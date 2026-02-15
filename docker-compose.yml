@@ -1,0 +1,38 @@
+services:
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: claude-dev
+    stdin_open: true
+    tty: true
+    volumes:
+      # Persistent storage for Claude Code config/auth/history
+      - claude-data:/home/dev/.claude
+
+      # Persistent storage for git config
+      - git-config:/home/dev/.gitconfig.d
+
+      # Your project code (persisted across container rebuilds)
+      - project-data:/home/dev/project
+
+      # SSH keys for GitHub (read-only)
+      - ~/.ssh:/home/dev/.ssh:ro
+
+      # Dev-env scripts (overnight tasks, load-secrets, etc.)
+      - ~/dev-env:/home/dev/dev-env:ro
+
+    environment:
+      # AWS region (credentials come from EC2 instance role via metadata)
+      - AWS_DEFAULT_REGION=us-east-1
+      - NODE_ENV=development
+
+    # Required: allows access to EC2 instance metadata for IAM role
+    network_mode: host
+
+    restart: unless-stopped
+
+volumes:
+  claude-data:
+  git-config:
+  project-data:
