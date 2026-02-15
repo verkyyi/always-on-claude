@@ -1,0 +1,13 @@
+# SSH keys — never commit these
+*.pem
+
+# Environment files with secrets
+.env
+.env.*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Overnight run logs (generated inside the project dir)
+overnight-*.md
