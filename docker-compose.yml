@@ -4,11 +4,17 @@ services:
       context: .
       dockerfile: Dockerfile.dev
     container_name: claude-dev
+    hostname: claude-dev
     stdin_open: true
     tty: true
     volumes:
-      # Persistent storage for Claude Code config/auth/history
-      - claude-data:/home/dev/.claude
+      # Claude Code config/auth/history (bind mount to persist through down/up)
+      - ~/.claude:/home/dev/.claude
+
+      # Claude Code onboarding state — lives OUTSIDE ~/.claude/
+      # Without this, every down/up triggers full re-onboarding
+      # IMPORTANT: run `touch ~/.claude.json` on host before first start
+      - ~/.claude.json:/home/dev/.claude.json
 
       # Persistent storage for git config
       - git-config:/home/dev/.gitconfig.d
@@ -33,6 +39,5 @@ services:
     restart: unless-stopped
 
 volumes:
-  claude-data:
   git-config:
   project-data:
