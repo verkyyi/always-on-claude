@@ -1,0 +1,62 @@
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PATH="/home/dev/.local/bin:${PATH}"
+
+# System packages — ripgrep, fzf, and zsh are required by Claude Code
+RUN apt-get update && apt-get install -y \
+    curl git tmux vim jq unzip \
+    build-essential python3 python3-pip \
+    ripgrep fzf zsh \
+    && rm -rf /var/lib/apt/lists/*
+
+# Node.js 22.x LTS
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y nodejs
+
+# AWS CLI v2
+RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" \
+    && unzip awscliv2.zip && ./aws/install \
+    && rm -rf aws awscliv2.zip
+
+# GitHub CLI
+RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+    | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+    | tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+    && apt-get update && apt-get install -y gh
+
+# Non-root user (Claude Code refuses to run as root)
+RUN useradd -m -s /bin/bash dev
+
+# Claude Code — native installer, must run as non-root
+USER dev
+RUN curl -fsSL https://claude.ai/install.sh | bash
+USER root
+
+# Pre-create .claude dirs — Docker volumes mount as root and can
+# overwrite ownership, causing ENOENT crashes without these
+RUN mkdir -p /home/dev/.claude/debug \
+    && touch /home/dev/.claude/remote-settings.json \
+    && chown -R dev:dev /home/dev/.claude
+
+USER dev
+WORKDIR /home/dev
+
+# tmux config — mouse support, truecolor, Ctrl+A prefix
+RUN echo 'set -g mouse on\n\
+set -g default-terminal "tmux-256color"\n\
+set -ga terminal-overrides ",xterm-256color:Tc"\n\
+set -g prefix C-a\n\
+unbind C-b\n\
+bind C-a send-prefix\n\
+set -g history-limit 50000' > /home/dev/.tmux.conf
+
+# Shell aliases
+RUN echo '\n\
+alias cc="claude --dangerously-skip-permissions"\n\
+alias gs="git status"\n\
+alias gl="git log --oneline -20"\n\
+' >> /home/dev/.bashrc
+
+CMD ["bash"]
