@@ -94,12 +94,17 @@ ssh ubuntu@my-dev-server
 ```bash
 scp -r ./* ubuntu@my-dev-server:~/dev-env/
 ssh ubuntu@my-dev-server
+
+# Pre-create bind mount targets (must exist before first docker compose up)
+mkdir -p ~/.claude
+touch ~/.claude.json
+
 cd ~/dev-env
 docker compose up -d
 
-# Fix volume permissions (Docker volumes mount as root)
+# Fix named volume permissions (Docker volumes mount as root)
 docker compose exec -u root dev bash -c \
-  "chown -R dev:dev /home/dev/.claude /home/dev/project"
+  "chown -R dev:dev /home/dev/project"
 ```
 
 ### 5. One-time setup inside the container
@@ -245,21 +250,27 @@ These are real issues hit during setup — none documented anywhere obvious.
 2. **Claude Code needs `~/.claude/debug/` and `~/.claude/remote-settings.json`.** If missing, it crashes with `ENOENT` errors. The Dockerfile pre-creates them, but Docker volumes mount as root and can overwrite ownership. Always fix permissions after first `docker compose up`:
    ```bash
    docker compose exec -u root dev bash -c \
-     "chown -R dev:dev /home/dev/.claude /home/dev/project"
+     "chown -R dev:dev /home/dev/project"
    ```
 
-3. **Use subscription auth (`claude login`), not `ANTHROPIC_API_KEY`.** Setting the env var overrides your subscription and uses API credits instead. The docker-compose.yml intentionally does *not* set `ANTHROPIC_API_KEY`. Run `claude login` once inside the container — the OAuth token persists in the `claude-data` volume.
+3. **Claude Code stores onboarding state in `~/.claude.json` (NOT inside `~/.claude/`).** This is a separate file in the home directory root. If you only bind-mount `~/.claude/`, this file lives in the container's ephemeral filesystem and gets wiped on every `docker compose down && up` — causing Claude Code to re-run the full setup (theme, trust prompt, onboarding) every time. Fix: bind-mount `~/.claude.json` separately. Run `touch ~/.claude.json` on the host before first start, or Docker will create it as a directory.
 
-4. **Clone via HTTPS, not SSH.** The `~/.ssh` volume is mounted read-only, so git can't write to `known_hosts`. Use `git clone https://...` and authenticate via `gh auth login`.
+4. **Use `docker compose stop/start`, not `down/up` for daily work.** `stop`/`start` preserves the container and all its state. `down` destroys and recreates the container. Only use `down`/`up` when you've changed the Dockerfile or docker-compose.yml. With the bind mounts above, `down`/`up` should also work — but `stop`/`start` is safer and faster.
 
-5. **Tailscale CLI on macOS isn't in PATH.** Use the full path:
+5. **Set `hostname` in docker-compose.yml.** Without a fixed hostname, each new container gets a random one. Claude Code may tie OAuth tokens to the hostname, causing re-auth after `down`/`up`.
+
+6. **Use subscription auth (`claude login`), not `ANTHROPIC_API_KEY`.** Setting the env var overrides your subscription and uses API credits instead. The docker-compose.yml intentionally does *not* set `ANTHROPIC_API_KEY`. Run `claude login` once inside the container — the OAuth token persists in the bind-mounted `~/.claude/` directory.
+
+7. **Clone via HTTPS, not SSH.** The `~/.ssh` volume is mounted read-only, so git can't write to `known_hosts`. Use `git clone https://...` and authenticate via `gh auth login`.
+
+8. **Tailscale CLI on macOS isn't in PATH.** Use the full path:
    ```bash
    /Applications/Tailscale.app/Contents/MacOS/Tailscale status
    ```
 
-6. **`docker-compose.yml` `version` key is obsolete.** Docker Compose v2 ignores it and prints a warning. Just omit it.
+9. **`docker-compose.yml` `version` key is obsolete.** Docker Compose v2 ignores it and prints a warning. Just omit it.
 
-7. **CloudFormation security group descriptions must be ASCII.** Em dashes and other non-ASCII characters cause `CREATE_FAILED`.
+10. **CloudFormation security group descriptions must be ASCII.** Em dashes and other non-ASCII characters cause `CREATE_FAILED`.
 
 ---
 
