@@ -44,6 +44,8 @@ Your Laptop / Phone (Terminus, VS Code, etc.)
 | [`bootstrap.sh`](bootstrap.sh) | One-shot EC2 setup (Docker, tmux, Tailscale) |
 | [`load-secrets.sh`](load-secrets.sh) | Pulls secrets from AWS SSM Parameter Store into env vars |
 | [`overnight-tasks.sh`](overnight-tasks.sh) | Autonomous Claude Code task runner |
+| [`start-claude.sh`](start-claude.sh) | Starts container if needed, launches Claude Code in tmux |
+| [`ssh-login.sh`](ssh-login.sh) | Interactive SSH login menu — Claude Code or plain shell |
 
 ---
 
@@ -125,14 +127,43 @@ claude -p "hello"
 
 ---
 
+## One-Command Access
+
+After bootstrap, every SSH login shows an interactive menu:
+
+```
+  ┌─────────────────────────────┐
+  │  [1] Claude Code (3s)       │
+  │  [2] Plain shell            │
+  └─────────────────────────────┘
+```
+
+Wait 3 seconds (or press Enter) and you're in Claude Code — container auto-starts if needed, tmux session auto-resumes if one exists. Press `2` for a normal shell.
+
+This works from **any SSH client on any device** — no client-side config required. Phone, tablet, someone else's laptop — just `ssh ubuntu@my-dev-server`.
+
+If an existing tmux session is running (e.g. from an overnight task), you'll reattach to it and see exactly where things left off.
+
+**Bypass the menu entirely:**
+
+```bash
+# Force plain shell (e.g. in scripts or automation)
+ssh dev-server -t "NO_CLAUDE=1 bash"
+```
+
+---
+
 ## Overnight Autonomous Workflows
 
-This is the real payoff. Define tasks, start a tmux session, detach, and go to sleep.
+This is the real payoff. Define tasks, SSH in (option 1), detach, and go to sleep.
 
 ```bash
 ssh ubuntu@my-dev-server
-docker compose exec dev bash
+# → auto-enters Claude Code via menu
 
+# Or start the overnight script directly:
+# Press 2 for shell, then:
+docker compose exec dev bash
 tmux new -s overnight
 cd ~/project
 bash ~/dev-env/overnight-tasks.sh
@@ -143,12 +174,11 @@ bash ~/dev-env/overnight-tasks.sh
 
 Edit [`overnight-tasks.sh`](overnight-tasks.sh) to define your tasks before each run. Each task gets a 10-minute timeout, and the script produces a Markdown log with git diffs and test results.
 
-Next morning:
+Next morning — just SSH in. The menu will reattach to your running tmux session automatically.
 
 ```bash
 ssh ubuntu@my-dev-server
-docker compose exec dev bash
-tmux attach -t overnight
+# → reattaches to existing Claude Code session
 
 # Or just pull from your laptop
 git pull origin main
@@ -268,8 +298,10 @@ docker run --rm -v dev-env_project-data:/data -v ~/backups:/backup \
 
 | Action | Command |
 |--------|---------|
-| SSH into server | `ssh ubuntu@my-dev-server` |
-| Enter container | `docker compose exec dev bash` |
+| SSH → Claude Code | `ssh ubuntu@my-dev-server` (wait 3s or press Enter) |
+| SSH → plain shell | `ssh ubuntu@my-dev-server` then press `2` |
+| SSH → plain shell (scripted) | `ssh dev-server -t "NO_CLAUDE=1 bash"` |
+| Enter container manually | `docker compose exec dev bash` |
 | New tmux session | `tmux new -s work` |
 | Detach tmux | `Ctrl+A`, then `D` |
 | Reattach tmux | `tmux attach -t work` |
