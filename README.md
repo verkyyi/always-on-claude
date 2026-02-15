@@ -1,0 +1,285 @@
+# Always-On Claude Code: EC2 + Docker Compose
+
+A reproducible, always-on development environment on AWS for running [Claude Code](https://docs.anthropic.com/en/docs/claude-code) autonomously — including overnight unattended workflows.
+
+**~$22/mo.** No ports exposed. Connect from anywhere — laptop, phone, tablet.
+
+---
+
+## Why This Setup?
+
+Running Claude Code locally ties you to your laptop. This setup gives you a persistent cloud dev environment you can connect to from anywhere and leave Claude working overnight while you sleep. It's cheap, secure (Tailscale mesh VPN, no open ports), and reproducible (Docker).
+
+---
+
+## Architecture
+
+```
+Your Laptop / Phone (Terminus, VS Code, etc.)
+    │
+    ├── Tailscale VPN (encrypted mesh)
+    │
+    └── EC2 Instance (t3.medium)
+         ├── Docker Compose
+         │    └── Dev Container
+         │         ├── Claude Code (native installer)
+         │         ├── Node.js 22 + npm
+         │         ├── AWS CLI v2
+         │         ├── Git + GitHub CLI
+         │         ├── ripgrep, fzf, zsh
+         │         └── Your project repo
+         ├── tmux (session persistence)
+         └── 30GB gp3 EBS (persistent storage)
+```
+
+---
+
+## Files in This Repo
+
+| File | Purpose |
+|------|---------|
+| [`Dockerfile.dev`](Dockerfile.dev) | Ubuntu 24.04, Node 22, AWS CLI, gh, Claude Code (native), ripgrep/fzf/zsh |
+| [`docker-compose.yml`](docker-compose.yml) | Persistent volumes, host networking for IAM role |
+| [`cloudformation.yml`](cloudformation.yml) | EC2 + security group + IAM role stack |
+| [`bootstrap.sh`](bootstrap.sh) | One-shot EC2 setup (Docker, tmux, Tailscale) |
+| [`load-secrets.sh`](load-secrets.sh) | Pulls secrets from AWS SSM Parameter Store into env vars |
+| [`overnight-tasks.sh`](overnight-tasks.sh) | Autonomous Claude Code task runner |
+
+---
+
+## Quick Start
+
+### 1. Deploy the EC2 instance
+
+```bash
+aws cloudformation create-stack \
+  --stack-name my-dev \
+  --template-body file://cloudformation.yml \
+  --capabilities CAPABILITY_NAMED_IAM \
+  --parameters \
+    ParameterKey=KeyPairName,ParameterValue=your-key \
+    ParameterKey=MyIP,ParameterValue=$(curl -s ifconfig.me)/32
+```
+
+### 2. Bootstrap the server
+
+```bash
+scp -i your-key.pem bootstrap.sh ubuntu@<PUBLIC_IP>:~/
+ssh -i your-key.pem ubuntu@<PUBLIC_IP> 'bash ~/bootstrap.sh'
+```
+
+### 3. Set up Tailscale
+
+```bash
+# On the EC2 instance
+sudo tailscale up --ssh
+sudo tailscale set --hostname my-dev-server
+
+# Then lock down the security group — remove public SSH
+aws ec2 revoke-security-group-ingress \
+  --group-id sg-YOUR_SG_ID \
+  --protocol tcp --port 22 --cidr YOUR_IP/32
+```
+
+Install [Tailscale](https://tailscale.com/download) on your laptop/phone and join the same network. Now you connect with just:
+
+```bash
+ssh ubuntu@my-dev-server
+```
+
+### 4. Upload files and start the container
+
+```bash
+scp -r ./* ubuntu@my-dev-server:~/dev-env/
+ssh ubuntu@my-dev-server
+cd ~/dev-env
+docker compose up -d
+
+# Fix volume permissions (Docker volumes mount as root)
+docker compose exec -u root dev bash -c \
+  "chown -R dev:dev /home/dev/.claude /home/dev/project"
+```
+
+### 5. One-time setup inside the container
+
+```bash
+docker compose exec dev bash
+
+# Git config
+git config --global user.name "Your Name"
+git config --global user.email "you@example.com"
+
+# Clone your project (use HTTPS — .ssh mount is read-only)
+cd ~/project
+git clone https://github.com/your-org/your-repo.git .
+npm install
+
+# Auth
+gh auth login
+claude login    # subscription auth, not API key — see gotchas below
+
+# Verify
+aws sts get-caller-identity
+claude -p "hello"
+```
+
+---
+
+## Overnight Autonomous Workflows
+
+This is the real payoff. Define tasks, start a tmux session, detach, and go to sleep.
+
+```bash
+ssh ubuntu@my-dev-server
+docker compose exec dev bash
+
+tmux new -s overnight
+cd ~/project
+bash ~/dev-env/overnight-tasks.sh
+
+# Detach: Ctrl+A, then D
+# Close your laptop. Sleep.
+```
+
+Edit [`overnight-tasks.sh`](overnight-tasks.sh) to define your tasks before each run. Each task gets a 10-minute timeout, and the script produces a Markdown log with git diffs and test results.
+
+Next morning:
+
+```bash
+ssh ubuntu@my-dev-server
+docker compose exec dev bash
+tmux attach -t overnight
+
+# Or just pull from your laptop
+git pull origin main
+```
+
+---
+
+## Secrets Management
+
+Use AWS SSM Parameter Store instead of `.env` files with raw secrets:
+
+```bash
+# Store (from your laptop)
+aws ssm put-parameter --name "/myproject/api-key" --value "secret" --type SecureString
+
+# Retrieve (inside the container — uses EC2 instance role)
+aws ssm get-parameter --name "/myproject/api-key" --with-decryption --query 'Parameter.Value' --output text
+```
+
+Edit [`load-secrets.sh`](load-secrets.sh) with your parameter names. The overnight script sources it automatically.
+
+---
+
+## Multi-User Setup
+
+**Shared container, separate tmux sessions:**
+
+```bash
+ssh ubuntu@my-dev-server
+docker compose exec dev bash
+tmux new -s teammate-session
+git checkout -b feature/their-work
+claude
+```
+
+**Full isolation — add a second service to `docker-compose.yml`:**
+
+```yaml
+  dev-teammate:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: dev-teammate
+    volumes:
+      - claude-data-teammate:/home/dev/.claude
+      - project-data-teammate:/home/dev/project
+      - ~/.ssh:/home/dev/.ssh:ro
+    environment:
+      - AWS_DEFAULT_REGION=us-east-1
+    network_mode: host
+    restart: unless-stopped
+```
+
+Each user runs `claude login` inside their own container.
+
+---
+
+## Gotchas and Lessons Learned
+
+These are real issues hit during setup — none documented anywhere obvious.
+
+1. **Claude Code requires `ripgrep`, `fzf`, and `zsh`.** Without them it exits silently with "Execution error" and no useful message. The Dockerfile includes all three.
+
+2. **Claude Code needs `~/.claude/debug/` and `~/.claude/remote-settings.json`.** If missing, it crashes with `ENOENT` errors. The Dockerfile pre-creates them, but Docker volumes mount as root and can overwrite ownership. Always fix permissions after first `docker compose up`:
+   ```bash
+   docker compose exec -u root dev bash -c \
+     "chown -R dev:dev /home/dev/.claude /home/dev/project"
+   ```
+
+3. **Use subscription auth (`claude login`), not `ANTHROPIC_API_KEY`.** Setting the env var overrides your subscription and uses API credits instead. The docker-compose.yml intentionally does *not* set `ANTHROPIC_API_KEY`. Run `claude login` once inside the container — the OAuth token persists in the `claude-data` volume.
+
+4. **Clone via HTTPS, not SSH.** The `~/.ssh` volume is mounted read-only, so git can't write to `known_hosts`. Use `git clone https://...` and authenticate via `gh auth login`.
+
+5. **Tailscale CLI on macOS isn't in PATH.** Use the full path:
+   ```bash
+   /Applications/Tailscale.app/Contents/MacOS/Tailscale status
+   ```
+
+6. **`docker-compose.yml` `version` key is obsolete.** Docker Compose v2 ignores it and prints a warning. Just omit it.
+
+7. **CloudFormation security group descriptions must be ASCII.** Em dashes and other non-ASCII characters cause `CREATE_FAILED`.
+
+---
+
+## Cost
+
+| Item | Monthly |
+|------|---------|
+| EC2 t3.medium (on-demand) | ~$30 |
+| EC2 t3.medium (1yr reserved) | ~$19 |
+| EBS 30GB gp3 | ~$2.40 |
+| Tailscale | Free |
+| Data transfer | ~$1–2 |
+| **Total** | **~$22–34** |
+
+> Spot Instances can bring EC2 down to ~$9–10/mo. You'll need to handle occasional interruptions.
+
+---
+
+## Maintenance
+
+```bash
+# Update Claude Code
+docker compose exec dev bash -c "curl -fsSL https://claude.ai/install.sh | bash"
+
+# Rebuild container
+docker compose build && docker compose up -d
+
+# Backup project data
+docker run --rm -v dev-env_project-data:/data -v ~/backups:/backup \
+  ubuntu tar czf /backup/project-$(date +%Y%m%d).tar.gz -C /data .
+```
+
+---
+
+## Quick Reference
+
+| Action | Command |
+|--------|---------|
+| SSH into server | `ssh ubuntu@my-dev-server` |
+| Enter container | `docker compose exec dev bash` |
+| New tmux session | `tmux new -s work` |
+| Detach tmux | `Ctrl+A`, then `D` |
+| Reattach tmux | `tmux attach -t work` |
+| Claude autonomous | `claude -p "task" --dangerously-skip-permissions` |
+| Overnight script | `bash ~/dev-env/overnight-tasks.sh` |
+| Fix permissions | `docker compose exec -u root dev bash -c "chown -R dev:dev /home/dev/.claude /home/dev/project"` |
+| Re-auth Claude | `claude login` |
+
+---
+
+## License
+
+MIT
