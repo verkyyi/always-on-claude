@@ -24,6 +24,16 @@ sudo apt-get install -y tmux
 echo "=== Installing Tailscale ==="
 curl -fsSL https://tailscale.com/install.sh | sh
 
+echo "=== Setting up one-command Claude Code access ==="
+chmod +x ~/dev-env/start-claude.sh
+
+# Add SSH login menu to .bash_profile (only if not already present)
+if ! grep -q "ssh-login.sh" ~/.bash_profile 2>/dev/null; then
+    echo "" >> ~/.bash_profile
+    echo "# Auto-launch Claude Code on SSH login" >> ~/.bash_profile
+    echo "source ~/dev-env/ssh-login.sh" >> ~/.bash_profile
+fi
+
 echo ""
 echo "============================================"
 echo "  Bootstrap complete!"
@@ -40,7 +50,7 @@ echo "       exit"
 echo "       ssh ubuntu@my-dev-server"
 echo ""
 echo "  3. Copy dev-env files to ~/dev-env on this machine:"
-echo "       scp -r ~/dev-env/* ubuntu@my-dev-server:~/dev-env/"
+echo "       scp -r ./* ubuntu@my-dev-server:~/dev-env/"
 echo ""
 echo "  4. Build and start the container:"
 echo "       cd ~/dev-env && docker compose up -d"
@@ -51,4 +61,12 @@ echo ""
 echo "  6. Enter the container and do one-time setup:"
 echo "       docker compose exec dev bash"
 echo "       # Then: gh auth login, git clone, claude login"
+echo ""
+echo "  After setup, every SSH login will show:"
+echo ""
+echo "    [1] Claude Code (3s)"
+echo "    [2] Plain shell"
+echo ""
+echo "  Wait 3 seconds or press Enter → Claude Code."
+echo "  Press 2 → normal shell."
 echo ""
