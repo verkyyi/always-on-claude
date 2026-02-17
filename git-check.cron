@@ -1,0 +1,10 @@
+# git-check.cron — Daily git repository health check
+#
+# Drop this file in /etc/cron.d/ to activate:
+#   sudo cp ~/dev-env/git-check.cron /etc/cron.d/git-daily-check
+#
+# Assumes always-on-claude is bind-mounted at ~/dev-env/ (the standard pattern).
+# Output appends to /home/dev/git-check.log — change LOG= to redirect elsewhere.
+#
+# Format: minute hour day-of-month month day-of-week user command
+0 8 * * * dev /home/dev/dev-env/git-check.sh >> /home/dev/git-check.log 2>&1
