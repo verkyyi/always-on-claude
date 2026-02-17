@@ -1,6 +1,7 @@
 #!/bin/bash
 # ssh-login.sh — Source this from .bash_profile.
-# Shows an interactive menu on SSH login with auto-default to Claude Code.
+# Shows an interactive menu on SSH login to choose Claude Code,
+# a container shell, or the host shell.
 #
 # Skips the prompt when:
 #   - Already inside tmux
@@ -15,21 +16,29 @@
 
 echo ""
 echo "  ┌─────────────────────────────┐"
-echo "  │  [1] Claude Code (3s)       │"
-echo "  │  [2] Plain shell            │"
+echo "  │  [1] Claude Code            │"
+echo "  │  [2] Container bash         │"
+echo "  │  [3] Host shell             │"
 echo "  └─────────────────────────────┘"
 echo ""
 
 choice=""
-read -t 3 -n 1 -p "  > " choice || true
+read -n 1 -p "  > " choice || true
 echo ""
 
 case "$choice" in
     2)
-        echo "  → Shell. Happy hacking!"
-        echo ""
+        exec tmux new-session -A -s dev \
+            "docker exec -it claude-dev bash -l"
+        ;;
+    3)
+        exec tmux new-session -A -s host
         ;;
     *)
-        exec bash ~/dev-env/start-claude.sh
+        if [[ -x ~/dev-env/start-claude.sh ]]; then
+            exec bash ~/dev-env/start-claude.sh
+        else
+            echo "  ⚠ start-claude.sh not found at ~/dev-env/start-claude.sh"
+        fi
         ;;
 esac

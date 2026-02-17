@@ -16,11 +16,12 @@ services:
       # IMPORTANT: run `touch ~/.claude.json` on host before first start
       - ~/.claude.json:/home/dev/.claude.json
 
-      # Persistent storage for git config
-      - git-config:/home/dev/.gitconfig.d
+      # Git config
+      - ~/.gitconfig.d:/home/dev/.gitconfig.d
 
-      # Your project code (persisted across container rebuilds)
-      - project-data:/home/dev/project
+      # Your projects — bind mount so files are visible directly on the host
+      # Create ~/projects on the host before first start
+      - ~/projects:/home/dev/projects
 
       # SSH keys for GitHub (read-only)
       - ~/.ssh:/home/dev/.ssh:ro
@@ -37,7 +38,3 @@ services:
     network_mode: host
 
     restart: unless-stopped
-
-volumes:
-  git-config:
-  project-data:

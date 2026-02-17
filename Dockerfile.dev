@@ -43,6 +43,10 @@ RUN mkdir -p /home/dev/.claude/debug \
 USER dev
 WORKDIR /home/dev
 
+# Bun — fast JS runtime/package manager used by many projects
+RUN curl -fsSL https://bun.sh/install | bash
+ENV PATH="/home/dev/.bun/bin:${PATH}"
+
 # tmux config — mouse support, truecolor, Ctrl+A prefix
 RUN echo 'set -g mouse on\n\
 set -g default-terminal "tmux-256color"\n\
