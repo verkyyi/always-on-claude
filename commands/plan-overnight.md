@@ -51,19 +51,34 @@ Present a concise summary:
 
 ---
 
-## Step 3 — Suggest 3–5 tasks
+## Step 3 — Suggest tasks targeting ~6 hours total runtime
 
-Pick concrete, completable items:
-- Each fits in a single Claude session (under 10 minutes)
-- Clear deliverables: files to create/modify, tests to write
-- Ordered by dependency (no task depends on a later one)
+**Task sizes:**
+| Size | Timeout | Examples |
+|------|---------|---------|
+| S — 15 min | `900` | Small fix, add a test, update a config, simple util function |
+| M — 30 min | `1800` | New endpoint, refactor a module, add validation + tests |
+| L — 60 min | `3600` | New feature, multi-file refactor, integration with external service |
+
+**Target:** fill ~360 minutes (6 hours). A balanced mix might be 2L + 4M + 6S = 330 min, or 12 × M = 360 min. Adjust to fit the available work.
+
+After each suggestion, show the running total:
+> Estimated total: **2h 30min** (3 tasks — 1L, 2M) — targeting 6h, room for ~3h 30min more
+
+Rules:
+- Ordered by dependency — no task depends on a later one
+- Each prompt is fully self-contained (Claude has no memory between tasks)
+- Prefer more smaller tasks over fewer large ones when work items are independent
 - In multi-project mode: assign each task to the correct repo via `dir:`
 
 ---
 
 ## Step 4 — Iterate
 
-Ask if the user wants to adjust, add, remove, or reprioritize. Revise until they confirm.
+Ask if the user wants to adjust, add, remove, or reprioritize. After each change, show the updated time total:
+> Estimated total: **5h 45min** (10 tasks — 2L, 4M, 4S)
+
+Keep iterating until the user confirms and the total is close to 6 hours. If they have less work than 6 hours, that's fine — don't pad with unnecessary tasks.
 
 ---
 
@@ -117,26 +132,38 @@ bash ~/dev-env/run-tasks.sh ~/tasks-<project>.txt
 
 ```
 # Tasks for <project> — YYYY-MM-DD
+# Estimated total runtime: ~6h (2L + 4M + 4S)
 
 ---
-desc: Short task name
-timeout: 600
+desc: [L] Add OAuth2 login flow
+timeout: 3600
 dir: /home/dev/myproject
-prompt: Detailed Claude instruction. Name specific files and patterns to follow.
-  Indented lines continue the prompt. End with: Run tests. Commit with descriptive message.
+prompt: Implement OAuth2 login with Google in src/auth/. Add callback handler at
+  /auth/google/callback, store session in Redis using the existing client in src/lib/redis.ts.
+  Follow patterns in src/auth/local.ts. Write integration tests in tests/auth/.
+  Run tests. Commit with descriptive message.
 
 ---
-desc: Next task
-dir: /home/dev/other-project
-prompt: Another self-contained instruction.
-  Be specific. Claude has no conversation context when running this. Run tests. Commit.
+desc: [M] Add rate limiting to public API endpoints
+timeout: 1800
+dir: /home/dev/myproject
+prompt: Add rate limiting to all routes in src/api/public/. Use express-rate-limit,
+  follow the existing middleware pattern in src/middleware/auth.ts.
+  Limit to 100 req/min per IP. Write tests in tests/api/. Run tests. Commit.
+
+---
+desc: [S] Fix typo in error messages across src/api/
+timeout: 900
+dir: /home/dev/myproject
+prompt: Find and fix all typos in user-facing error messages in src/api/.
+  Run tests to confirm nothing broke. Commit with descriptive message.
 ```
 
 Fields:
 - `---` separates tasks
-- `desc:` short name (required)
+- `desc:` short name — prefix with `[S]`, `[M]`, or `[L]` for size (required)
 - `prompt:` multi-line instruction (required) — self-contained, no references to this conversation
-- `timeout:` seconds, default 600 (optional)
+- `timeout:` seconds — use 900 (S), 1800 (M), or 3600 (L) (required)
 - `dir:` working directory (optional — required in multi-project mode)
 
 ## Prompt quality checklist
