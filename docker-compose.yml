@@ -29,6 +29,11 @@ services:
       # Dev-env scripts (overnight tasks, load-secrets, etc.)
       - ~/dev-env:/home/dev/dev-env:ro
 
+      # Overnight task files and logs — shared with host so at/cron can
+      # reference task files and logs survive container rebuilds.
+      # Run `mkdir -p ~/overnight/logs` on host before first start.
+      - ~/overnight:/home/dev/overnight
+
     environment:
       # AWS region (credentials come from EC2 instance role via metadata)
       - AWS_DEFAULT_REGION=us-east-1

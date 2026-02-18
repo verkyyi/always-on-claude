@@ -44,7 +44,8 @@ Your Laptop / Phone (Terminus, VS Code, etc.)
 | [`bootstrap.sh`](bootstrap.sh) | One-shot EC2 setup (Docker, tmux, Tailscale) |
 | [`load-secrets.sh`](load-secrets.sh) | Pulls secrets from AWS SSM Parameter Store into env vars |
 | [`overnight-tasks.sh`](overnight-tasks.sh) | Simple autonomous task runner — hardcode tasks directly in the script |
-| [`run-tasks.sh`](run-tasks.sh) | Task runner that reads `tasks.txt` — use with `/plan-overnight` |
+| [`run-tasks.sh`](run-tasks.sh) | Task runner that reads `tasks.txt` from `~/overnight/` — use with `/plan-overnight` |
+| [`trigger-watcher.sh`](trigger-watcher.sh) | Host-side cron watcher — detects `.scheduled` sidecars and queues `docker exec` jobs via `at` |
 | [`start-claude.sh`](start-claude.sh) | Starts container if needed, launches Claude Code in tmux |
 | [`ssh-login.sh`](ssh-login.sh) | Interactive SSH login menu — Claude Code or plain shell |
 | [`git-check.sh`](git-check.sh) | Daily repo health check — git status, linting, tests, docs, auto-fix, GitHub issues |
@@ -109,12 +110,20 @@ cp ~/dev-env/commands/plan-overnight.md ~/.claude/commands/
 mkdir -p ~/.claude
 touch ~/.claude.json
 
+# Overnight shared volume (task files + logs, visible to both host and container)
+mkdir -p ~/overnight/logs
+
 cd ~/dev-env
 docker compose up -d
 
 # Fix named volume permissions (Docker volumes mount as root)
 docker compose exec -u root dev bash -c \
   "chown -R dev:dev /home/dev/project"
+
+# One-time: install at and activate the trigger-watcher cron
+sudo apt-get install -y at
+sudo systemctl enable --now atd
+(crontab -l 2>/dev/null; echo "* * * * * bash ~/dev-env/trigger-watcher.sh >> ~/overnight/trigger-watcher.log 2>&1") | crontab -
 ```
 
 ### 5. One-time setup inside the container
@@ -174,42 +183,69 @@ This is the real payoff. Define tasks, SSH in, detach, and go to sleep.
 
 ### Option A: Interactive planning with `/plan-overnight` (recommended)
 
-Use the `/plan-overnight` slash command inside Claude Code. It reads your TODO.md, open GitHub issues, and recent git log, then collaboratively builds a `tasks.txt` file with you before running anything.
+Use the `/plan-overnight` slash command inside Claude Code. It reads your TODO.md, open GitHub issues, and recent git log across all projects, then collaboratively builds a task file and schedules it — all without leaving Claude.
 
 ```bash
 ssh ubuntu@my-dev-server
-# → auto-enters Claude Code via menu, or press 2 for shell then:
-docker compose exec dev bash
+# → auto-enters Claude Code via menu
 
 # Inside Claude Code:
 /plan-overnight              # optionally: /plan-overnight auth refactor
 
-# Claude will show available work, suggest 3-5 tasks, iterate with you,
-# then write ~/tasks.txt. Review it, then kick off:
-tmux new -s overnight
-bash ~/dev-env/run-tasks.sh  # reads ~/tasks.txt
+# Claude will:
+#  1. Scan all git repos under the current directory
+#  2. Show open TODOs + GitHub issues across all projects
+#  3. Suggest tasks targeting ~6h of runtime
+#  4. Iterate with you until confirmed
+#  5. Write ~/overnight/tasks-<project>.txt
+#  6. Ask what time to run → write a .scheduled sidecar file
 
-# Detach: Ctrl+A, then D. Close your laptop. Sleep.
+# That's it. Close your laptop. Sleep.
+# The host trigger-watcher cron picks up the sidecar within 1 minute
+# and queues the job via `at` using docker exec.
 ```
 
-[`run-tasks.sh`](run-tasks.sh) parses `tasks.txt` and runs each task via `claude --dangerously-skip-permissions` with its own timeout, logging output to a Markdown file with per-task commit history.
+**How scheduling works without leaving the container:**
 
-**tasks.txt format:**
+Task files and logs live in `~/overnight/` which is bind-mounted to the host at `~/overnight/`. When `/plan-overnight` confirms a time, it writes a sidecar:
+
 ```
-# Daily tasks for YYYY-MM-DD
+~/overnight/tasks-ainbox.txt           ← task definitions
+~/overnight/tasks-ainbox.txt.scheduled ← contains "23:00" (written by plan-overnight)
+~/overnight/tasks-ainbox.txt.triggered ← renamed here after host picks it up
+~/overnight/logs/overnight-ainbox-*.md ← run log (written by run-tasks.sh)
+```
+
+The host cron runs `trigger-watcher.sh` every minute. When it finds a `.scheduled` file it runs:
+```bash
+echo "docker exec claude-dev bash -c 'bash ~/dev-env/run-tasks.sh ~/overnight/tasks-ainbox.txt'" | at 23:00
+```
+
+Because `docker exec` runs outside the Claude session, `CLAUDECODE` is never set and `claude -p` works freely inside the container.
+
+[`run-tasks.sh`](run-tasks.sh) parses the task file and runs each task via `claude -p --dangerously-skip-permissions` with its own timeout, logging output to a Markdown file with per-task commit history.
+
+**Task file format** (`~/overnight/tasks-<project>.txt`):
+```
+# Tasks for myproject — 2026-02-18
+# Estimated total runtime: ~3h (1L + 2M)
 
 ---
-desc: Add input validation
-timeout: 600
+desc: [L] Add OAuth2 login flow
+timeout: 3600
 dir: /home/dev/myproject
-prompt: Add input validation to all API endpoints in src/api/.
-  Follow existing patterns in src/api/users.ts. Write tests in tests/api/.
+prompt: Implement OAuth2 login with Google in src/auth/. Add callback handler at
+  /auth/google/callback, store session in Redis using the existing client in src/lib/redis.ts.
+  Follow patterns in src/auth/local.ts. Write integration tests in tests/auth/.
   Run tests. Commit with descriptive message.
 
 ---
-desc: Rate limiting
-prompt: Add rate limiting to all public endpoints using express-rate-limit.
-  Write tests. Run tests. Commit.
+desc: [M] Add rate limiting to public API endpoints
+timeout: 1800
+dir: /home/dev/myproject
+prompt: Add rate limiting to all routes in src/api/public/. Use express-rate-limit,
+  follow the existing middleware pattern in src/middleware/auth.ts.
+  Limit to 100 req/min per IP. Write tests. Run tests. Commit.
 ```
 
 ### Option B: Manual script editing
@@ -398,7 +434,11 @@ docker run --rm -v dev-env_project-data:/data -v ~/backups:/backup \
 | Reattach tmux | `tmux attach -t work` |
 | Claude autonomous | `claude -p "task" --dangerously-skip-permissions` |
 | Plan overnight tasks | `/plan-overnight` (inside Claude Code) |
-| Run tasks.txt | `bash ~/dev-env/run-tasks.sh` |
+| Run tasks manually (host) | `docker exec claude-dev bash -c 'bash ~/dev-env/run-tasks.sh ~/overnight/tasks-<name>.txt'` |
+| Run tasks manually (container) | `bash ~/dev-env/run-tasks.sh ~/overnight/tasks-<name>.txt` (outside Claude session) |
+| View overnight log | `tail -f ~/overnight/logs/overnight-*.md` |
+| Check scheduled jobs | `atq` (on host) |
+| View trigger watcher log | `tail -f ~/overnight/trigger-watcher.log` (on host) |
 | Overnight script (manual) | `bash ~/dev-env/overnight-tasks.sh` |
 | Daily health check | `bash ~/dev-env/git-check.sh` |
 | Health check (git only) | `SKIP_ANALYSIS=1 bash ~/dev-env/git-check.sh` |

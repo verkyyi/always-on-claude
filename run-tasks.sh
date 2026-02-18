@@ -6,8 +6,8 @@
 #   bash ~/dev-env/run-tasks.sh [tasks.txt]
 #   # Detach: Ctrl+A, then D
 
-TASKS_FILE="${1:-$HOME/tasks.txt}"
-LOG_DIR="${LOG_DIR:-$HOME/logs}"
+TASKS_FILE="${1:-$HOME/overnight/tasks.txt}"
+LOG_DIR="${LOG_DIR:-$HOME/overnight/logs}"
 mkdir -p "$LOG_DIR"
 
 # Derive log filename from tasks file (e.g. ~/tasks-ainbox.txt → ~/logs/overnight-ainbox-20260218-2300.md)
@@ -24,7 +24,9 @@ if [[ ! -f "$TASKS_FILE" ]]; then
 fi
 
 # Load secrets from SSM Parameter Store (safe to skip if not configured)
-source ~/dev-env/load-secrets.sh 2>/dev/null || true
+# Source in a subshell to prevent set -euo pipefail in load-secrets.sh from
+# propagating to this script and killing it when SSM calls fail.
+( source ~/dev-env/load-secrets.sh ) 2>/dev/null || true
 
 echo "# Overnight Run — $(date)" > "$LOG_FILE"
 echo "Tasks file: \`$TASKS_FILE\`" >> "$LOG_FILE"
