@@ -49,6 +49,7 @@ Your Laptop / Phone (Terminus, VS Code, etc.)
 | [`ssh-login.sh`](ssh-login.sh) | Interactive SSH login menu — Claude Code or plain shell |
 | [`git-check.sh`](git-check.sh) | Daily repo health check — git status, linting, tests, docs, auto-fix, GitHub issues |
 | [`git-check.cron`](git-check.cron) | Cron schedule for `git-check.sh` (runs daily at 08:00) |
+| [`commands/plan-overnight.md`](commands/plan-overnight.md) | Claude Code slash command — deploy to `~/.claude/commands/` |
 
 ---
 
@@ -99,6 +100,10 @@ ssh ubuntu@my-dev-server
 ```bash
 scp -r ./* ubuntu@my-dev-server:~/dev-env/
 ssh ubuntu@my-dev-server
+
+# Deploy the /plan-overnight slash command to your Claude Code user commands
+mkdir -p ~/.claude/commands
+cp ~/dev-env/commands/plan-overnight.md ~/.claude/commands/
 
 # Pre-create bind mount targets (must exist before first docker compose up)
 mkdir -p ~/.claude
