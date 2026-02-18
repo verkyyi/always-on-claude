@@ -43,7 +43,8 @@ Your Laptop / Phone (Terminus, VS Code, etc.)
 | [`cloudformation.yml`](cloudformation.yml) | EC2 + security group + IAM role stack |
 | [`bootstrap.sh`](bootstrap.sh) | One-shot EC2 setup (Docker, tmux, Tailscale) |
 | [`load-secrets.sh`](load-secrets.sh) | Pulls secrets from AWS SSM Parameter Store into env vars |
-| [`overnight-tasks.sh`](overnight-tasks.sh) | Autonomous Claude Code task runner |
+| [`overnight-tasks.sh`](overnight-tasks.sh) | Simple autonomous task runner — hardcode tasks directly in the script |
+| [`run-tasks.sh`](run-tasks.sh) | Task runner that reads `tasks.txt` — use with `/plan-overnight` |
 | [`start-claude.sh`](start-claude.sh) | Starts container if needed, launches Claude Code in tmux |
 | [`ssh-login.sh`](ssh-login.sh) | Interactive SSH login menu — Claude Code or plain shell |
 | [`git-check.sh`](git-check.sh) | Daily repo health check — git status, linting, tests, docs, auto-fix, GitHub issues |
@@ -164,32 +165,68 @@ ssh dev-server -t "NO_CLAUDE=1 bash"
 
 ## Overnight Autonomous Workflows
 
-This is the real payoff. Define tasks, SSH in (option 1), detach, and go to sleep.
+This is the real payoff. Define tasks, SSH in, detach, and go to sleep.
+
+### Option A: Interactive planning with `/plan-overnight` (recommended)
+
+Use the `/plan-overnight` slash command inside Claude Code. It reads your TODO.md, open GitHub issues, and recent git log, then collaboratively builds a `tasks.txt` file with you before running anything.
 
 ```bash
 ssh ubuntu@my-dev-server
-# → auto-enters Claude Code via menu
-
-# Or start the overnight script directly:
-# Press 2 for shell, then:
+# → auto-enters Claude Code via menu, or press 2 for shell then:
 docker compose exec dev bash
+
+# Inside Claude Code:
+/plan-overnight              # optionally: /plan-overnight auth refactor
+
+# Claude will show available work, suggest 3-5 tasks, iterate with you,
+# then write ~/tasks.txt. Review it, then kick off:
+tmux new -s overnight
+bash ~/dev-env/run-tasks.sh  # reads ~/tasks.txt
+
+# Detach: Ctrl+A, then D. Close your laptop. Sleep.
+```
+
+[`run-tasks.sh`](run-tasks.sh) parses `tasks.txt` and runs each task via `claude --dangerously-skip-permissions` with its own timeout, logging output to a Markdown file with per-task commit history.
+
+**tasks.txt format:**
+```
+# Daily tasks for YYYY-MM-DD
+
+---
+desc: Add input validation
+timeout: 600
+dir: /home/dev/myproject
+prompt: Add input validation to all API endpoints in src/api/.
+  Follow existing patterns in src/api/users.ts. Write tests in tests/api/.
+  Run tests. Commit with descriptive message.
+
+---
+desc: Rate limiting
+prompt: Add rate limiting to all public endpoints using express-rate-limit.
+  Write tests. Run tests. Commit.
+```
+
+### Option B: Manual script editing
+
+Edit [`overnight-tasks.sh`](overnight-tasks.sh) directly to hardcode tasks, then run it:
+
+```bash
 tmux new -s overnight
 cd ~/project
 bash ~/dev-env/overnight-tasks.sh
-
 # Detach: Ctrl+A, then D
-# Close your laptop. Sleep.
 ```
 
-Edit [`overnight-tasks.sh`](overnight-tasks.sh) to define your tasks before each run. Each task gets a 10-minute timeout, and the script produces a Markdown log with git diffs and test results.
+---
 
-Next morning — just SSH in. The menu will reattach to your running tmux session automatically.
+Next morning — SSH in. The menu will reattach to your running tmux session automatically.
 
 ```bash
 ssh ubuntu@my-dev-server
-# → reattaches to existing Claude Code session
+# → reattaches to existing tmux session
 
-# Or just pull from your laptop
+# Or pull from your laptop
 git pull origin main
 ```
 
@@ -355,7 +392,9 @@ docker run --rm -v dev-env_project-data:/data -v ~/backups:/backup \
 | Detach tmux | `Ctrl+A`, then `D` |
 | Reattach tmux | `tmux attach -t work` |
 | Claude autonomous | `claude -p "task" --dangerously-skip-permissions` |
-| Overnight script | `bash ~/dev-env/overnight-tasks.sh` |
+| Plan overnight tasks | `/plan-overnight` (inside Claude Code) |
+| Run tasks.txt | `bash ~/dev-env/run-tasks.sh` |
+| Overnight script (manual) | `bash ~/dev-env/overnight-tasks.sh` |
 | Daily health check | `bash ~/dev-env/git-check.sh` |
 | Health check (git only) | `SKIP_ANALYSIS=1 bash ~/dev-env/git-check.sh` |
 | View health check log | `tail -f ~/git-check.log` |
