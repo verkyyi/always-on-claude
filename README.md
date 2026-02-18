@@ -46,6 +46,8 @@ Your Laptop / Phone (Terminus, VS Code, etc.)
 | [`overnight-tasks.sh`](overnight-tasks.sh) | Autonomous Claude Code task runner |
 | [`start-claude.sh`](start-claude.sh) | Starts container if needed, launches Claude Code in tmux |
 | [`ssh-login.sh`](ssh-login.sh) | Interactive SSH login menu — Claude Code or plain shell |
+| [`git-check.sh`](git-check.sh) | Daily repo health check — git status, linting, tests, docs, auto-fix, GitHub issues |
+| [`git-check.cron`](git-check.cron) | Cron schedule for `git-check.sh` (runs daily at 08:00) |
 
 ---
 
@@ -82,6 +84,8 @@ aws ec2 revoke-security-group-ingress \
   --group-id sg-YOUR_SG_ID \
   --protocol tcp --port 22 --cidr YOUR_IP/32
 ```
+
+> **Tailscale SSH access mode:** After enabling `--ssh`, go to the [Tailscale admin console](https://login.tailscale.com/admin/machines) → select your machine → SSH → set access mode to **Accept** (not the default **Check**). Check mode requires periodic re-authentication and can interrupt normal SSH sessions. Accept mode lets SSH work transparently.
 
 Install [Tailscale](https://tailscale.com/download) on your laptop/phone and join the same network. Now you connect with just:
 
@@ -187,6 +191,40 @@ ssh ubuntu@my-dev-server
 
 # Or just pull from your laptop
 git pull origin main
+```
+
+---
+
+## Daily Repository Health Check
+
+`git-check.sh` runs automatically every morning at 08:00 via cron. For each git repo found under `$HOME` it:
+
+1. **Git health** — flags uncommitted changes, unpushed commits, and stale branches (>30 days)
+2. **Code quality** — runs linters and formatters via Claude
+3. **Test coverage** — runs the test suite and flags untested files via Claude
+4. **Documentation** — checks README, docstrings, and public API docs via Claude
+5. **Auto-fix** — applies safe formatter/linter fixes and commits them locally via Claude
+6. **GitHub issues** — files issues for significant problems found via Claude
+
+Output appends to `~/git-check.log`.
+
+### Activate the cron job
+
+```bash
+sudo cp ~/dev-env/git-check.cron /etc/cron.d/git-daily-check
+```
+
+### Run manually
+
+```bash
+# Full run (git checks + Claude analysis)
+bash ~/dev-env/git-check.sh
+
+# Git checks only — no Claude
+SKIP_ANALYSIS=1 bash ~/dev-env/git-check.sh
+
+# Custom log location
+LOG=/tmp/mylog.log bash ~/dev-env/git-check.sh
 ```
 
 ---
@@ -318,6 +356,9 @@ docker run --rm -v dev-env_project-data:/data -v ~/backups:/backup \
 | Reattach tmux | `tmux attach -t work` |
 | Claude autonomous | `claude -p "task" --dangerously-skip-permissions` |
 | Overnight script | `bash ~/dev-env/overnight-tasks.sh` |
+| Daily health check | `bash ~/dev-env/git-check.sh` |
+| Health check (git only) | `SKIP_ANALYSIS=1 bash ~/dev-env/git-check.sh` |
+| View health check log | `tail -f ~/git-check.log` |
 | Fix permissions | `docker compose exec -u root dev bash -c "chown -R dev:dev /home/dev/.claude /home/dev/project"` |
 | Re-auth Claude | `claude login` |
 
