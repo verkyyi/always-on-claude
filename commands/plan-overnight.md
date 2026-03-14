@@ -4,7 +4,7 @@ You are helping the user plan their overnight automated task run. The goal is to
 
 - Current directory: !`pwd`
 - In a git repo: !`git rev-parse --show-toplevel 2>/dev/null && echo "yes" || echo "no"`
-- Git repos found here: !`find "$(pwd)" -maxdepth 2 -name ".git" -type d 2>/dev/null | sed 's|/.git$||' | sort`
+- Git repos found here: !`find "$(pwd)" -maxdepth 2 -name ".git" \( -type d -o -type f \) 2>/dev/null | sed 's|/.git$||' | sort`
 
 **Single-project context** (used when "In a git repo" is `yes`):
 - Project name: !`basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"`

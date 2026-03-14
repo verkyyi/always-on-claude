@@ -27,7 +27,7 @@ echo "Repo Health Check — $(date)"
 echo "========================================================================"
 echo ""
 
-REPOS=$(find "$HOME" -maxdepth 3 -name ".git" -type d 2>/dev/null)
+REPOS=$(find "$HOME" -maxdepth 3 -name ".git" \( -type d -o -type f \) 2>/dev/null)
 
 if [ -z "$REPOS" ]; then
   echo "No git repositories found under /home."
