@@ -27,7 +27,7 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
     && apt-get update && apt-get install -y gh
 
 # Non-root user (Claude Code refuses to run as root)
-RUN useradd -m -s /bin/bash dev
+RUN userdel -r ubuntu && groupadd -g 1000 dev && useradd -m -s /bin/bash -u 1000 -g 1000 dev
 
 # Claude Code — native installer, must run as non-root
 USER dev
