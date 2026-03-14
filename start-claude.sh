@@ -135,7 +135,8 @@ while true; do
             continue
         }
 
-        selected="$wt_result"
+        # Last line is the worktree path; earlier lines are git progress messages
+        selected=$(tail -1 <<< "$wt_result")
         echo "  Created: $selected"
         break
 
