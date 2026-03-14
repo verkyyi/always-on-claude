@@ -1,6 +1,10 @@
 #!/bin/bash
+# DEPRECATED — Use install.sh instead for a fully automated one-line setup:
+#   curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/install.sh | bash
+#
 # bootstrap.sh — Run once on a fresh EC2 Ubuntu 24.04 instance.
 # Installs Docker, tmux, Tailscale, and prepares for the dev container.
+# Kept for reference. See install.sh for the current setup flow.
 #
 # Usage:
 #   scp -i your-key.pem bootstrap.sh ubuntu@<ip>:~/

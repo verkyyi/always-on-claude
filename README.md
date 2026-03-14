@@ -1,8 +1,8 @@
-# Always-On Claude Code: EC2 + Docker Compose
+# Always-On Claude Code
 
-A reproducible, always-on development environment on AWS for running [Claude Code](https://docs.anthropic.com/en/docs/claude-code) autonomously — including overnight unattended workflows.
+A reproducible, always-on development environment for running [Claude Code](https://docs.anthropic.com/en/docs/claude-code) autonomously — including overnight unattended workflows.
 
-**~$22/mo.** No ports exposed. Connect from anywhere — laptop, phone, tablet.
+**~$22/mo on AWS.** No ports exposed. Connect from anywhere — laptop, phone, tablet. Works on any Ubuntu 24.04 server.
 
 ---
 
@@ -19,7 +19,7 @@ Your Laptop / Phone (Terminus, VS Code, etc.)
     │
     ├── Tailscale VPN (encrypted mesh)
     │
-    └── EC2 Instance (t3.medium)
+    └── Ubuntu 24.04 Server (any provider)
          ├── Docker Compose
          │    └── Dev Container
          │         ├── Claude Code (native installer)
@@ -29,7 +29,7 @@ Your Laptop / Phone (Terminus, VS Code, etc.)
          │         ├── ripgrep, fzf, zsh
          │         └── Your project repo
          ├── tmux (session persistence)
-         └── 30GB gp3 EBS (persistent storage)
+         └── 30GB+ storage
 ```
 
 ---
@@ -38,10 +38,13 @@ Your Laptop / Phone (Terminus, VS Code, etc.)
 
 | File | Purpose |
 |------|---------|
+| [`provision.sh`](provision.sh) | **Run from your laptop** — provisions AWS EC2 + runs install.sh over SSH |
+| [`install.sh`](install.sh) | **Run on the server** — automates full setup, guides through auth |
+| [`setup-auth.sh`](setup-auth.sh) | In-container auth helper (git, gh, claude login) |
 | [`Dockerfile.dev`](Dockerfile.dev) | Ubuntu 24.04, Node 22, AWS CLI, gh, Claude Code (native), ripgrep/fzf/zsh |
 | [`docker-compose.yml`](docker-compose.yml) | Persistent volumes, host networking for IAM role |
 | [`cloudformation.yml`](cloudformation.yml) | EC2 + security group + IAM role stack |
-| [`bootstrap.sh`](bootstrap.sh) | One-shot EC2 setup (Docker, tmux, Tailscale) |
+| [`bootstrap.sh`](bootstrap.sh) | Legacy one-shot setup (deprecated — use `install.sh`) |
 | [`load-secrets.sh`](load-secrets.sh) | Pulls secrets from AWS SSM Parameter Store into env vars |
 | [`overnight-tasks.sh`](overnight-tasks.sh) | Simple autonomous task runner — hardcode tasks directly in the script |
 | [`run-tasks.sh`](run-tasks.sh) | Task runner that reads `tasks.txt` from `~/overnight/` — use with `/plan-overnight` |
@@ -54,41 +57,153 @@ Your Laptop / Phone (Terminus, VS Code, etc.)
 
 ---
 
+## Prerequisites
+
+You need these accounts/tools before starting:
+
+| What | Why | From scratch |
+|------|-----|--------------|
+| **Cloud server or AWS account** | Hosts the environment | ~10 min (AWS signup) or already have a VPS |
+| **AWS CLI** *(AWS path only)* | `provision.sh` talks to AWS | ~5 min (`brew install awscli` + `aws configure`) |
+| **[Tailscale](https://tailscale.com/) account** | Secure SSH from anywhere, no open ports | ~2 min (free) |
+| **GitHub account** | Push/pull repos via `gh auth` | You probably have this |
+| **Claude Max or Team subscription** | `claude login` inside the container | You probably have this |
+
+Already have AWS + GitHub + Claude? You just need a [Tailscale account](https://login.tailscale.com/start) (free, 2 minutes).
+
+---
+
+## How Long Does It Take?
+
+**First run (AWS path, from laptop to working Claude Code): ~10-15 minutes.**
+
+```
+provision.sh (your laptop)
+├── Preflight + key pair + AMI lookup       ~10s
+├── CloudFormation create + wait            ~2-3 min     ← server booting
+├── Wait for SSH ready                      ~30-60s
+│
+install.sh Phase 1 (on server, automated)
+├── System packages (Docker, tmux, at)      ~1-2 min
+├── Tailscale binary install                ~15s
+├── Git clone repo                          ~5s
+├── Create host dirs + files                ~1s
+├── docker compose build                    ~3-5 min     ← biggest step
+└── docker compose up + fix permissions     ~10s
+│
+install.sh Phase 2 (interactive, needs browser)
+├── Tailscale auth — paste URL, approve     ~1-2 min
+├── Git config — type name + email          ~30s
+├── gh auth login — paste device code       ~1 min
+└── claude login — paste URL                ~1 min
+```
+
+**Re-run (idempotent):** ~30 seconds — everything skips.
+
+---
+
 ## Quick Start
 
-### 1. Deploy the EC2 instance
+You need an Ubuntu 24.04 server with at least 2 vCPUs, 4 GB RAM, and 30 GB storage. Pick whichever path gets you there:
+
+### Option A: I already have a server
+
+If you have any Ubuntu 24.04 VPS (DigitalOcean, Hetzner, Linode, Vultr, your own hardware, etc.):
 
 ```bash
-aws cloudformation create-stack \
-  --stack-name my-dev \
-  --template-body file://cloudformation.yml \
-  --capabilities CAPABILITY_NAMED_IAM \
-  --parameters \
-    ParameterKey=KeyPairName,ParameterValue=your-key \
-    ParameterKey=MyIP,ParameterValue=$(curl -s ifconfig.me)/32
+ssh root@<YOUR_SERVER_IP>
+curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/install.sh | bash
 ```
 
-### 2. Bootstrap the server
+That's it. The script installs everything, then walks you through Tailscale, git, GitHub, and Claude auth.
+
+### Option B: I need a server (AWS, fully automated)
+
+One command from your laptop. Provisions an EC2 instance and bootstraps it over SSH:
 
 ```bash
-scp -i your-key.pem bootstrap.sh ubuntu@<PUBLIC_IP>:~/
-ssh -i your-key.pem ubuntu@<PUBLIC_IP> 'bash ~/bootstrap.sh'
+curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/provision.sh | bash
 ```
 
-### 3. Set up Tailscale
+**Prerequisites:** AWS CLI installed and configured (`aws configure`). The script handles everything else — key pair, AMI lookup, CloudFormation stack, waiting for boot, SSH, and running `install.sh`.
 
+Override defaults with env vars:
 ```bash
-# On the EC2 instance
-sudo tailscale up --ssh
-sudo tailscale set --hostname my-dev-server
-
-# Then lock down the security group — remove public SSH
-aws ec2 revoke-security-group-ingress \
-  --group-id sg-YOUR_SG_ID \
-  --protocol tcp --port 22 --cidr YOUR_IP/32
+STACK_NAME=my-dev KEY_NAME=my-key AWS_REGION=us-west-2 bash provision.sh
 ```
 
-> **Tailscale SSH access mode:** After enabling `--ssh`, go to the [Tailscale admin console](https://login.tailscale.com/admin/machines) → select your machine → SSH → set access mode to **Accept** (not the default **Check**). Check mode requires periodic re-authentication and can interrupt normal SSH sessions. Accept mode lets SSH work transparently.
+<details>
+<summary>New to AWS? Step-by-step setup</summary>
+
+1. **Create an AWS account** at [aws.amazon.com](https://aws.amazon.com/). New accounts get 12 months of free tier (t3.medium is not free tier, but costs ~$30/mo).
+
+2. **Install the AWS CLI:**
+   - macOS: `brew install awscli`
+   - Linux: `sudo apt install awscli` or [official installer](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
+   - Windows: [MSI installer](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
+
+3. **Create an access key:** Go to [IAM console](https://console.aws.amazon.com/iam/) → Users → your user → Security credentials → Create access key
+
+4. **Configure the CLI:**
+   ```bash
+   aws configure
+   # Enter your access key, secret key, and preferred region (e.g. us-east-1)
+   ```
+
+5. **Run the provisioning script:**
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/provision.sh | bash
+   ```
+
+</details>
+
+### Option C: I need a server (other providers)
+
+Any Ubuntu 24.04 VPS works. Here's how to get one:
+
+<details>
+<summary>DigitalOcean (~$24/mo)</summary>
+
+1. Sign up at [digitalocean.com](https://www.digitalocean.com/)
+2. Create a Droplet: **Ubuntu 24.04**, **Regular $24/mo** (2 vCPU, 4 GB, 80 GB), choose a region
+3. Add your SSH key (or use their console password)
+4. Once created, copy the IP address and run:
+   ```bash
+   ssh root@<DROPLET_IP>
+   curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/install.sh | bash
+   ```
+
+</details>
+
+<details>
+<summary>Hetzner (~EUR 4.5/mo)</summary>
+
+1. Sign up at [hetzner.com](https://www.hetzner.com/cloud/)
+2. Create a server: **Ubuntu 24.04**, **CX22** (2 vCPU, 4 GB, 40 GB), choose a location
+3. Add your SSH key
+4. Once created, copy the IP address and run:
+   ```bash
+   ssh root@<SERVER_IP>
+   curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/install.sh | bash
+   ```
+
+</details>
+
+<details>
+<summary>Linode/Akamai (~$24/mo)</summary>
+
+1. Sign up at [linode.com](https://www.linode.com/)
+2. Create a Linode: **Ubuntu 24.04**, **Linode 4GB** (2 vCPU, 4 GB, 80 GB), choose a region
+3. Set a root password or add your SSH key
+4. Once created, copy the IP address and run:
+   ```bash
+   ssh root@<LINODE_IP>
+   curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/install.sh | bash
+   ```
+
+</details>
+
+### After setup
 
 Install [Tailscale](https://tailscale.com/download) on your laptop/phone and join the same network. Now you connect with just:
 
@@ -96,75 +211,111 @@ Install [Tailscale](https://tailscale.com/download) on your laptop/phone and joi
 ssh ubuntu@my-dev-server
 ```
 
-### 4. Upload files and start the container
+> **Tailscale SSH access mode:** After enabling `--ssh`, go to the [Tailscale admin console](https://login.tailscale.com/admin/machines) → select your machine → SSH → set access mode to **Accept** (not the default **Check**). Check mode requires periodic re-authentication and can interrupt normal SSH sessions. Accept mode lets SSH work transparently.
+
+<details>
+<summary><strong>Manual Setup (Reference)</strong></summary>
+
+If you prefer to run each step manually instead of using `install.sh`:
+
+#### Bootstrap the server
+
+```bash
+scp -i your-key.pem bootstrap.sh ubuntu@<PUBLIC_IP>:~/
+ssh -i your-key.pem ubuntu@<PUBLIC_IP> 'bash ~/bootstrap.sh'
+```
+
+#### Set up Tailscale
+
+```bash
+sudo tailscale up --ssh
+sudo tailscale set --hostname my-dev-server
+```
+
+#### Upload files and start the container
 
 ```bash
 scp -r ./* ubuntu@my-dev-server:~/dev-env/
-ssh ubuntu@my-dev-server
 
-# Deploy the /plan-overnight slash command to your Claude Code user commands
+# Deploy slash commands
 mkdir -p ~/.claude/commands
 cp ~/dev-env/commands/plan-overnight.md ~/.claude/commands/
 
-# Pre-create bind mount targets (must exist before first docker compose up)
-mkdir -p ~/.claude
+# Pre-create bind mount targets
+mkdir -p ~/.claude/debug
 touch ~/.claude.json
-
-# Overnight shared volume (task files + logs, visible to both host and container)
 mkdir -p ~/overnight/logs
+mkdir -p ~/.gitconfig.d
 
 cd ~/dev-env
 docker compose up -d
 
-# Fix named volume permissions (Docker volumes mount as root)
+# Fix permissions
 docker compose exec -u root dev bash -c \
-  "chown -R dev:dev /home/dev/project"
+  "chown -R dev:dev /home/dev/projects"
 
-# One-time: install at and activate the trigger-watcher cron
+# Install at daemon and trigger-watcher cron
 sudo apt-get install -y at
 sudo systemctl enable --now atd
 (crontab -l 2>/dev/null; echo "* * * * * bash ~/dev-env/trigger-watcher.sh >> ~/overnight/trigger-watcher.log 2>&1") | crontab -
 ```
 
-### 5. One-time setup inside the container
+#### One-time auth inside the container
 
 ```bash
 docker compose exec dev bash
 
-# Git config
 git config --global user.name "Your Name"
 git config --global user.email "you@example.com"
-
-# Clone your project (use HTTPS — .ssh mount is read-only)
-cd ~/project
-git clone https://github.com/your-org/your-repo.git .
-npm install
-
-# Auth
 gh auth login
 claude login    # subscription auth, not API key — see gotchas below
-
-# Verify
-aws sts get-caller-identity
-claude -p "hello"
 ```
+
+</details>
+
+---
+
+## What You Get
+
+After setup completes, log out and SSH back in:
+
+```
+$ ssh ubuntu@my-dev-server
+
+  ┌─────────────────────────────┐
+  │  [1] Claude Code            │
+  │  [2] Container bash         │
+  │  [3] Host shell             │
+  └─────────────────────────────┘
+```
+
+**The server is running:**
+- Docker container (`claude-dev`) with Claude Code, Node.js 22, npm, Bun, AWS CLI v2, GitHub CLI, ripgrep, fzf, zsh
+- Tailscale mesh VPN — SSH from any device, no open ports
+- tmux for session persistence — disconnect and reconnect without losing state
+
+**Automation is wired up:**
+- SSH login menu — press Enter to land in Claude Code
+- `/plan-overnight` slash command — plan tasks, schedule them, go to sleep
+- `trigger-watcher` cron — detects scheduled tasks every minute, queues them via `at`
+- Overnight task logs in `~/overnight/logs/`
+
+**Everything persists across container rebuilds** (bind-mounted volumes):
+
+| Host path | Container path | What it stores |
+|-----------|---------------|----------------|
+| `~/.claude` | `/home/dev/.claude` | Auth tokens, settings, history |
+| `~/.claude.json` | `/home/dev/.claude.json` | Onboarding state |
+| `~/projects` | `/home/dev/projects` | Your code repos |
+| `~/overnight` | `/home/dev/overnight` | Task files + run logs |
+| `~/.gitconfig.d` | `/home/dev/.gitconfig.d` | Git config |
+| `~/.ssh` | `/home/dev/.ssh` | SSH keys (read-only) + known_hosts |
 
 ---
 
 ## One-Command Access
 
-After bootstrap, every SSH login shows an interactive menu:
-
-```
-  ┌─────────────────────────────┐
-  │  [1] Claude Code (3s)       │
-  │  [2] Plain shell            │
-  └─────────────────────────────┘
-```
-
-Wait 3 seconds (or press Enter) and you're in Claude Code — container auto-starts if needed, tmux session auto-resumes if one exists. Press `2` for a normal shell.
-
-This works from **any SSH client on any device** — no client-side config required. Phone, tablet, someone else's laptop — just `ssh ubuntu@my-dev-server`.
+The login menu works from **any SSH client on any device** — phone, tablet, someone else's laptop. No client-side config needed.
 
 If an existing tmux session is running (e.g. from an overnight task), you'll reattach to it and see exactly where things left off.
 
@@ -392,16 +543,17 @@ These are real issues hit during setup — none documented anywhere obvious.
 
 ## Cost
 
-| Item | Monthly |
-|------|---------|
-| EC2 t3.medium (on-demand) | ~$30 |
-| EC2 t3.medium (1yr reserved) | ~$19 |
-| EBS 30GB gp3 | ~$2.40 |
-| Tailscale | Free |
-| Data transfer | ~$1–2 |
-| **Total** | **~$22–34** |
+| Provider | Spec | Monthly |
+|----------|------|---------|
+| **Hetzner CX22** | 2 vCPU, 4 GB, 40 GB | ~EUR 4.50 |
+| **AWS EC2 t3.medium** (1yr reserved) | 2 vCPU, 4 GB, 30 GB | ~$22 |
+| **DigitalOcean** | 2 vCPU, 4 GB, 80 GB | ~$24 |
+| **Linode 4GB** | 2 vCPU, 4 GB, 80 GB | ~$24 |
+| **AWS EC2 t3.medium** (on-demand) | 2 vCPU, 4 GB, 30 GB | ~$32 |
 
-> Spot Instances can bring EC2 down to ~$9–10/mo. You'll need to handle occasional interruptions.
+Tailscale is free. All providers include enough bandwidth for dev work.
+
+> AWS Spot Instances can bring EC2 down to ~$9–10/mo. You'll need to handle occasional interruptions.
 
 ---
 
