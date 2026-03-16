@@ -31,6 +31,43 @@ info()  { echo ""; echo "=== $* ==="; }
 ok()    { echo "  OK: $*"; }
 die()   { echo "ERROR: $*" >&2; exit 1; }
 
+# --- Confirmation -----------------------------------------------------------
+
+echo ""
+echo "============================================"
+echo "  always-on-claude provisioner"
+echo "============================================"
+echo ""
+echo "  What this will do:"
+echo "    1. Create an SSH key pair in AWS (if not exists)"
+echo "    2. Create a security group allowing SSH from anywhere"
+echo "    3. Launch an EC2 instance ($INSTANCE_TYPE, 30GB, Ubuntu 24.04)"
+echo "    4. Install Docker + Claude Code on the instance"
+echo "    5. Prompt you for GitHub + Claude authentication"
+echo ""
+echo "  Prerequisites:"
+echo "    - AWS CLI configured with valid credentials (aws configure)"
+echo "    - An AWS account (this will create billable resources)"
+echo ""
+echo "  Cost:"
+echo "    - $INSTANCE_TYPE in $AWS_REGION: ~\$0.04/hr (~\$30/mo if left running)"
+echo "    - 30GB gp3 EBS: ~\$2.40/mo"
+echo "    - Stop the instance when not in use to save money"
+echo ""
+echo "  Resources created (tagged Project=$TAG):"
+echo "    - EC2 instance: $INSTANCE_NAME"
+echo "    - Security group: $SG_NAME (SSH open to 0.0.0.0/0)"
+echo "    - SSH key pair: $KEY_NAME"
+echo ""
+echo "  Tear down anytime:"
+echo "    curl -fsSL https://raw.githubusercontent.com/.../destroy.sh | bash"
+echo ""
+read -rp "  Proceed? [y/N] " confirm
+if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
+    echo "  Aborted."
+    exit 0
+fi
+
 # --- Preflight --------------------------------------------------------------
 
 info "Preflight checks"
