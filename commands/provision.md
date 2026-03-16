@@ -5,7 +5,7 @@ You are orchestrating the provisioning of an always-on Claude Code workspace on 
 - AWS CLI configured: !`aws sts get-caller-identity 2>&1 | head -5`
 - AWS region: !`aws configure get region 2>/dev/null || echo "not set"`
 - Existing SSH keys: !`ls ~/.ssh/*.pem 2>/dev/null || echo "none"`
-- Existing CloudFormation stacks: !`aws cloudformation list-stacks --stack-status-filter CREATE_COMPLETE UPDATE_COMPLETE --query 'StackSummaries[].StackName' --output text 2>/dev/null || echo "error — check AWS CLI"`
+- Existing instances: !`aws ec2 describe-instances --filters "Name=tag:Project,Values=always-on-claude" "Name=instance-state-name,Values=running,pending" --query 'Reservations[].Instances[].[InstanceId,PublicIpAddress,Tags[?Key==\x60Name\x60].Value|[0]]' --output text 2>/dev/null || echo "error — check AWS CLI"`
 
 ---
 
@@ -13,39 +13,38 @@ You are orchestrating the provisioning of an always-on Claude Code workspace on 
 
 If the AWS CLI context above shows an error or is not configured, stop and help the user set it up before proceeding. They need `aws configure` with a valid access key, secret, and region.
 
-If `$ARGUMENTS` is provided, parse it for preferences (e.g. region, instance type, stack name, `tailscale`, `overnight`). Anything not specified uses defaults.
+If an existing instance is found, ask if they want to reuse it (skip to auth) or destroy and recreate.
+
+If `$ARGUMENTS` is provided, parse it for preferences (e.g. region, instance type, name). Anything not specified uses defaults.
 
 ---
 
 ## Step 1 — Collect preferences
 
-Ask the user ONE question with sensible defaults. Show what you'll create and let them confirm or adjust:
+Ask the user ONE question with sensible defaults:
 
 ```
-I'll provision an always-on Claude Code server with these settings:
+I'll provision an always-on Claude Code server:
 
   Region:        us-east-1
   Instance type: t3.medium
-  Stack name:    claude-dev
+  Instance name: claude-dev
   SSH key:       claude-dev-key
-  Tailscale:     no
-  Overnight:     no
 
 Press Enter to proceed, or tell me what to change.
 ```
 
-Adjust defaults based on context (e.g. if AWS region is already configured, use that). If `$ARGUMENTS` mentions `tailscale`, set Tailscale to yes. If `$ARGUMENTS` mentions `overnight`, set Overnight to yes. If a stack with the default name already exists, suggest a different name or ask if they want to reuse it.
+Adjust defaults based on context (e.g. if AWS region is already configured, use that).
 
 ---
 
 ## Step 2 — SSH key pair
 
 ```bash
-# Check if key exists in AWS
 aws ec2 describe-key-pairs --key-names "$KEY_NAME" --region "$REGION" 2>/dev/null
 ```
 
-- **Exists + local .pem file found**: skip, tell user
+- **Exists + local .pem file found**: skip
 - **Exists but no local file**: stop — tell user to find the .pem or delete the key pair
 - **Doesn't exist**: create it:
 
@@ -56,188 +55,96 @@ chmod 600 ~/.ssh/$KEY_NAME.pem
 
 ---
 
-## Step 3 — Find Ubuntu 24.04 AMI
+## Step 3 — Security group
+
+```bash
+SG_ID=$(aws ec2 describe-security-groups --region "$REGION" --filters "Name=group-name,Values=claude-dev-sg" --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null)
+```
+
+- **Exists**: reuse it
+- **Doesn't exist**: create + authorize SSH + tag with `Project=always-on-claude`
+
+---
+
+## Step 4 — Find Ubuntu 24.04 AMI
 
 ```bash
 aws ec2 describe-images \
-    --owners 099720109477 \
-    --region "$REGION" \
-    --filters \
-        "Name=name,Values=ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*" \
-        "Name=state,Values=available" \
-    --query 'Images | sort_by(@, &CreationDate) | [-1].ImageId' \
-    --output text
-```
-
-If this returns `None`, the region may not have the AMI. Tell the user and suggest a different region.
-
----
-
-## Step 4 — Deploy CloudFormation
-
-Check if the stack already exists and is healthy:
-- `CREATE_COMPLETE` or `UPDATE_COMPLETE` → skip, reuse it
-- `ROLLBACK_COMPLETE` or `DELETE_FAILED` → delete it first, then recreate
-- `*_IN_PROGRESS` → wait for it to finish, then assess
-- Doesn't exist → create it
-
-To create:
-```bash
-# Download template if not available locally
-curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/cloudformation.yml -o /tmp/aoc-cloudformation.yml
-
-aws cloudformation create-stack \
-    --stack-name "$STACK_NAME" \
-    --region "$REGION" \
-    --template-body file:///tmp/aoc-cloudformation.yml \
-    --parameters \
-        ParameterKey=KeyPairName,ParameterValue="$KEY_NAME"
-```
-
-Then wait:
-```bash
-aws cloudformation wait stack-create-complete --stack-name "$STACK_NAME" --region "$REGION"
-```
-
-Tell the user "Creating infrastructure... this takes 2-3 minutes." while waiting.
-
----
-
-## Step 5 — Get instance IP
-
-```bash
-aws cloudformation describe-stacks \
-    --stack-name "$STACK_NAME" \
-    --region "$REGION" \
-    --query 'Stacks[0].Outputs[?OutputKey==`PublicIP`].OutputValue' \
-    --output text
+    --owners 099720109477 --region "$REGION" \
+    --filters "Name=name,Values=ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*" "Name=state,Values=available" \
+    --query 'Images | sort_by(@, &CreationDate) | [-1].ImageId' --output text
 ```
 
 ---
 
-## Step 6 — Wait for SSH
+## Step 5 — Launch instance
 
-Poll until SSH is available (max 30 attempts, 5s apart):
+```bash
+aws ec2 run-instances \
+    --region "$REGION" \
+    --image-id "$AMI_ID" \
+    --instance-type "$INSTANCE_TYPE" \
+    --key-name "$KEY_NAME" \
+    --security-group-ids "$SG_ID" \
+    --user-data '#!/bin/bash
+exec > /var/log/install.log 2>&1
+su - ubuntu -c "NON_INTERACTIVE=1 bash -c '\''curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/install.sh | bash'\''"' \
+    --block-device-mappings 'DeviceName=/dev/sda1,Ebs={VolumeSize=30,VolumeType=gp3,DeleteOnTermination=true}' \
+    --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=claude-dev},{Key=Project,Value=always-on-claude}]' \
+    --query 'Instances[0].InstanceId' --output text
+```
 
+Tell the user "Instance launched — install.sh is running in the background via User Data."
+
+---
+
+## Step 6 — Wait for instance + SSH
+
+```bash
+aws ec2 wait instance-running --region "$REGION" --instance-ids "$INSTANCE_ID"
+```
+
+Get public IP, then poll SSH:
 ```bash
 ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -o BatchMode=yes -i ~/.ssh/$KEY_NAME.pem ubuntu@$IP "echo ok"
 ```
 
 ---
 
-## Step 7 — Remote setup via SSH
+## Step 7 — Wait for setup
 
-Run the install steps remotely. Use `ssh -t -i KEY ubuntu@IP "commands"` for each group. Set `TAILSCALE=1` or `OVERNIGHT=1` in the remote environment based on the user's preferences from Step 1.
-
-**7a — System packages + Docker:**
 ```bash
-ssh -t -i $KEY ubuntu@$IP "sudo apt-get update -qq && \
-    (command -v docker &>/dev/null || curl -fsSL https://get.docker.com | sh) && \
-    (command -v tmux &>/dev/null || sudo apt-get install -y -qq tmux) && \
-    (docker compose version &>/dev/null 2>&1 || sudo apt-get install -y -qq docker-compose-plugin) && \
-    (id -nG ubuntu | grep -qw docker || sudo usermod -aG docker ubuntu)"
+ssh -t -i $KEY ubuntu@$IP "cloud-init status --wait >/dev/null 2>&1"
 ```
 
-**7b — Tailscale (only if enabled):**
+Verify container is running:
 ```bash
-ssh -t -i $KEY ubuntu@$IP "command -v tailscale &>/dev/null || curl -fsSL https://tailscale.com/install.sh | sh"
+ssh -i $KEY ubuntu@$IP "sg docker -c 'docker ps --format {{.Names}}' | grep -q claude-dev"
 ```
-
-**7c — Overnight task dependencies (only if enabled):**
-```bash
-ssh -t -i $KEY ubuntu@$IP "(dpkg -s at &>/dev/null 2>&1 || sudo apt-get install -y -qq at) && \
-    (systemctl is-active --quiet atd 2>/dev/null || sudo systemctl enable --now atd)"
-```
-
-**7d — Clone repo + host dirs:**
-```bash
-ssh -t -i $KEY ubuntu@$IP 'DEV_ENV=$HOME/dev-env && \
-    ([ -d "$DEV_ENV/.git" ] && git -C "$DEV_ENV" pull --ff-only || git clone https://github.com/verkyyi/always-on-claude.git "$DEV_ENV") && \
-    mkdir -p ~/.claude/commands ~/.claude/debug ~/projects ~/overnight/logs ~/.gitconfig.d ~/.ssh && \
-    ([ -s ~/.claude.json ] || echo "{}" > ~/.claude.json) && \
-    [ -f ~/.ssh/known_hosts ] || touch ~/.ssh/known_hosts && \
-    cp "$DEV_ENV"/commands/*.md ~/.claude/commands/ 2>/dev/null; \
-    chmod +x "$DEV_ENV"/*.sh 2>/dev/null; true'
-```
-
-**7e — Shell integration:**
-```bash
-ssh -t -i $KEY ubuntu@$IP 'grep -q "ssh-login.sh" ~/.bash_profile 2>/dev/null || echo -e "\n# Auto-launch Claude Code on SSH login\nsource ~/dev-env/ssh-login.sh" >> ~/.bash_profile'
-```
-
-**7f — Trigger-watcher cron (only if overnight enabled):**
-```bash
-ssh -t -i $KEY ubuntu@$IP 'crontab -l 2>/dev/null | grep -q "trigger-watcher.sh" || (crontab -l 2>/dev/null; echo "* * * * * bash ~/dev-env/trigger-watcher.sh >> ~/overnight/trigger-watcher.log 2>&1") | crontab -'
-```
-
-**7g — Docker pull + start:**
-```bash
-ssh -t -i $KEY ubuntu@$IP 'cd ~/dev-env && sg docker -c "docker pull ghcr.io/verkyyi/always-on-claude:latest && docker compose up -d"'
-```
-
-If pull fails, fallback:
-```bash
-ssh -t -i $KEY ubuntu@$IP 'cd ~/dev-env && sg docker -c "docker compose -f docker-compose.yml -f docker-compose.build.yml build && docker compose up -d"'
-```
-
-**7h — Fix permissions:**
-```bash
-ssh -t -i $KEY ubuntu@$IP 'cd ~/dev-env && sg docker -c "docker compose exec -T -u root dev bash -c \"chown -R dev:dev /home/dev/projects /home/dev/.claude /home/dev/overnight\""'
-```
-
-After each group, report progress to the user (e.g. "Docker installed. Pulling image...").
 
 ---
 
-## Step 8 — Interactive auth (needs user)
+## Step 8 — Interactive auth
 
-Tell the user:
-
-```
-Infrastructure is ready! Now we need to set up authentication.
-This requires you to open URLs in your browser.
-
-I'll SSH you into the container where setup-auth.sh will run interactively.
-```
-
-If Tailscale is enabled, first do:
 ```bash
-ssh -t -i $KEY ubuntu@$IP "sudo tailscale up --ssh"
-```
-Tell the user to open the Tailscale URL in their browser and authenticate. Then ask for a hostname and set it.
-
-Then run the interactive auth:
-```bash
-ssh -t -i $KEY ubuntu@$IP 'cd ~/dev-env && sg docker -c "docker compose exec -it dev bash /home/dev/dev-env/setup-auth.sh"'
+ssh -t -i $KEY ubuntu@$IP "cd ~/dev-env && sg docker -c 'docker compose exec -it dev bash /home/dev/dev-env/setup-auth.sh'"
 ```
 
-**IMPORTANT:** This is interactive — the user will see prompts for git config, `gh auth login`, and `claude login`. Tell them what to expect before running it.
+Tell the user what to expect before running it (git config, GitHub CLI, Claude login — each requires browser auth).
 
 ---
 
-## Step 9 — Verify + print summary
-
-Run verification:
-```bash
-ssh -i $KEY ubuntu@$IP 'cd ~/dev-env && sg docker -c "docker ps --format {{.Names}}" | grep -q claude-dev && echo "container: ok" || echo "container: FAIL"'
-```
-
-Then print a clean summary:
+## Step 9 — Summary
 
 ```
-Setup complete!
+Provisioning complete!
 
-  Instance IP: $IP
-  SSH key:     ~/.ssh/$KEY_NAME.pem
-  Stack:       $STACK_NAME ($REGION)
+  Instance:  $INSTANCE_ID
+  Public IP: $IP
+  SSH key:   ~/.ssh/$KEY_NAME.pem
 
   Connect:
     ssh -i ~/.ssh/$KEY_NAME.pem ubuntu@$IP
-
-  [If Tailscale] Or via Tailscale:
-    ssh ubuntu@$TAILSCALE_HOSTNAME
-
-  The login menu will appear — press Enter for Claude Code.
 
   To tear down:
     /destroy
@@ -247,10 +154,10 @@ Setup complete!
 
 ## Error handling
 
-- **CloudFormation in ROLLBACK_COMPLETE**: delete the stack and retry creation
-- **SSH timeout after 30 tries**: check security group allows your IP, check instance is running
-- **Docker pull fails**: fall back to local build, tell the user it will take a few extra minutes
-- **Any SSH command fails**: show the error, suggest the user SSH in manually to debug
-- **Key pair exists without local file**: don't create a new one — the instance won't accept it. Help user find the file or delete the AWS key pair first.
+- **Instance already exists**: ask if reuse or recreate
+- **SSH timeout**: check security group, check instance state
+- **cloud-init errors**: show /var/log/install.log
+- **Docker pull fails**: install.sh falls back to local build automatically
+- **Key pair exists without local file**: help user find it or delete the AWS key pair
 
-Do NOT blindly retry failed commands. Diagnose the error and take the appropriate corrective action, or ask the user for help.
+Do NOT blindly retry failed commands. Diagnose and fix, or ask the user.

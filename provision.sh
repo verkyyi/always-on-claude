@@ -1,31 +1,29 @@
 #!/bin/bash
-# provision.sh — Run on your laptop to provision an EC2 instance and bootstrap it.
+# provision.sh — Run on your Mac to provision an EC2 instance and bootstrap it.
 #
-# Truly one command from zero (assumes AWS CLI is configured):
+# One command from zero (assumes AWS CLI is configured):
 #   curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/provision.sh | bash
 #
-# Or clone first and run locally:
-#   bash provision.sh
-#
 # What it does:
-#   1. Creates/reuses an SSH key pair
-#   2. Finds the latest Ubuntu 24.04 AMI for your region
-#   3. Deploys the CloudFormation stack (install.sh runs via User Data in parallel)
-#   4. Waits for the instance + setup to complete
-#   5. SSHs in for interactive auth (git, GitHub CLI, Claude Code)
+#   1. Creates/reuses an SSH key pair and security group
+#   2. Launches EC2 instance with install.sh running via User Data
+#   3. Waits for instance + setup (~60s)
+#   4. SSHs in for interactive auth (git, GitHub CLI, Claude Code)
 #
 # Override defaults with env vars:
-#   STACK_NAME=my-dev KEY_NAME=my-key AWS_REGION=us-west-2 bash provision.sh
+#   INSTANCE_NAME=my-dev KEY_NAME=my-key AWS_REGION=us-west-2 bash provision.sh
 
 set -euo pipefail
 
 # --- Config (override with env vars) ----------------------------------------
 
-STACK_NAME="${STACK_NAME:-claude-dev}"
+INSTANCE_NAME="${INSTANCE_NAME:-claude-dev}"
 KEY_NAME="${KEY_NAME:-claude-dev-key}"
 AWS_REGION="${AWS_REGION:-$(aws configure get region 2>/dev/null || echo "us-east-1")}"
 INSTANCE_TYPE="${INSTANCE_TYPE:-t3.medium}"
+SG_NAME="${SG_NAME:-claude-dev-sg}"
 SSH_USER="${SSH_USER:-ubuntu}"
+TAG="always-on-claude"
 
 # --- Helpers ----------------------------------------------------------------
 
@@ -40,10 +38,52 @@ info "Preflight checks"
 command -v aws &>/dev/null || die "AWS CLI not found. Install: https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html"
 command -v ssh &>/dev/null || die "SSH client not found."
 
-# Verify AWS credentials work
 aws sts get-caller-identity &>/dev/null || die "AWS credentials not configured. Run: aws configure"
 
 ok "AWS CLI configured (region: $AWS_REGION)"
+
+# --- Check for existing instance -------------------------------------------
+
+info "Checking for existing instance"
+
+EXISTING_ID=$(aws ec2 describe-instances \
+    --region "$AWS_REGION" \
+    --filters \
+        "Name=tag:Project,Values=$TAG" \
+        "Name=tag:Name,Values=$INSTANCE_NAME" \
+        "Name=instance-state-name,Values=running,pending" \
+    --query 'Reservations[0].Instances[0].InstanceId' \
+    --output text 2>/dev/null || echo "None")
+
+if [[ "$EXISTING_ID" != "None" && -n "$EXISTING_ID" ]]; then
+    PUBLIC_IP=$(aws ec2 describe-instances \
+        --region "$AWS_REGION" \
+        --instance-ids "$EXISTING_ID" \
+        --query 'Reservations[0].Instances[0].PublicIpAddress' \
+        --output text)
+    KEY_FILE="$HOME/.ssh/${KEY_NAME}.pem"
+    ok "Instance '$INSTANCE_NAME' already running: $EXISTING_ID ($PUBLIC_IP)"
+    echo ""
+    echo "  Skipping to auth setup. To start fresh, run destroy first."
+    echo ""
+
+    # Jump straight to auth
+    info "Authentication setup"
+    echo ""
+    echo "  Setting up git, GitHub CLI, and Claude Code."
+    echo "  This requires opening URLs in your browser."
+    echo ""
+    ssh -o StrictHostKeyChecking=no -t -i "$KEY_FILE" "${SSH_USER}@${PUBLIC_IP}" \
+        "cd ~/dev-env && sg docker -c 'docker compose exec -it dev bash /home/dev/dev-env/setup-auth.sh'"
+
+    echo ""
+    echo "============================================"
+    echo "  Done! Connect: ssh -i $KEY_FILE ${SSH_USER}@$PUBLIC_IP"
+    echo "============================================"
+    exit 0
+fi
+
+skip "No existing instance found — creating new one"
 
 # --- SSH Key Pair -----------------------------------------------------------
 
@@ -72,6 +112,39 @@ else
     ok "Created key pair and saved to $KEY_FILE"
 fi
 
+# --- Security group ---------------------------------------------------------
+
+info "Security group"
+
+SG_ID=$(aws ec2 describe-security-groups \
+    --region "$AWS_REGION" \
+    --filters "Name=group-name,Values=$SG_NAME" \
+    --query 'SecurityGroups[0].GroupId' \
+    --output text 2>/dev/null || echo "None")
+
+if [[ "$SG_ID" != "None" && -n "$SG_ID" ]]; then
+    ok "Security group '$SG_NAME' exists: $SG_ID"
+else
+    SG_ID=$(aws ec2 create-security-group \
+        --region "$AWS_REGION" \
+        --group-name "$SG_NAME" \
+        --description "SSH access for always-on Claude Code" \
+        --query 'GroupId' \
+        --output text)
+
+    aws ec2 authorize-security-group-ingress \
+        --region "$AWS_REGION" \
+        --group-id "$SG_ID" \
+        --protocol tcp --port 22 --cidr 0.0.0.0/0 >/dev/null
+
+    aws ec2 create-tags \
+        --region "$AWS_REGION" \
+        --resources "$SG_ID" \
+        --tags Key=Project,Value="$TAG" Key=Name,Value="$SG_NAME"
+
+    ok "Created security group: $SG_ID"
+fi
+
 # --- Find latest Ubuntu 24.04 AMI ------------------------------------------
 
 info "Finding Ubuntu 24.04 AMI"
@@ -88,75 +161,50 @@ AMI_ID=$(aws ec2 describe-images \
 [[ "$AMI_ID" == "None" || -z "$AMI_ID" ]] && die "Could not find Ubuntu 24.04 AMI in $AWS_REGION"
 ok "AMI: $AMI_ID"
 
-# --- CloudFormation stack ---------------------------------------------------
+# --- Launch instance --------------------------------------------------------
 
-info "CloudFormation stack"
+info "Launching instance"
 
-# Check if stack already exists
-stack_status=$(aws cloudformation describe-stacks \
-    --stack-name "$STACK_NAME" \
+USER_DATA=$(cat <<'USERDATA'
+#!/bin/bash
+exec > /var/log/install.log 2>&1
+su - ubuntu -c "NON_INTERACTIVE=1 bash -c 'curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/install.sh | bash'"
+USERDATA
+)
+
+INSTANCE_ID=$(aws ec2 run-instances \
     --region "$AWS_REGION" \
-    --query 'Stacks[0].StackStatus' \
-    --output text 2>/dev/null || echo "DOES_NOT_EXIST")
-
-if [[ "$stack_status" == "CREATE_COMPLETE" || "$stack_status" == "UPDATE_COMPLETE" ]]; then
-    ok "Stack '$STACK_NAME' already exists ($stack_status)"
-else
-    if [[ "$stack_status" != "DOES_NOT_EXIST" && "$stack_status" != "" ]]; then
-        echo "  Stack exists with status: $stack_status"
-        echo "  Delete it first: aws cloudformation delete-stack --stack-name $STACK_NAME --region $AWS_REGION"
-        exit 1
-    fi
-
-    # We need the CloudFormation template. Try local copy first, then download.
-    if [[ -f "cloudformation.yml" ]]; then
-        CF_TEMPLATE="file://cloudformation.yml"
-    else
-        echo "  Downloading cloudformation.yml..."
-        curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/cloudformation.yml -o /tmp/aoc-cloudformation.yml
-        CF_TEMPLATE="file:///tmp/aoc-cloudformation.yml"
-    fi
-
-    # Patch the AMI into the template's mappings (the template has a hardcoded AMI for us-east-1)
-    # Instead, we'll override via a parameter — but the template doesn't support that.
-    # Simplest: use the template as-is for us-east-1, or create a modified version for other regions.
-    # For now, we'll create the stack with the template and let it use its built-in AMI mapping.
-    # If the region isn't in the mapping, CloudFormation will fail with a clear error.
-
-    echo "  Creating stack '$STACK_NAME'..."
-    aws cloudformation create-stack \
-        --stack-name "$STACK_NAME" \
-        --region "$AWS_REGION" \
-        --template-body "$CF_TEMPLATE" \
-        --parameters \
-            ParameterKey=KeyPairName,ParameterValue="$KEY_NAME"
-
-    echo "  Waiting for stack to complete (this takes 2-3 minutes)..."
-    aws cloudformation wait stack-create-complete \
-        --stack-name "$STACK_NAME" \
-        --region "$AWS_REGION"
-
-    ok "Stack created"
-fi
-
-# --- Get instance IP --------------------------------------------------------
-
-info "Instance details"
-
-PUBLIC_IP=$(aws cloudformation describe-stacks \
-    --stack-name "$STACK_NAME" \
-    --region "$AWS_REGION" \
-    --query 'Stacks[0].Outputs[?OutputKey==`PublicIP`].OutputValue' \
+    --image-id "$AMI_ID" \
+    --instance-type "$INSTANCE_TYPE" \
+    --key-name "$KEY_NAME" \
+    --security-group-ids "$SG_ID" \
+    --user-data "$USER_DATA" \
+    --block-device-mappings 'DeviceName=/dev/sda1,Ebs={VolumeSize=30,VolumeType=gp3,DeleteOnTermination=true}' \
+    --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$INSTANCE_NAME},{Key=Project,Value=$TAG}]" \
+    --query 'Instances[0].InstanceId' \
     --output text)
 
-[[ -z "$PUBLIC_IP" || "$PUBLIC_IP" == "None" ]] && die "Could not get instance IP from stack outputs"
-ok "Public IP: $PUBLIC_IP"
+ok "Instance launched: $INSTANCE_ID"
+echo "  install.sh is running via User Data in the background..."
 
-# --- Wait for SSH to be available -------------------------------------------
+# --- Wait for instance + SSH ------------------------------------------------
 
-info "Waiting for SSH"
+info "Waiting for instance"
 
-echo "  Waiting for instance to accept SSH connections..."
+aws ec2 wait instance-running \
+    --region "$AWS_REGION" \
+    --instance-ids "$INSTANCE_ID"
+
+PUBLIC_IP=$(aws ec2 describe-instances \
+    --region "$AWS_REGION" \
+    --instance-ids "$INSTANCE_ID" \
+    --query 'Reservations[0].Instances[0].PublicIpAddress' \
+    --output text)
+
+[[ -z "$PUBLIC_IP" || "$PUBLIC_IP" == "None" ]] && die "Instance has no public IP"
+ok "Running: $PUBLIC_IP"
+
+echo "  Waiting for SSH..."
 for i in $(seq 1 30); do
     if ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -o BatchMode=yes \
         -i "$KEY_FILE" "${SSH_USER}@${PUBLIC_IP}" "echo ok" &>/dev/null 2>&1; then
@@ -164,20 +212,17 @@ for i in $(seq 1 30); do
         break
     fi
     if [[ $i -eq 30 ]]; then
-        die "SSH not available after 150 seconds. Check the instance and security group."
+        die "SSH not available after 150 seconds"
     fi
-    sleep 5
+    sleep 3
 done
 
-# --- Wait for install.sh (runs via EC2 User Data) -------------------------
+# --- Wait for setup to complete ---------------------------------------------
 
 info "Waiting for setup to complete"
 
-echo "  install.sh is running on the instance via User Data..."
-echo "  (started automatically during boot — running in parallel)"
-echo ""
+echo "  install.sh started during boot — waiting for it to finish..."
 
-# Wait for cloud-init to finish (install.sh runs as user data)
 if ssh -o StrictHostKeyChecking=no -t -i "$KEY_FILE" "${SSH_USER}@${PUBLIC_IP}" \
     "cloud-init status --wait >/dev/null 2>&1"; then
     ok "Setup complete"
@@ -211,13 +256,13 @@ echo "============================================"
 echo "  Provisioning complete!"
 echo "============================================"
 echo ""
-echo "  Instance IP: $PUBLIC_IP"
-echo "  SSH key:     $KEY_FILE"
-echo "  Stack:       $STACK_NAME"
+echo "  Instance:  $INSTANCE_ID"
+echo "  Public IP: $PUBLIC_IP"
+echo "  SSH key:   $KEY_FILE"
 echo ""
-echo "  Connect via SSH:"
+echo "  Connect:"
 echo "    ssh -i $KEY_FILE ${SSH_USER}@$PUBLIC_IP"
 echo ""
-echo "  To tear down everything:"
-echo "    aws cloudformation delete-stack --stack-name $STACK_NAME --region $AWS_REGION"
+echo "  To tear down:"
+echo "    curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/destroy.sh | bash"
 echo ""

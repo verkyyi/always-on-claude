@@ -4,7 +4,8 @@ You are tearing down an always-on Claude Code workspace on AWS. Confirm with the
 
 - AWS CLI configured: !`aws sts get-caller-identity 2>&1 | head -5`
 - AWS region: !`aws configure get region 2>/dev/null || echo "not set"`
-- CloudFormation stacks: !`aws cloudformation list-stacks --stack-status-filter CREATE_COMPLETE UPDATE_COMPLETE ROLLBACK_COMPLETE DELETE_FAILED --query 'StackSummaries[].[StackName,StackStatus]' --output text 2>/dev/null || echo "error — check AWS CLI"`
+- Tagged instances: !`aws ec2 describe-instances --filters "Name=tag:Project,Values=always-on-claude" "Name=instance-state-name,Values=running,stopped,pending" --query 'Reservations[].Instances[].[InstanceId,PublicIpAddress,Tags[?Key==\x60Name\x60].Value|[0],InstanceType]' --output text 2>/dev/null || echo "error — check AWS CLI"`
+- Tagged security groups: !`aws ec2 describe-security-groups --filters "Name=tag:Project,Values=always-on-claude" --query 'SecurityGroups[].[GroupId,GroupName]' --output text 2>/dev/null || echo "none"`
 - SSH key pairs: !`aws ec2 describe-key-pairs --query 'KeyPairs[].KeyName' --output text 2>/dev/null || echo "error"`
 - Local .pem files: !`ls ~/.ssh/*.pem 2>/dev/null || echo "none"`
 
@@ -14,73 +15,68 @@ You are tearing down an always-on Claude Code workspace on AWS. Confirm with the
 
 If the AWS CLI context above shows an error, stop and help the user configure it first.
 
-If `$ARGUMENTS` is provided, use it as the stack name. Otherwise, default to `claude-dev`.
-
 ---
 
 ## Step 1 — Show what will be deleted
 
-Look at the context above and show the user exactly what exists:
+List everything found with the `Project=always-on-claude` tag:
 
 ```
-I found these resources for stack "$STACK_NAME":
+I found these resources:
 
-  CloudFormation stack: $STACK_NAME ($STATUS)
-    - EC2 instance (will be terminated, EBS volume deleted)
-    - Security group
-  SSH key pair in AWS: $KEY_NAME
-  Local key file: ~/.ssh/$KEY_NAME.pem
+  Instances:       i-xxx (1.2.3.4, claude-dev, t3.medium)
+  Security groups: sg-xxx (claude-dev-sg)
+  Key pair:        claude-dev-key (in AWS + local file)
 
 Delete all of these? [y/N]
 ```
 
-If the stack doesn't exist, say so. If there are multiple stacks that look relevant, list them and ask which one.
+If nothing is found, say so and exit.
 
 ---
 
-## Step 2 — Delete CloudFormation stack
+## Step 2 — Terminate instances
 
 ```bash
-aws cloudformation delete-stack --stack-name "$STACK_NAME" --region "$REGION"
+aws ec2 terminate-instances --region "$REGION" --instance-ids $INSTANCE_IDS
+aws ec2 wait instance-terminated --region "$REGION" --instance-ids $INSTANCE_IDS
 ```
-
-Then wait for deletion:
-```bash
-aws cloudformation wait stack-delete-complete --stack-name "$STACK_NAME" --region "$REGION"
-```
-
-Tell the user "Deleting stack... this takes 1-2 minutes." while waiting.
-
-If the stack is in `DELETE_FAILED`, try again. If it fails twice, show the error and suggest manual cleanup in the AWS console.
 
 ---
 
-## Step 3 — Delete SSH key pair (ask first)
+## Step 3 — Delete security groups
+
+```bash
+aws ec2 delete-security-group --region "$REGION" --group-id "$SG_ID"
+```
+
+If deletion fails (still in use from terminating instance), wait a moment and retry.
+
+---
+
+## Step 4 — Delete SSH key pair (ask separately)
 
 ```
-Also delete the SSH key pair "$KEY_NAME"? [y/N]
+Also delete the SSH key pair "claude-dev-key"? [y/N]
 ```
 
 If yes:
 ```bash
-aws ec2 delete-key-pair --key-name "$KEY_NAME" --region "$REGION"
+aws ec2 delete-key-pair --region "$REGION" --key-name "$KEY_NAME"
 rm -f ~/.ssh/$KEY_NAME.pem
 ```
 
-If no, tell the user the key pair remains in AWS and locally for future use.
-
 ---
 
-## Step 4 — Summary
+## Step 5 — Summary
 
 ```
 Teardown complete.
 
   Deleted:
-    - CloudFormation stack: $STACK_NAME
-    - EC2 instance + EBS volume
-    - Security group
-    [- SSH key pair: $KEY_NAME (if deleted)]
+    - Instance: i-xxx
+    - Security group: sg-xxx
+    [- Key pair: claude-dev-key]
 
   To re-provision:
     /provision
@@ -90,8 +86,8 @@ Teardown complete.
 
 ## Error handling
 
-- **Stack not found**: tell the user, check if they mean a different stack name or region
-- **DELETE_FAILED**: show which resources failed to delete, suggest AWS console cleanup
-- **Wrong region**: if no stack found in default region, check if the user meant another region
+- **No resources found**: tell the user, check region
+- **Security group deletion fails**: instance may still be terminating — wait and retry
+- **Multiple instances found**: list all, ask which to delete or all
 
 Do NOT delete anything without explicit user confirmation.

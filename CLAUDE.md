@@ -2,6 +2,10 @@
 
 Affordable, isolated Claude Code runtime workspaces. Bring your own auth, SSH in, code.
 
+## Target user
+
+Solo developers on Mac. All tooling, docs, and setup flows assume a single user running macOS with AWS CLI and SSH available locally.
+
 ## Vision
 
 Always-on Claude Code workspaces where we handle the runtime — container, persistence, dev tools, cross-device access — and users handle their own Claude auth. No server to manage, no ops burden.
@@ -48,10 +52,11 @@ Core (the always-on experience):
   worktree-helper.sh  — Create/remove/list git worktrees for parallel sessions
 
 Deployment:
-  install.sh          — One-line server setup (pulls pre-built image, optional Tailscale)
-  provision.sh        — AWS-specific: CloudFormation stack, then runs install.sh
+  install.sh          — One-line server setup (pulls pre-built image, optional Tailscale/overnight)
+  provision.sh        — AWS provisioning: direct EC2 launch with User Data, ~60s to running
+  destroy.sh          — Tear down EC2 resources by Project tag
   setup-auth.sh       — Interactive auth: git config, gh auth login, claude login
-  cloudformation.yml  — EC2 + security group + IAM role
+  cloudformation.yml  — Legacy CF template (deprecated — provision.sh uses direct EC2 calls)
   .github/workflows/docker-publish.yml — Multi-arch build + push to GHCR on main
   bootstrap.sh        — Legacy manual setup (deprecated)
 
