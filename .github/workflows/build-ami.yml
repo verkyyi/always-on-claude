@@ -139,7 +139,7 @@ jobs:
           NEW_AMI=$(aws ec2 create-image \
             --instance-id "$INSTANCE_ID" \
             --name "$AMI_NAME" \
-            --description "Always-on Claude Code workspace — Ubuntu 24.04 + Docker + Claude Code" \
+            --description "Always-on Claude Code workspace - Ubuntu 24.04 + Docker + Claude Code" \
             --tag-specifications "ResourceType=image,Tags=[{Key=Name,Value=$AMI_NAME},{Key=Project,Value=${{ env.TAG }}}]" \
             --query 'ImageId' --output text)
           echo "NEW_AMI=$NEW_AMI" >> "$GITHUB_ENV"

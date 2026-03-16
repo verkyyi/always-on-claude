@@ -204,7 +204,7 @@ AMI_ID=$(aws ec2 create-image \
     --region "$AWS_REGION" \
     --instance-id "$INSTANCE_ID" \
     --name "$AMI_NAME" \
-    --description "Always-on Claude Code workspace — Ubuntu 24.04 + Docker + Claude Code" \
+    --description "Always-on Claude Code workspace - Ubuntu 24.04 + Docker + Claude Code" \
     --tag-specifications "ResourceType=image,Tags=[{Key=Name,Value=$AMI_NAME},{Key=Project,Value=$TAG}]" \
     --query 'ImageId' \
     --output text)
