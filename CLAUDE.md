@@ -10,6 +10,10 @@ Solo developers on Mac. All tooling, docs, and setup flows assume a single user 
 
 Always-on Claude Code workspaces where we handle the runtime — container, persistence, dev tools, cross-device access — and users handle their own Claude auth. No server to manage, no ops burden.
 
+## Lifecycle philosophy
+
+The full workspace lifecycle — **provision, setup, update, destroy** — should be **Claude Code-guided first, scripts as fallback**. Users run slash commands (`/provision`, `/destroy`) and Claude orchestrates the AWS calls, handles errors intelligently, and walks them through interactive steps. Shell scripts (`provision.sh`, `destroy.sh`, `install.sh`) exist as fallbacks for automation, CI/CD, and environments without Claude Code.
+
 ## Business model: BYO Auth
 
 Users bring their own Claude authentication. We provide the runtime only. We never provide, share, or manage Claude subscriptions or API keys on behalf of users.
