@@ -108,22 +108,8 @@ if [[ "$EXISTING_ID" != "None" && -n "$EXISTING_ID" ]]; then
     KEY_FILE="$HOME/.ssh/${KEY_NAME}.pem"
     ok "Instance '$INSTANCE_NAME' already running: $EXISTING_ID ($PUBLIC_IP)"
     echo ""
-    echo "  Skipping to auth setup. To start fresh, run destroy first."
-    echo ""
-
-    # Jump straight to auth
-    info "Authentication setup"
-    echo ""
-    echo "  Setting up git, GitHub CLI, and Claude Code."
-    echo "  This requires opening URLs in your browser."
-    echo ""
-    ssh -o StrictHostKeyChecking=no -t -i "$KEY_FILE" "${SSH_USER}@${PUBLIC_IP}" \
-        "cd ~/dev-env && sg docker -c 'docker compose exec -it dev bash /home/dev/dev-env/setup-auth.sh'"
-
-    echo ""
-    echo "============================================"
-    echo "  Done! Connect: ssh -i $KEY_FILE ${SSH_USER}@$PUBLIC_IP"
-    echo "============================================"
+    echo "  Connect: ssh -i $KEY_FILE ${SSH_USER}@$PUBLIC_IP"
+    echo "  To start fresh, run destroy first."
     exit 0
 fi
 
@@ -283,18 +269,6 @@ else
     echo "  WARN: Container not running — check /var/log/install.log on the instance"
 fi
 
-# --- Interactive auth (needs browser) ---------------------------------------
-
-info "Authentication setup"
-
-echo ""
-echo "  Now we'll set up git, GitHub CLI, and Claude Code."
-echo "  This requires opening URLs in your browser."
-echo ""
-
-ssh -o StrictHostKeyChecking=no -t -i "$KEY_FILE" "${SSH_USER}@${PUBLIC_IP}" \
-    "cd ~/dev-env && sg docker -c 'docker compose exec -it dev bash /home/dev/dev-env/setup-auth.sh'" </dev/tty
-
 echo ""
 echo "============================================"
 echo "  Provisioning complete!"
@@ -307,6 +281,11 @@ echo ""
 echo "  Connect:"
 echo "    ssh -i $KEY_FILE ${SSH_USER}@$PUBLIC_IP"
 echo ""
+echo "  First time? Run auth setup inside the container:"
+echo "    1. SSH in: ssh -i $KEY_FILE ${SSH_USER}@$PUBLIC_IP"
+echo "    2. Choose option [2] for container bash"
+echo "    3. Run: bash ~/dev-env/setup-auth.sh"
+echo ""
 echo "  To tear down:"
-echo "    curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/destroy.sh | bash"
+echo "    bash <(curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/destroy.sh)"
 echo ""
