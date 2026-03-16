@@ -251,12 +251,14 @@ chmod +x "$DEV_ENV"/*.sh 2>/dev/null || true
 info "Docker container"
 step="docker pull and up"
 
-# Run docker commands — root runs directly, non-root uses sg if needed
+# Run docker commands — use sudo if not root and docker group not active
 run_docker() {
-    if [[ $EUID -eq 0 ]] || id -nG "$USER" | grep -qw docker; then
+    if [[ $EUID -eq 0 ]]; then
+        (cd "$DEV_ENV" && "$@")
+    elif id -nG "$USER" | grep -qw docker; then
         (cd "$DEV_ENV" && "$@")
     else
-        sg docker -c "cd '$DEV_ENV' && $*"
+        (cd "$DEV_ENV" && sudo "$@")
     fi
 }
 
