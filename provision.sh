@@ -29,6 +29,7 @@ TAG="always-on-claude"
 
 info()  { echo ""; echo "=== $* ==="; }
 ok()    { echo "  OK: $*"; }
+skip()  { echo "  SKIP: $* (already done)"; }
 die()   { echo "ERROR: $*" >&2; exit 1; }
 
 # --- Confirmation -----------------------------------------------------------
