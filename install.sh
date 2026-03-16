@@ -176,10 +176,14 @@ mkdir -p ~/projects
 mkdir -p ~/overnight/logs
 mkdir -p ~/.gitconfig.d
 
-# Critical: touch as FILE before compose up (Docker would create as directory)
+# Critical: must exist as a FILE with valid JSON before compose up
+# (Docker would create it as a directory if missing)
 if [[ ! -f ~/.claude.json ]]; then
-    touch ~/.claude.json
+    echo '{}' > ~/.claude.json
     ok "Created ~/.claude.json"
+elif [[ ! -s ~/.claude.json ]]; then
+    echo '{}' > ~/.claude.json
+    ok "Fixed empty ~/.claude.json"
 else
     skip "~/.claude.json"
 fi
