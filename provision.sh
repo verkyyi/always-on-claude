@@ -213,7 +213,7 @@ if [[ "$USE_CUSTOM_AMI" == "1" ]]; then
     USER_DATA=$(cat <<'USERDATA'
 #!/bin/bash
 exec > /var/log/install.log 2>&1
-su - ubuntu -c 'cd ~/dev-env && git pull --ff-only 2>/dev/null; sudo docker compose up -d'
+su - ubuntu -c 'cd ~/dev-env && git pull --ff-only 2>/dev/null; sudo --preserve-env=HOME docker compose up -d'
 USERDATA
 )
 else
