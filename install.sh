@@ -252,12 +252,13 @@ info "Docker container"
 step="docker pull and up"
 
 # Run docker commands — always use sudo for non-root (docker group may not
-# be active in the current session even if user was added to it)
+# be active in the current session even if user was added to it).
+# Preserve HOME so ~ in docker-compose.yml resolves to the user's home, not /root.
 run_docker() {
     if [[ $EUID -eq 0 ]]; then
         (cd "$DEV_ENV" && "$@")
     else
-        (cd "$DEV_ENV" && sudo "$@")
+        (cd "$DEV_ENV" && sudo --preserve-env=HOME "$@")
     fi
 }
 
