@@ -6,6 +6,7 @@
 #
 # Options (env vars):
 #   TAILSCALE=1    — install and configure Tailscale for SSH access
+#   OVERNIGHT=1    — install at/cron for overnight autonomous tasks
 #   LOCAL_BUILD=1  — build Docker image locally instead of pulling from GHCR
 #
 # Idempotent — safe to re-run at any point.
@@ -23,6 +24,7 @@ skip()  { echo "  SKIP: $* (already done)"; }
 
 TAILSCALE="${TAILSCALE:-0}"
 LOCAL_BUILD="${LOCAL_BUILD:-0}"
+OVERNIGHT="${OVERNIGHT:-0}"
 IMAGE="ghcr.io/verkyyi/always-on-claude:latest"
 
 # Wrap sudo: no-op when already root, real sudo otherwise
@@ -88,13 +90,6 @@ else
     skip "tmux"
 fi
 
-if ! dpkg -s at &>/dev/null 2>&1; then
-    sudo apt-get install -y -qq at
-    ok "at installed"
-else
-    skip "at"
-fi
-
 # Ensure Docker Compose plugin is installed
 if ! docker compose version &>/dev/null 2>&1; then
     step="Docker Compose plugin"
@@ -112,12 +107,25 @@ else
     skip "Docker group membership"
 fi
 
-# Enable atd
-if ! systemctl is-active --quiet atd 2>/dev/null; then
-    sudo systemctl enable --now atd
-    ok "atd enabled"
-else
-    skip "atd"
+# --- Overnight tasks (optional) ---------------------------------------------
+
+if [[ "$OVERNIGHT" == "1" ]]; then
+    info "Overnight task dependencies"
+    step="at install"
+
+    if ! dpkg -s at &>/dev/null 2>&1; then
+        sudo apt-get install -y -qq at
+        ok "at installed"
+    else
+        skip "at"
+    fi
+
+    if ! systemctl is-active --quiet atd 2>/dev/null; then
+        sudo systemctl enable --now atd
+        ok "atd enabled"
+    else
+        skip "atd"
+    fi
 fi
 
 # --- Tailscale (optional) --------------------------------------------------
@@ -213,16 +221,18 @@ else
     skip "ssh-login.sh already in .bash_profile"
 fi
 
-# --- Cron: trigger-watcher --------------------------------------------------
+# --- Cron: trigger-watcher (optional) ---------------------------------------
 
-info "Trigger watcher cron"
-step="trigger-watcher cron"
+if [[ "$OVERNIGHT" == "1" ]]; then
+    info "Trigger watcher cron"
+    step="trigger-watcher cron"
 
-if ! crontab -l 2>/dev/null | grep -q "trigger-watcher.sh"; then
-    (crontab -l 2>/dev/null; echo "* * * * * bash ~/dev-env/trigger-watcher.sh >> ~/overnight/trigger-watcher.log 2>&1") | crontab -
-    ok "Installed trigger-watcher cron"
-else
-    skip "trigger-watcher cron already installed"
+    if ! crontab -l 2>/dev/null | grep -q "trigger-watcher.sh"; then
+        (crontab -l 2>/dev/null; echo "* * * * * bash ~/dev-env/trigger-watcher.sh >> ~/overnight/trigger-watcher.log 2>&1") | crontab -
+        ok "Installed trigger-watcher cron"
+    else
+        skip "trigger-watcher cron already installed"
+    fi
 fi
 
 # --- Make scripts executable ------------------------------------------------
@@ -337,11 +347,13 @@ else
     echo "  WARN: Container not running"
 fi
 
-# Check cron
-if crontab -l 2>/dev/null | grep -q "trigger-watcher.sh"; then
-    ok "trigger-watcher cron is installed"
-else
-    echo "  WARN: trigger-watcher cron not found"
+# Check cron (only if overnight enabled)
+if [[ "$OVERNIGHT" == "1" ]]; then
+    if crontab -l 2>/dev/null | grep -q "trigger-watcher.sh"; then
+        ok "trigger-watcher cron is installed"
+    else
+        echo "  WARN: trigger-watcher cron not found"
+    fi
 fi
 
 # Check tailscale (only if enabled)
