@@ -2,7 +2,7 @@
 # provision.sh — Run on your Mac to provision an EC2 instance and bootstrap it.
 #
 # One command from zero (assumes AWS CLI is configured):
-#   curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/provision.sh | bash
+#   bash <(curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/provision.sh)
 #
 # What it does:
 #   1. Creates/reuses an SSH key pair and security group
