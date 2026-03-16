@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - Dockerfile
+      - docker-compose.yml
       - .github/workflows/docker-publish.yml
 
 env:
