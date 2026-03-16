@@ -37,11 +37,9 @@ services:
       - ~/overnight:/home/dev/overnight
 
     environment:
-      # AWS region (credentials come from EC2 instance role via metadata)
-      - AWS_DEFAULT_REGION=us-east-1
       - NODE_ENV=development
 
-    # Required: allows access to EC2 instance metadata for IAM role
+    # Host networking for full network access (EC2 metadata, local services, etc.)
     network_mode: host
 
     restart: unless-stopped

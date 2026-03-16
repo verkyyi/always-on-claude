@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: "Dev environment - EC2 t3.medium with IAM role for SES + SSM"
+Description: "Dev environment - EC2 t3.medium for always-on Claude Code"
 
 Parameters:
   KeyPairName:
@@ -8,30 +8,6 @@ Parameters:
 
 
 Resources:
-  # --- IAM ---
-  DevInstanceRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: dev-instance-role
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: ec2.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        # Adjust these to match your project needs
-        - arn:aws:iam::aws:policy/AmazonSESFullAccess
-        - arn:aws:iam::aws:policy/AmazonSSMReadOnlyAccess
-
-  DevInstanceProfile:
-    Type: AWS::IAM::InstanceProfile
-    Properties:
-      InstanceProfileName: dev-instance-profile
-      Roles:
-        - !Ref DevInstanceRole
-
   # --- Security Group ---
   DevSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -52,7 +28,6 @@ Resources:
       InstanceType: t3.medium
       ImageId: !FindInMap [RegionAMI, !Ref "AWS::Region", AMI]
       KeyName: !Ref KeyPairName
-      IamInstanceProfile: !Ref DevInstanceProfile
       SecurityGroupIds:
         - !GetAtt DevSecurityGroup.GroupId
       BlockDeviceMappings:

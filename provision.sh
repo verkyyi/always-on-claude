@@ -128,7 +128,6 @@ else
         --stack-name "$STACK_NAME" \
         --region "$AWS_REGION" \
         --template-body "$CF_TEMPLATE" \
-        --capabilities CAPABILITY_NAMED_IAM \
         --parameters \
             ParameterKey=KeyPairName,ParameterValue="$KEY_NAME"
 

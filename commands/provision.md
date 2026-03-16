@@ -89,7 +89,6 @@ aws cloudformation create-stack \
     --stack-name "$STACK_NAME" \
     --region "$REGION" \
     --template-body file:///tmp/aoc-cloudformation.yml \
-    --capabilities CAPABILITY_NAMED_IAM \
     --parameters \
         ParameterKey=KeyPairName,ParameterValue="$KEY_NAME"
 ```
