@@ -62,10 +62,16 @@ echo ""
 echo "  Tear down anytime:"
 echo "    curl -fsSL https://raw.githubusercontent.com/.../destroy.sh | bash"
 echo ""
-read -rp "  Proceed? [y/N] " confirm
-if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
-    echo "  Aborted."
-    exit 0
+if [[ -t 0 ]]; then
+    read -rp "  Proceed? [y/N] " confirm
+    if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
+        echo "  Aborted."
+        exit 0
+    fi
+else
+    echo "  (piped mode — proceeding automatically in 5 seconds)"
+    echo "  Ctrl+C to cancel."
+    sleep 5
 fi
 
 # --- Preflight --------------------------------------------------------------
@@ -286,7 +292,7 @@ echo "  This requires opening URLs in your browser."
 echo ""
 
 ssh -o StrictHostKeyChecking=no -t -i "$KEY_FILE" "${SSH_USER}@${PUBLIC_IP}" \
-    "cd ~/dev-env && sg docker -c 'docker compose exec -it dev bash /home/dev/dev-env/setup-auth.sh'"
+    "cd ~/dev-env && sg docker -c 'docker compose exec -it dev bash /home/dev/dev-env/setup-auth.sh'" </dev/tty
 
 echo ""
 echo "============================================"
