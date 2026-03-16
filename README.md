@@ -82,47 +82,6 @@ Your Mac / Phone / Tablet
 
 ---
 
-## Claude-Guided Lifecycle
-
-The full workspace lifecycle is designed to be **Claude Code-guided first**, with shell scripts as fallback:
-
-| Action | Claude-guided | Script fallback |
-|---|---|---|
-| **Provision** | `/provision` | `provision.sh` |
-| **Auth setup** | `/setup-auth` | `setup-auth.sh` |
-| **Plan overnight work** | `/plan-overnight` | Edit task files manually |
-| **Destroy** | `/destroy` | `destroy.sh` |
-
-To use the slash commands, install them locally:
-
-```bash
-mkdir -p ~/.claude/commands
-curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/commands/provision.md -o ~/.claude/commands/provision.md
-curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/commands/destroy.md -o ~/.claude/commands/destroy.md
-```
-
-Then in Claude Code: type `/provision` and Claude orchestrates the entire AWS setup for you.
-
----
-
-## Overnight Autonomous Work
-
-The real payoff — define tasks, close your laptop, wake up to completed work.
-
-```bash
-ssh ubuntu@<YOUR_IP>
-# Inside Claude Code:
-/plan-overnight
-```
-
-Claude scans your TODOs and GitHub issues, collaboratively builds a task list targeting ~6 hours of work, and schedules it. Close your laptop and sleep.
-
-Next morning — SSH back in, review the results.
-
-> Requires `OVERNIGHT=1` during install. See [implementation details](docs/overnight-tasks.md) for the task file format and scheduling internals.
-
----
-
 ## How It Works
 
 | Component | Purpose |
@@ -161,6 +120,13 @@ We provide the runtime. You bring your own Claude authentication:
 - **Subscription** — run `claude login` with your Pro/Max account
 
 We never provide, share, or manage Claude credentials.
+
+---
+
+## Coming Soon
+
+- **Claude-guided lifecycle** — `/provision`, `/destroy`, and `/plan-overnight` slash commands that let Claude orchestrate AWS operations, handle errors, and walk you through setup interactively. See [roadmap details](docs/claude-guided-lifecycle.md).
+- **Overnight autonomous work** — schedule tasks for Claude to work on while you sleep, review results in the morning. See [design doc](docs/overnight-tasks.md).
 
 ---
 
