@@ -151,6 +151,7 @@ jobs:
 
       - name: Make AMI public
         run: |
+          aws ec2 disable-image-block-public-access >/dev/null 2>&1 || true
           aws ec2 modify-image-attribute \
             --image-id "$NEW_AMI" \
             --launch-permission "Add=[{Group=all}]"
