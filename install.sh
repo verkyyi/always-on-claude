@@ -109,6 +109,25 @@ else
     skip "Docker group membership"
 fi
 
+# Node.js (needed for Claude Code on host)
+if ! command -v node &>/dev/null; then
+    step="Node.js install"
+    curl -fsSL https://deb.nodesource.com/setup_22.x | sudo bash -
+    sudo apt-get install -y -qq nodejs
+    ok "Node.js installed"
+else
+    skip "Node.js"
+fi
+
+# Claude Code on host (for orchestrating updates, setup, container management)
+if ! command -v claude &>/dev/null; then
+    step="Claude Code install (host)"
+    curl -fsSL https://claude.ai/install.sh | sh
+    ok "Claude Code installed on host"
+else
+    skip "Claude Code (host)"
+fi
+
 # --- Overnight tasks (optional) ---------------------------------------------
 
 if [[ "$OVERNIGHT" == "1" ]]; then
