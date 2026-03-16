@@ -53,12 +53,11 @@ Core (the always-on experience):
 
 Deployment:
   install.sh          — One-line server setup (pulls pre-built image, optional Tailscale/overnight)
-  provision.sh        — AWS provisioning: direct EC2 launch with User Data, ~60s to running
+  provision.sh        — AWS provisioning: direct EC2 launch, ~40s with pre-built AMI
   destroy.sh          — Tear down EC2 resources by Project tag
+  build-ami.sh        — Build and publish pre-baked AMI (Docker + Claude Code pre-installed)
   setup-auth.sh       — Interactive auth: git config, gh auth login, claude login
-  cloudformation.yml  — Legacy CF template (deprecated — provision.sh uses direct EC2 calls)
   .github/workflows/docker-publish.yml — Multi-arch build + push to GHCR on main
-  bootstrap.sh        — Legacy manual setup (deprecated)
 
 Add-ons (slash commands):
   commands/provision.md       — Slash command: orchestrates full AWS provisioning via Claude

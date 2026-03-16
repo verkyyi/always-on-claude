@@ -42,9 +42,8 @@ echo ""
 echo "  What this will do:"
 echo "    1. Create an SSH key pair in AWS (if not exists)"
 echo "    2. Create a security group allowing SSH from anywhere"
-echo "    3. Launch an EC2 instance ($INSTANCE_TYPE, 30GB, Ubuntu 24.04)"
-echo "    4. Install Docker + Claude Code on the instance"
-echo "    5. Prompt you for GitHub + Claude authentication"
+echo "    3. Launch an EC2 instance ($INSTANCE_TYPE, 30GB)"
+echo "    4. Set up Claude Code workspace (~40s with pre-built AMI)"
 echo ""
 echo "  Prerequisites:"
 echo "    - AWS CLI configured with valid credentials (aws configure)"
@@ -175,32 +174,57 @@ else
     ok "Created security group: $SG_ID"
 fi
 
-# --- Find latest Ubuntu 24.04 AMI ------------------------------------------
+# --- Find AMI ---------------------------------------------------------------
 
-info "Finding Ubuntu 24.04 AMI"
+info "Finding AMI"
 
-AMI_ID=$(aws ec2 describe-images \
-    --owners 099720109477 \
+# Try pre-built AMI first (tagged by build-ami.sh), then fall back to stock Ubuntu
+CUSTOM_AMI=$(aws ec2 describe-images \
     --region "$AWS_REGION" \
-    --filters \
-        "Name=name,Values=ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*" \
-        "Name=state,Values=available" \
+    --filters "Name=tag:Project,Values=$TAG" "Name=state,Values=available" "Name=is-public,Values=true" \
     --query 'Images | sort_by(@, &CreationDate) | [-1].ImageId' \
-    --output text)
+    --output text 2>/dev/null || echo "None")
 
-[[ "$AMI_ID" == "None" || -z "$AMI_ID" ]] && die "Could not find Ubuntu 24.04 AMI in $AWS_REGION"
-ok "AMI: $AMI_ID"
+if [[ "$CUSTOM_AMI" != "None" && -n "$CUSTOM_AMI" ]]; then
+    AMI_ID="$CUSTOM_AMI"
+    USE_CUSTOM_AMI=1
+    ok "Pre-built AMI: $AMI_ID (fast path — ~40s)"
+else
+    AMI_ID=$(aws ec2 describe-images \
+        --owners 099720109477 \
+        --region "$AWS_REGION" \
+        --filters \
+            "Name=name,Values=ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*" \
+            "Name=state,Values=available" \
+        --query 'Images | sort_by(@, &CreationDate) | [-1].ImageId' \
+        --output text)
+    USE_CUSTOM_AMI=0
+    ok "Stock Ubuntu AMI: $AMI_ID (full install — ~90s)"
+fi
+
+[[ "$AMI_ID" == "None" || -z "$AMI_ID" ]] && die "Could not find any suitable AMI in $AWS_REGION"
 
 # --- Launch instance --------------------------------------------------------
 
 info "Launching instance"
 
-USER_DATA=$(cat <<'USERDATA'
+if [[ "$USE_CUSTOM_AMI" == "1" ]]; then
+    # Pre-built AMI: just start the container and update repo
+    USER_DATA=$(cat <<'USERDATA'
+#!/bin/bash
+exec > /var/log/install.log 2>&1
+su - ubuntu -c 'cd ~/dev-env && git pull --ff-only 2>/dev/null; sudo docker compose up -d'
+USERDATA
+)
+else
+    # Stock Ubuntu: full install
+    USER_DATA=$(cat <<'USERDATA'
 #!/bin/bash
 exec > /var/log/install.log 2>&1
 su - ubuntu -c "NON_INTERACTIVE=1 bash -c 'curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/install.sh | bash'"
 USERDATA
 )
+fi
 
 INSTANCE_ID=$(aws ec2 run-instances \
     --region "$AWS_REGION" \
