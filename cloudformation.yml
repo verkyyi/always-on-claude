@@ -30,6 +30,11 @@ Resources:
       KeyName: !Ref KeyPairName
       SecurityGroupIds:
         - !GetAtt DevSecurityGroup.GroupId
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          exec > /var/log/install.log 2>&1
+          su - ubuntu -c "NON_INTERACTIVE=1 bash -c 'curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/install.sh | bash'"
       BlockDeviceMappings:
         - DeviceName: /dev/sda1
           Ebs:

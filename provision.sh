@@ -10,9 +10,9 @@
 # What it does:
 #   1. Creates/reuses an SSH key pair
 #   2. Finds the latest Ubuntu 24.04 AMI for your region
-#   3. Deploys the CloudFormation stack
-#   4. Waits for the instance to be ready
-#   5. SSHs in and runs install.sh
+#   3. Deploys the CloudFormation stack (install.sh runs via User Data in parallel)
+#   4. Waits for the instance + setup to complete
+#   5. SSHs in for interactive auth (git, GitHub CLI, Claude Code)
 #
 # Override defaults with env vars:
 #   STACK_NAME=my-dev KEY_NAME=my-key AWS_REGION=us-west-2 bash provision.sh
@@ -169,38 +169,47 @@ for i in $(seq 1 30); do
     sleep 5
 done
 
-# --- Run install.sh on the instance ----------------------------------------
+# --- Wait for install.sh (runs via EC2 User Data) -------------------------
 
-info "Running install.sh on the instance"
+info "Waiting for setup to complete"
 
-TAILSCALE="${TAILSCALE:-0}"
-
-echo ""
-echo "  Connecting to ${SSH_USER}@${PUBLIC_IP}..."
-echo "  The install script will run automatically."
-if [[ "$TAILSCALE" == "1" ]]; then
-    echo "  You'll be prompted for Tailscale auth, git config, and Claude login."
-else
-    echo "  You'll be prompted for git config and Claude login."
-fi
+echo "  install.sh is running on the instance via User Data..."
+echo "  (started automatically during boot — running in parallel)"
 echo ""
 
+# Wait for cloud-init to finish (install.sh runs as user data)
 if ssh -o StrictHostKeyChecking=no -t -i "$KEY_FILE" "${SSH_USER}@${PUBLIC_IP}" \
-    "export TAILSCALE=$TAILSCALE && curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/install.sh | bash"; then
-    echo ""
-    echo "============================================"
-    echo "  Provisioning complete!"
-    echo "============================================"
+    "cloud-init status --wait >/dev/null 2>&1"; then
+    ok "Setup complete"
 else
-    echo ""
-    echo "============================================"
-    echo "  Remote setup failed."
-    echo "============================================"
-    echo ""
-    echo "  SSH in to debug: ssh -i $KEY_FILE ${SSH_USER}@$PUBLIC_IP"
-    echo "  Re-run install:  curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/install.sh | bash"
-    exit 1
+    echo "  WARN: cloud-init finished with errors"
+    echo "  Check logs: ssh -i $KEY_FILE ${SSH_USER}@$PUBLIC_IP 'cat /var/log/install.log'"
 fi
+
+# Verify container is running
+if ssh -o StrictHostKeyChecking=no -i "$KEY_FILE" "${SSH_USER}@${PUBLIC_IP}" \
+    "sg docker -c 'docker ps --format {{.Names}}' 2>/dev/null | grep -q claude-dev"; then
+    ok "Container 'claude-dev' is running"
+else
+    echo "  WARN: Container not running — check /var/log/install.log on the instance"
+fi
+
+# --- Interactive auth (needs browser) ---------------------------------------
+
+info "Authentication setup"
+
+echo ""
+echo "  Now we'll set up git, GitHub CLI, and Claude Code."
+echo "  This requires opening URLs in your browser."
+echo ""
+
+ssh -o StrictHostKeyChecking=no -t -i "$KEY_FILE" "${SSH_USER}@${PUBLIC_IP}" \
+    "cd ~/dev-env && sg docker -c 'docker compose exec -it dev bash /home/dev/dev-env/setup-auth.sh'"
+
+echo ""
+echo "============================================"
+echo "  Provisioning complete!"
+echo "============================================"
 echo ""
 echo "  Instance IP: $PUBLIC_IP"
 echo "  SSH key:     $KEY_FILE"
@@ -209,11 +218,6 @@ echo ""
 echo "  Connect via SSH:"
 echo "    ssh -i $KEY_FILE ${SSH_USER}@$PUBLIC_IP"
 echo ""
-if [[ "$TAILSCALE" == "1" ]]; then
-    echo "  Or via Tailscale (after setup):"
-    echo "    ssh ${SSH_USER}@<your-tailscale-hostname>"
-    echo ""
-fi
 echo "  To tear down everything:"
 echo "    aws cloudformation delete-stack --stack-name $STACK_NAME --region $AWS_REGION"
 echo ""

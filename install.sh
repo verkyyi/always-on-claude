@@ -5,9 +5,10 @@
 #   curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/install.sh | bash
 #
 # Options (env vars):
-#   TAILSCALE=1    — install and configure Tailscale for SSH access
-#   OVERNIGHT=1    — install at/cron for overnight autonomous tasks
-#   LOCAL_BUILD=1  — build Docker image locally instead of pulling from GHCR
+#   TAILSCALE=1        — install and configure Tailscale for SSH access
+#   OVERNIGHT=1        — install at/cron for overnight autonomous tasks
+#   LOCAL_BUILD=1      — build Docker image locally instead of pulling from GHCR
+#   NON_INTERACTIVE=1  — skip Phase 2 (interactive auth), for use in user data scripts
 #
 # Idempotent — safe to re-run at any point.
 
@@ -25,6 +26,7 @@ skip()  { echo "  SKIP: $* (already done)"; }
 TAILSCALE="${TAILSCALE:-0}"
 LOCAL_BUILD="${LOCAL_BUILD:-0}"
 OVERNIGHT="${OVERNIGHT:-0}"
+NON_INTERACTIVE="${NON_INTERACTIVE:-0}"
 IMAGE="ghcr.io/verkyyi/always-on-claude:latest"
 
 # Wrap sudo: no-op when already root, real sudo otherwise
@@ -282,14 +284,22 @@ run_docker docker compose exec -T -u root dev bash -c \
     "chown -R dev:dev /home/dev/projects /home/dev/.claude /home/dev/overnight" 2>/dev/null || true
 ok "Fixed container permissions"
 
-# ============================================================================
-# Phase 2: Interactive (browser auth needed)
-# ============================================================================
-
 echo ""
 echo "============================================"
 echo "  Phase 1 complete! Container is running."
 echo "============================================"
+
+if [[ "$NON_INTERACTIVE" == "1" ]]; then
+    echo ""
+    echo "  NON_INTERACTIVE mode — skipping auth setup."
+    echo "  Run setup-auth.sh manually after SSHing in."
+    exit 0
+fi
+
+# ============================================================================
+# Phase 2: Interactive (browser auth needed)
+# ============================================================================
+
 echo ""
 echo "Phase 2: Interactive setup (needs browser)"
 echo ""
