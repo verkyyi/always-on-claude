@@ -13,7 +13,7 @@ You are orchestrating the provisioning of an always-on Claude Code workspace on 
 
 If the AWS CLI context above shows an error or is not configured, stop and help the user set it up before proceeding. They need `aws configure` with a valid access key, secret, and region.
 
-If `$ARGUMENTS` is provided, parse it for preferences (e.g. region, instance type, stack name, `tailscale`). Anything not specified uses defaults.
+If `$ARGUMENTS` is provided, parse it for preferences (e.g. region, instance type, stack name, `tailscale`, `overnight`). Anything not specified uses defaults.
 
 ---
 
@@ -29,11 +29,12 @@ I'll provision an always-on Claude Code server with these settings:
   Stack name:    claude-dev
   SSH key:       claude-dev-key
   Tailscale:     no
+  Overnight:     no
 
 Press Enter to proceed, or tell me what to change.
 ```
 
-Adjust defaults based on context (e.g. if AWS region is already configured, use that). If `$ARGUMENTS` mentions `tailscale`, set Tailscale to yes. If a stack with the default name already exists, suggest a different name or ask if they want to reuse it.
+Adjust defaults based on context (e.g. if AWS region is already configured, use that). If `$ARGUMENTS` mentions `tailscale`, set Tailscale to yes. If `$ARGUMENTS` mentions `overnight`, set Overnight to yes. If a stack with the default name already exists, suggest a different name or ask if they want to reuse it.
 
 ---
 
@@ -126,46 +127,50 @@ ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -o BatchMode=yes -i ~/.ssh/$
 
 ## Step 7 — Remote setup via SSH
 
-Run the install steps remotely. Use `ssh -t -i KEY ubuntu@IP "commands"` for each group. Set `TAILSCALE=1` in the remote environment if the user chose Tailscale.
+Run the install steps remotely. Use `ssh -t -i KEY ubuntu@IP "commands"` for each group. Set `TAILSCALE=1` or `OVERNIGHT=1` in the remote environment based on the user's preferences from Step 1.
 
-**8a — System packages + Docker:**
+**7a — System packages + Docker:**
 ```bash
 ssh -t -i $KEY ubuntu@$IP "sudo apt-get update -qq && \
     (command -v docker &>/dev/null || curl -fsSL https://get.docker.com | sh) && \
     (command -v tmux &>/dev/null || sudo apt-get install -y -qq tmux) && \
-    (dpkg -s at &>/dev/null 2>&1 || sudo apt-get install -y -qq at) && \
     (docker compose version &>/dev/null 2>&1 || sudo apt-get install -y -qq docker-compose-plugin) && \
-    (id -nG ubuntu | grep -qw docker || sudo usermod -aG docker ubuntu) && \
-    (systemctl is-active --quiet atd 2>/dev/null || sudo systemctl enable --now atd)"
+    (id -nG ubuntu | grep -qw docker || sudo usermod -aG docker ubuntu)"
 ```
 
-**8b — Tailscale (only if enabled):**
+**7b — Tailscale (only if enabled):**
 ```bash
 ssh -t -i $KEY ubuntu@$IP "command -v tailscale &>/dev/null || curl -fsSL https://tailscale.com/install.sh | sh"
 ```
 
-**8c — Clone repo + host dirs:**
+**7c — Overnight task dependencies (only if enabled):**
+```bash
+ssh -t -i $KEY ubuntu@$IP "(dpkg -s at &>/dev/null 2>&1 || sudo apt-get install -y -qq at) && \
+    (systemctl is-active --quiet atd 2>/dev/null || sudo systemctl enable --now atd)"
+```
+
+**7d — Clone repo + host dirs:**
 ```bash
 ssh -t -i $KEY ubuntu@$IP 'DEV_ENV=$HOME/dev-env && \
     ([ -d "$DEV_ENV/.git" ] && git -C "$DEV_ENV" pull --ff-only || git clone https://github.com/verkyyi/always-on-claude.git "$DEV_ENV") && \
     mkdir -p ~/.claude/commands ~/.claude/debug ~/projects ~/overnight/logs ~/.gitconfig.d ~/.ssh && \
-    [ -f ~/.claude.json ] || touch ~/.claude.json && \
+    ([ -s ~/.claude.json ] || echo "{}" > ~/.claude.json) && \
     [ -f ~/.ssh/known_hosts ] || touch ~/.ssh/known_hosts && \
     cp "$DEV_ENV"/commands/*.md ~/.claude/commands/ 2>/dev/null; \
     chmod +x "$DEV_ENV"/*.sh 2>/dev/null; true'
 ```
 
-**8d — Shell integration:**
+**7e — Shell integration:**
 ```bash
 ssh -t -i $KEY ubuntu@$IP 'grep -q "ssh-login.sh" ~/.bash_profile 2>/dev/null || echo -e "\n# Auto-launch Claude Code on SSH login\nsource ~/dev-env/ssh-login.sh" >> ~/.bash_profile'
 ```
 
-**8e — Cron:**
+**7f — Trigger-watcher cron (only if overnight enabled):**
 ```bash
 ssh -t -i $KEY ubuntu@$IP 'crontab -l 2>/dev/null | grep -q "trigger-watcher.sh" || (crontab -l 2>/dev/null; echo "* * * * * bash ~/dev-env/trigger-watcher.sh >> ~/overnight/trigger-watcher.log 2>&1") | crontab -'
 ```
 
-**8f — Docker pull + start:**
+**7g — Docker pull + start:**
 ```bash
 ssh -t -i $KEY ubuntu@$IP 'cd ~/dev-env && sg docker -c "docker pull ghcr.io/verkyyi/always-on-claude:latest && docker compose up -d"'
 ```
@@ -175,7 +180,7 @@ If pull fails, fallback:
 ssh -t -i $KEY ubuntu@$IP 'cd ~/dev-env && sg docker -c "docker compose -f docker-compose.yml -f docker-compose.build.yml build && docker compose up -d"'
 ```
 
-**8g — Fix permissions:**
+**7h — Fix permissions:**
 ```bash
 ssh -t -i $KEY ubuntu@$IP 'cd ~/dev-env && sg docker -c "docker compose exec -T -u root dev bash -c \"chown -R dev:dev /home/dev/projects /home/dev/.claude /home/dev/overnight\""'
 ```
@@ -235,7 +240,7 @@ Setup complete!
   The login menu will appear — press Enter for Claude Code.
 
   To tear down:
-    aws cloudformation delete-stack --stack-name $STACK_NAME --region $REGION
+    /destroy
 ```
 
 ---
