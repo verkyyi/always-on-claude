@@ -29,6 +29,9 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -112,10 +115,13 @@ jobs:
 
       - name: Run install.sh
         run: |
-          echo "Running install.sh on build instance..."
+          echo "Copying install.sh to build instance..."
+          scp -o StrictHostKeyChecking=no -i /tmp/build-key.pem \
+            install.sh "ubuntu@${PUBLIC_IP}:/tmp/install.sh"
+          echo "Running install.sh..."
           ssh -o StrictHostKeyChecking=no -o BatchMode=yes -i /tmp/build-key.pem \
             "ubuntu@${PUBLIC_IP}" \
-            "NON_INTERACTIVE=1 bash -c 'curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/install.sh | bash'"
+            "NON_INTERACTIVE=1 bash /tmp/install.sh"
 
       - name: Clean instance for snapshot
         run: |
