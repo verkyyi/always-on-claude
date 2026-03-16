@@ -4,6 +4,10 @@
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/install.sh | bash
 #
+# Options (env vars):
+#   TAILSCALE=1    — install and configure Tailscale for SSH access
+#   LOCAL_BUILD=1  — build Docker image locally instead of pulling from GHCR
+#
 # Idempotent — safe to re-run at any point.
 
 set -euo pipefail
@@ -16,6 +20,10 @@ trap 'if [ $? -ne 0 ]; then echo ""; echo "ERROR: Failed during: $step"; echo "F
 info()  { echo ""; echo "=== $* ==="; }
 ok()    { echo "  OK: $*"; }
 skip()  { echo "  SKIP: $* (already done)"; }
+
+TAILSCALE="${TAILSCALE:-0}"
+LOCAL_BUILD="${LOCAL_BUILD:-0}"
+IMAGE="ghcr.io/verkyyi/always-on-claude:latest"
 
 # Wrap sudo: no-op when already root, real sudo otherwise
 if [[ $EUID -eq 0 ]]; then
@@ -112,16 +120,18 @@ else
     skip "atd"
 fi
 
-# --- Tailscale --------------------------------------------------------------
+# --- Tailscale (optional) --------------------------------------------------
 
-info "Tailscale"
-step="Tailscale install"
+if [[ "$TAILSCALE" == "1" ]]; then
+    info "Tailscale"
+    step="Tailscale install"
 
-if ! command -v tailscale &>/dev/null; then
-    curl -fsSL https://tailscale.com/install.sh | sh
-    ok "Tailscale installed"
-else
-    skip "Tailscale binary"
+    if ! command -v tailscale &>/dev/null; then
+        curl -fsSL https://tailscale.com/install.sh | sh
+        ok "Tailscale installed"
+    else
+        skip "Tailscale binary"
+    fi
 fi
 
 # --- Clone / update repo ----------------------------------------------------
@@ -220,10 +230,10 @@ fi
 step="chmod scripts"
 chmod +x "$DEV_ENV"/*.sh 2>/dev/null || true
 
-# --- Docker build + start ---------------------------------------------------
+# --- Docker pull + start ----------------------------------------------------
 
 info "Docker container"
-step="docker compose build and up"
+step="docker pull and up"
 
 # Run docker commands — root runs directly, non-root uses sg if needed
 run_docker() {
@@ -234,9 +244,23 @@ run_docker() {
     fi
 }
 
-run_docker docker compose build
+if [[ "$LOCAL_BUILD" == "1" ]]; then
+    echo "  LOCAL_BUILD=1 — building image locally..."
+    run_docker docker compose -f docker-compose.yml -f docker-compose.build.yml build
+    ok "Image built locally"
+else
+    step="docker pull"
+    if run_docker docker pull "$IMAGE"; then
+        ok "Pulled $IMAGE"
+    else
+        echo "  WARN: Pull failed — falling back to local build..."
+        run_docker docker compose -f docker-compose.yml -f docker-compose.build.yml build
+        ok "Image built locally (fallback)"
+    fi
+fi
+
 run_docker docker compose up -d
-ok "Container built and running"
+ok "Container running"
 
 # Fix container permissions (volumes mount as root)
 step="fix container permissions"
@@ -256,34 +280,36 @@ echo ""
 echo "Phase 2: Interactive setup (needs browser)"
 echo ""
 
-# --- Tailscale auth ---------------------------------------------------------
+# --- Tailscale auth (optional) ----------------------------------------------
 
-info "Tailscale authentication"
-step="tailscale auth"
+if [[ "$TAILSCALE" == "1" ]]; then
+    info "Tailscale authentication"
+    step="tailscale auth"
 
-if tailscale status &>/dev/null 2>&1; then
-    skip "Tailscale already connected"
-else
-    echo ""
-    echo "  Tailscale needs to be connected for SSH access."
-    echo "  This will open a URL — paste it in your browser to authenticate."
-    echo ""
-    read -rp "  Press Enter to run 'sudo tailscale up --ssh'... "
-    sudo tailscale up --ssh
+    if tailscale status &>/dev/null 2>&1; then
+        skip "Tailscale already connected"
+    else
+        echo ""
+        echo "  Tailscale needs to be connected for SSH access."
+        echo "  This will open a URL — paste it in your browser to authenticate."
+        echo ""
+        read -rp "  Press Enter to run 'sudo tailscale up --ssh'... "
+        sudo tailscale up --ssh
 
-    echo ""
-    read -rp "  Enter a hostname for this machine (e.g. my-dev-server): " ts_hostname
-    if [[ -n "$ts_hostname" ]]; then
-        sudo tailscale set --hostname "$ts_hostname"
-        ok "Tailscale hostname set to $ts_hostname"
+        echo ""
+        read -rp "  Enter a hostname for this machine (e.g. my-dev-server): " ts_hostname
+        if [[ -n "$ts_hostname" ]]; then
+            sudo tailscale set --hostname "$ts_hostname"
+            ok "Tailscale hostname set to $ts_hostname"
+        fi
     fi
-fi
 
-echo ""
-echo "  TIP: Go to https://login.tailscale.com/admin/machines"
-echo "  Select your machine -> SSH -> set access mode to 'Accept'"
-echo "  (This avoids periodic re-authentication prompts)"
-echo ""
+    echo ""
+    echo "  TIP: Go to https://login.tailscale.com/admin/machines"
+    echo "  Select your machine -> SSH -> set access mode to 'Accept'"
+    echo "  (This avoids periodic re-authentication prompts)"
+    echo ""
+fi
 
 # --- In-container auth ------------------------------------------------------
 
@@ -318,11 +344,13 @@ else
     echo "  WARN: trigger-watcher cron not found"
 fi
 
-# Check tailscale
-if tailscale status &>/dev/null 2>&1; then
-    ok "Tailscale is connected"
-else
-    echo "  WARN: Tailscale not connected"
+# Check tailscale (only if enabled)
+if [[ "$TAILSCALE" == "1" ]]; then
+    if tailscale status &>/dev/null 2>&1; then
+        ok "Tailscale is connected"
+    else
+        echo "  WARN: Tailscale not connected"
+    fi
 fi
 
 echo ""
@@ -332,10 +360,14 @@ echo "============================================"
 echo ""
 echo "  Next steps:"
 echo "    1. Log out: exit"
-ts_name=$(hostname)
-echo "    2. SSH back in: ssh $USER@$ts_name"
+echo "    2. SSH back in: ssh $USER@$(hostname)"
 echo "    3. The login menu will appear — press Enter for Claude Code"
 echo ""
+if [[ "$TAILSCALE" == "1" ]] && tailscale status &>/dev/null 2>&1; then
+    ts_name=$(tailscale status --self --peers=false | awk '{print $2}' 2>/dev/null || hostname)
+    echo "  Or via Tailscale: ssh $USER@$ts_name"
+    echo ""
+fi
 echo "  To lock down the security group (remove public SSH):"
 echo "    aws ec2 revoke-security-group-ingress \\"
 echo "      --group-id sg-YOUR_SG_ID \\"

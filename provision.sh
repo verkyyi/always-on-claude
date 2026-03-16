@@ -181,14 +181,20 @@ done
 
 info "Running install.sh on the instance"
 
+TAILSCALE="${TAILSCALE:-0}"
+
 echo ""
 echo "  Connecting to ${SSH_USER}@${PUBLIC_IP}..."
 echo "  The install script will run automatically."
-echo "  You'll be prompted for Tailscale auth, git config, and Claude login."
+if [[ "$TAILSCALE" == "1" ]]; then
+    echo "  You'll be prompted for Tailscale auth, git config, and Claude login."
+else
+    echo "  You'll be prompted for git config and Claude login."
+fi
 echo ""
 
 if ssh -o StrictHostKeyChecking=no -t -i "$KEY_FILE" "${SSH_USER}@${PUBLIC_IP}" \
-    "curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/install.sh | bash"; then
+    "export TAILSCALE=$TAILSCALE && curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/install.sh | bash"; then
     echo ""
     echo "============================================"
     echo "  Provisioning complete!"
@@ -208,12 +214,14 @@ echo "  Instance IP: $PUBLIC_IP"
 echo "  SSH key:     $KEY_FILE"
 echo "  Stack:       $STACK_NAME"
 echo ""
-echo "  Connect via Tailscale:"
-echo "    ssh ${SSH_USER}@<your-tailscale-hostname>"
-echo ""
-echo "  Connect directly (until you lock down the security group):"
+echo "  Connect via SSH:"
 echo "    ssh -i $KEY_FILE ${SSH_USER}@$PUBLIC_IP"
 echo ""
+if [[ "$TAILSCALE" == "1" ]]; then
+    echo "  Or via Tailscale (after setup):"
+    echo "    ssh ${SSH_USER}@<your-tailscale-hostname>"
+    echo ""
+fi
 echo "  To tear down everything:"
 echo "    aws cloudformation delete-stack --stack-name $STACK_NAME --region $AWS_REGION"
 echo ""

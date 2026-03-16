@@ -1,8 +1,6 @@
 services:
   dev:
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
+    image: ghcr.io/verkyyi/always-on-claude:latest
     container_name: claude-dev
     hostname: claude-dev
     stdin_open: true

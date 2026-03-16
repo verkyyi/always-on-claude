@@ -1,5 +1,8 @@
 FROM ubuntu:24.04
 
+LABEL org.opencontainers.image.source="https://github.com/verkyyi/always-on-claude"
+LABEL org.opencontainers.image.description="Always-on Claude Code workspace — Ubuntu 24.04 + Node 22 + dev tools"
+
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PATH="/home/dev/.local/bin:${PATH}"
 
@@ -15,7 +18,7 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs
 
 # AWS CLI v2
-RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" \
+RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o "awscliv2.zip" \
     && unzip awscliv2.zip && ./aws/install \
     && rm -rf aws awscliv2.zip
 
@@ -27,7 +30,8 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
     && apt-get update && apt-get install -y gh
 
 # Non-root user (Claude Code refuses to run as root)
-RUN userdel -r ubuntu && groupadd -g 1000 dev && useradd -m -s /bin/bash -u 1000 -g 1000 dev
+RUN userdel -r ubuntu 2>/dev/null || true \
+    && groupadd -g 1000 dev && useradd -m -s /bin/bash -u 1000 -g 1000 dev
 
 # Claude Code — native installer, must run as non-root
 USER dev
