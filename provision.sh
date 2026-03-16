@@ -253,21 +253,24 @@ info "Waiting for setup to complete"
 
 echo "  install.sh started during boot — waiting for it to finish..."
 
-if ssh -o StrictHostKeyChecking=no -t -i "$KEY_FILE" "${SSH_USER}@${PUBLIC_IP}" \
-    "cloud-init status --wait >/dev/null 2>&1"; then
-    ok "Setup complete"
-else
-    echo "  WARN: cloud-init finished with errors"
-    echo "  Check logs: ssh -i $KEY_FILE ${SSH_USER}@$PUBLIC_IP 'cat /var/log/install.log'"
-fi
+# Wait for cloud-init (no -t flag, works without TTY)
+ssh -o StrictHostKeyChecking=no -o BatchMode=yes -i "$KEY_FILE" "${SSH_USER}@${PUBLIC_IP}" \
+    "cloud-init status --wait" >/dev/null 2>&1 || true
 
-# Verify container is running
-if ssh -o StrictHostKeyChecking=no -i "$KEY_FILE" "${SSH_USER}@${PUBLIC_IP}" \
-    "sg docker -c 'docker ps --format {{.Names}}' 2>/dev/null | grep -q claude-dev"; then
-    ok "Container 'claude-dev' is running"
-else
-    echo "  WARN: Container not running — check /var/log/install.log on the instance"
-fi
+# Poll for container to be running (cloud-init done doesn't guarantee compose up finished)
+echo "  Waiting for container..."
+for i in $(seq 1 60); do
+    if ssh -o StrictHostKeyChecking=no -o BatchMode=yes -i "$KEY_FILE" "${SSH_USER}@${PUBLIC_IP}" \
+        "sudo docker ps --format '{{.Names}}' 2>/dev/null | grep -q claude-dev" 2>/dev/null; then
+        ok "Container 'claude-dev' is running"
+        break
+    fi
+    if [[ $i -eq 60 ]]; then
+        echo "  WARN: Container not running after 3 minutes"
+        echo "  Check logs: ssh -i $KEY_FILE ${SSH_USER}@$PUBLIC_IP 'cat /var/log/install.log'"
+    fi
+    sleep 3
+done
 
 echo ""
 echo "============================================"
