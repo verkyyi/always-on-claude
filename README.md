@@ -75,10 +75,14 @@ Your Mac / Phone / Tablet
               │    ├── Git, GitHub CLI, AWS CLI
               │    └── Your project repos
               ├── tmux (session persistence)
-              └── Login menu on SSH connect
+              └── Workspace picker on SSH connect
 ```
 
 **Everything persists** — auth, settings, repos, tmux sessions, Claude history — all survive container restarts and reconnects.
+
+**Built-in slash commands:**
+- `/workspace` — manage git worktrees from inside Claude (create, delete, list)
+- `/plan-overnight` — plan tasks, schedule them, go to sleep
 
 ---
 

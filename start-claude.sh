@@ -4,24 +4,37 @@
 # inside a named tmux session.
 #
 # Called automatically from ssh-login.sh on SSH login.
+# Worktree create/delete is handled by the /workspace slash command
+# inside Claude Code — this script only does selection.
 
 set -euo pipefail
 
 COMPOSE_DIR="$HOME/dev-env"
 CONTAINER_NAME="claude-dev"
 
+# Start container if not running
 if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
     echo "Container not running. Starting..."
     cd "$COMPOSE_DIR" && docker compose up -d
     sleep 2
-
-    # Fix named volume permissions (projects dir mounts as root)
-    # ~/.claude is a bind mount — inherits host ownership, no fix needed
     docker compose exec -u root dev bash -c \
         "chown -R dev:dev /home/dev/projects" 2>/dev/null || true
 fi
 
 show_menu() {
+    # Show active claude-* tmux sessions
+    local sessions
+    sessions=$(tmux list-sessions -F '#{session_name} #{?session_attached,(attached),(idle)}' 2>/dev/null \
+        | grep '^claude-' || true)
+
+    if [[ -n "$sessions" ]]; then
+        echo ""
+        echo "  === Active sessions ==="
+        while IFS= read -r line; do
+            echo "  $line"
+        done <<< "$sessions"
+    fi
+
     # Discover repos and worktrees via worktree-helper.sh
     mapfile -t entries < <(
         docker exec "$CONTAINER_NAME" bash -c \
@@ -29,7 +42,6 @@ show_menu() {
         | sort
     )
 
-    # Separate repos and worktrees
     repos=()
     worktrees=()
     for entry in "${entries[@]}"; do
@@ -40,15 +52,13 @@ show_menu() {
         esac
     done
 
-    # Build combined list for display (repos first, then worktrees)
+    # Build combined list (repos first, then worktrees)
     all=()
     for item in "${repos[@]+"${repos[@]}"}"; do all+=("$item"); done
     for item in "${worktrees[@]+"${worktrees[@]}"}"; do all+=("WT:$item"); done
 
     echo ""
-    echo "  +---------------------------------+"
-    echo "  |  Pick workspace:                |"
-
+    echo "  === Workspaces ==="
     local i=1
     for item in "${all[@]}"; do
         local display_path display_branch suffix=""
@@ -58,28 +68,22 @@ show_menu() {
         fi
         IFS='|' read -r display_path display_branch <<< "$item"
         local short_path="${display_path#/home/dev/}"
-        local label="  |  [$i] ${short_path} (${display_branch})${suffix}"
-        printf "%-37s|\n" "$label"
+        echo "  [$i] ${short_path} (${display_branch})${suffix}"
         ((i++))
     done
 
-    printf "%-37s|\n" "  |  [w] New worktree"
-    if [[ ${#worktrees[@]} -gt 0 ]]; then
-        printf "%-37s|\n" "  |  [d] Delete worktree"
-    fi
-    printf "%-37s|\n" "  |  [h] ~ (home)"
-    echo "  +---------------------------------+"
+    echo "  [h] ~ (home)"
+    echo "  [r] Refresh list"
     echo ""
 }
 
 show_menu
 
 while true; do
-    choice=""
     read -n 1 -p "  > " choice || true
     echo ""
 
-    # Combine repos + worktrees into a flat list for index lookup
+    # Flat list for index lookup
     all_flat=()
     for item in "${repos[@]+"${repos[@]}"}"; do all_flat+=("$item"); done
     for item in "${worktrees[@]+"${worktrees[@]}"}"; do all_flat+=("$item"); done
@@ -87,90 +91,12 @@ while true; do
     if [[ "$choice" =~ ^[0-9]+$ && "$choice" -ge 1 && "$choice" -le "${#all_flat[@]}" ]]; then
         IFS='|' read -r selected _ <<< "${all_flat[$((choice - 1))]}"
         break
-
     elif [[ "$choice" == "h" ]]; then
         selected="/home/dev"
         break
-
-    elif [[ "$choice" == "w" ]]; then
-        # New worktree flow: pick a repo, then enter branch name
-        if [[ ${#repos[@]} -eq 0 ]]; then
-            echo "  No repos found to create a worktree from."
-            continue
-        fi
-
-        echo ""
-        echo "  Create worktree from which repo?"
-        ri=1
-        for repo_entry in "${repos[@]}"; do
-            IFS='|' read -r rpath rbranch <<< "$repo_entry"
-            echo "  [$ri] ${rpath#/home/dev/} ($rbranch)"
-            ((ri++))
-        done
-        echo ""
-        read -n 1 -p "  repo> " repo_choice || true
-        echo ""
-
-        if [[ ! "$repo_choice" =~ ^[0-9]+$ || "$repo_choice" -lt 1 || "$repo_choice" -gt "${#repos[@]}" ]]; then
-            echo "  Invalid choice."
-            show_menu
-            continue
-        fi
-
-        IFS='|' read -r base_repo _ <<< "${repos[$((repo_choice - 1))]}"
-
-        echo ""
-        read -r -p "  Branch name: " branch_name
-        if [[ -z "$branch_name" ]]; then
-            echo "  No branch name given."
-            show_menu
-            continue
-        fi
-
-        echo "  Creating worktree..."
-        wt_result=$(docker exec "$CONTAINER_NAME" bash -c \
-            "bash /home/dev/dev-env/worktree-helper.sh create '$base_repo' '$branch_name'" 2>&1) || {
-            echo "  Error: $wt_result"
-            show_menu
-            continue
-        }
-
-        # Last line is the worktree path; earlier lines are git progress messages
-        selected=$(tail -1 <<< "$wt_result")
-        echo "  Created: $selected"
-        break
-
-    elif [[ "$choice" == "d" && ${#worktrees[@]} -gt 0 ]]; then
-        # Delete worktree flow
-        echo ""
-        echo "  Delete which worktree?"
-        wi=1
-        for wt_entry in "${worktrees[@]}"; do
-            IFS='|' read -r wpath wbranch <<< "$wt_entry"
-            echo "  [$wi] ${wpath#/home/dev/} ($wbranch)"
-            ((wi++))
-        done
-        echo ""
-        read -n 1 -p "  delete> " del_choice || true
-        echo ""
-
-        if [[ ! "$del_choice" =~ ^[0-9]+$ || "$del_choice" -lt 1 || "$del_choice" -gt "${#worktrees[@]}" ]]; then
-            echo "  Invalid choice."
-            show_menu
-            continue
-        fi
-
-        IFS='|' read -r del_path _ <<< "${worktrees[$((del_choice - 1))]}"
-
-        echo "  Removing worktree: $del_path"
-        docker exec "$CONTAINER_NAME" bash -c \
-            "bash /home/dev/dev-env/worktree-helper.sh remove '$del_path'" 2>&1 || true
-
-        echo "  Done."
-        echo ""
+    elif [[ "$choice" == "r" ]]; then
         show_menu
         continue
-
     else
         # Default: first repo, or home if none found
         if [[ ${#all_flat[@]} -gt 0 ]]; then
