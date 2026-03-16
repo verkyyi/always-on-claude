@@ -88,12 +88,6 @@ AMI_ID=$(aws ec2 describe-images \
 [[ "$AMI_ID" == "None" || -z "$AMI_ID" ]] && die "Could not find Ubuntu 24.04 AMI in $AWS_REGION"
 ok "AMI: $AMI_ID"
 
-# --- Get public IP for security group ---------------------------------------
-
-MY_IP=$(curl -s --max-time 5 ifconfig.me 2>/dev/null || curl -s --max-time 5 checkip.amazonaws.com 2>/dev/null)
-[[ -z "$MY_IP" ]] && die "Could not determine your public IP"
-ok "Your IP: $MY_IP"
-
 # --- CloudFormation stack ---------------------------------------------------
 
 info "CloudFormation stack"
@@ -136,8 +130,7 @@ else
         --template-body "$CF_TEMPLATE" \
         --capabilities CAPABILITY_NAMED_IAM \
         --parameters \
-            ParameterKey=KeyPairName,ParameterValue="$KEY_NAME" \
-            ParameterKey=MyIP,ParameterValue="${MY_IP}/32"
+            ParameterKey=KeyPairName,ParameterValue="$KEY_NAME"
 
     echo "  Waiting for stack to complete (this takes 2-3 minutes)..."
     aws cloudformation wait stack-create-complete \

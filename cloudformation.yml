@@ -6,10 +6,6 @@ Parameters:
     Type: AWS::EC2::KeyPair::KeyName
     Description: EC2 key pair for initial SSH access (before Tailscale is set up)
 
-  MyIP:
-    Type: String
-    Description: "Your public IP for SSH access (e.g. 203.0.113.50/32)"
-    AllowedPattern: '(\d{1,3}\.){3}\d{1,3}/\d{1,2}'
 
 Resources:
   # --- IAM ---
@@ -40,14 +36,14 @@ Resources:
   DevSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: "Dev server - SSH from your IP only, lock down after Tailscale"
+      GroupDescription: "Dev server - SSH open initially, lock down after setup"
       GroupName: dev-sg
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 22
           ToPort: 22
-          CidrIp: !Ref MyIP
-          Description: "SSH from your IP"
+          CidrIp: 0.0.0.0/0
+          Description: "SSH (lock down after setup)"
 
   # --- EC2 Instance ---
   DevInstance:

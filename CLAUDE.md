@@ -55,7 +55,8 @@ Deployment:
   .github/workflows/docker-publish.yml — Multi-arch build + push to GHCR on main
   bootstrap.sh        — Legacy manual setup (deprecated)
 
-Add-ons (overnight autonomous tasks):
+Add-ons (slash commands):
+  commands/provision.md       — Slash command: orchestrates full AWS provisioning via Claude
   commands/plan-overnight.md  — Slash command: scans TODOs/issues, writes task file
   trigger-watcher.sh          — Host cron: detects .scheduled files, runs `at`
   run-tasks.sh                — Parses task file, runs each via `claude -p`, logs output
