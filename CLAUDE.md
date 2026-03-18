@@ -63,9 +63,9 @@ Deployment:
   setup-auth.sh       — Interactive auth: git config, gh auth login, claude login
   .github/workflows/docker-publish.yml — Multi-arch build + push to GHCR on main
 
-Add-ons (slash commands):
-  commands/provision.md       — Slash command: orchestrates full AWS provisioning via Claude
-  commands/plan-overnight.md  — Slash command: scans TODOs/issues, writes task file
+Add-ons (slash commands — live in .claude/commands/, auto-discovered):
+  .claude/commands/provision.md       — Slash command: orchestrates full AWS provisioning via Claude
+  .claude/commands/plan-overnight.md  — Slash command: scans TODOs/issues, writes task file
   trigger-watcher.sh          — Host cron: detects .scheduled files, runs `at`
   run-tasks.sh                — Parses task file, runs each via `claude -p`, logs output
   overnight-tasks.sh          — Simpler manual alternative

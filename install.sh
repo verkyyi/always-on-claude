@@ -218,17 +218,8 @@ else
     skip "~/.ssh/known_hosts"
 fi
 
-# --- Slash commands ---------------------------------------------------------
-
-info "Slash commands"
-step="slash commands"
-
-if [[ -d "$DEV_ENV/commands" ]]; then
-    cp "$DEV_ENV/commands/"*.md ~/.claude/commands/ 2>/dev/null || true
-    ok "Copied slash commands to ~/.claude/commands/"
-else
-    skip "No commands directory found"
-fi
+# Slash commands now live in .claude/commands/ inside the repo
+# and are picked up automatically as project-level commands — no copy needed
 
 # --- Shell integration (ssh-login.sh) ---------------------------------------
 
