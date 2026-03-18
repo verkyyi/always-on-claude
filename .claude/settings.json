@@ -1,0 +1,45 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(aws:*)",
+      "Bash(ssh:*)",
+      "Bash(ssh-keygen:*)",
+      "Bash(chmod:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(grep:*)",
+      "Bash(mkdir:*)",
+      "Bash(touch:*)",
+      "Bash(curl:*)",
+      "Bash(docker:*)",
+      "Bash(docker-compose:*)",
+      "Bash(git:*)",
+      "Bash(gh:*)",
+      "Bash(echo:*)",
+      "Bash(rm:*.pem)",
+      "Bash(atq:*)",
+      "Bash(at:*)",
+      "Bash(crontab:*)",
+      "Bash(hostname:*)",
+      "Bash(whoami:*)",
+      "Bash(pwd:*)",
+      "Bash(find:*)",
+      "Bash(jq:*)",
+      "Bash(sleep:*)",
+      "Read(*)",
+      "Edit(*)",
+      "Write(*)",
+      "Glob",
+      "Grep",
+      "WebFetch(*)",
+      "WebSearch"
+    ],
+    "deny": [
+      "Bash(rm -rf /*)",
+      "Bash(rm -rf /)",
+      "Bash(sudo rm:*)"
+    ]
+  }
+}
