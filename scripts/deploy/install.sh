@@ -120,7 +120,7 @@ fi
 # Claude Code on host (for orchestrating updates, setup, container management)
 if ! command -v claude &>/dev/null; then
     step="Claude Code install (host)"
-    curl -fsSL https://claude.ai/install.sh | sh
+    curl -fsSL https://claude.ai/install.sh | bash
     ok "Claude Code installed on host"
 else
     skip "Claude Code (host)"
