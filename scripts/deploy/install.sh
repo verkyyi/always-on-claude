@@ -117,6 +117,20 @@ else
     skip "Node.js"
 fi
 
+# GitHub CLI on host (for workspace management, cloning, PR operations)
+if ! command -v gh &>/dev/null; then
+    step="GitHub CLI install (host)"
+    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+        | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+        | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+    sudo apt-get update -qq
+    sudo apt-get install -y -qq gh
+    ok "GitHub CLI installed on host"
+else
+    skip "GitHub CLI (host)"
+fi
+
 # Claude Code on host (for orchestrating updates, setup, container management)
 if ! command -v claude &>/dev/null; then
     step="Claude Code install (host)"
@@ -170,6 +184,7 @@ step="host directories"
 
 mkdir -p ~/.claude/commands
 mkdir -p ~/.claude/debug
+mkdir -p ~/.config/gh
 mkdir -p ~/projects
 mkdir -p ~/.gitconfig.d
 

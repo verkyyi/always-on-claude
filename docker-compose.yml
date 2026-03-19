@@ -21,6 +21,9 @@ services:
       # Create ~/projects on the host before first start
       - ~/projects:/home/dev/projects
 
+      # GitHub CLI config/auth (shared between host and container)
+      - ~/.config/gh:/home/dev/.config/gh
+
       # SSH keys for GitHub (read-only)
       - ~/.ssh:/home/dev/.ssh:ro
 
