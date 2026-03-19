@@ -66,6 +66,34 @@ fi
 
 ok "Running as $USER ($(if [[ $EUID -eq 0 ]]; then echo "root"; else echo "non-root, using sudo"; fi)) on $(hostname)"
 
+# --- Rename ubuntu user to dev (matches container user) ---------------------
+
+info "System user"
+step="rename user"
+
+if id ubuntu &>/dev/null 2>&1 && ! id dev &>/dev/null 2>&1; then
+    # Direct file edit avoids usermod's "user is currently logged in" check
+    sudo sed -i '/^ubuntu:/ { s/^ubuntu:/dev:/; s|:/home/ubuntu:|:/home/dev:| }' /etc/passwd
+    sudo sed -i 's/^ubuntu:/dev:/' /etc/shadow /etc/group /etc/gshadow /etc/subuid /etc/subgid 2>/dev/null || true
+    sudo mv /home/ubuntu /home/dev 2>/dev/null || true
+
+    # Fix sudoers
+    if [[ -f /etc/sudoers.d/90-cloud-init-users ]]; then
+        sudo sed -i 's/ubuntu/dev/g' /etc/sudoers.d/90-cloud-init-users
+    fi
+
+    # Update current session
+    export USER=dev
+    export HOME=/home/dev
+    cd "$HOME"
+
+    ok "Renamed system user ubuntu → dev"
+elif id dev &>/dev/null 2>&1; then
+    skip "User is already dev"
+else
+    skip "User is $(id -un) (no rename needed)"
+fi
+
 # --- System packages --------------------------------------------------------
 
 info "System packages"

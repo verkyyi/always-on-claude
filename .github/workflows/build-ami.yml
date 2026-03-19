@@ -125,8 +125,9 @@ jobs:
 
       - name: Clean instance for snapshot
         run: |
+          # install.sh renames ubuntu → dev, so use dev@ for post-install commands
           ssh -o StrictHostKeyChecking=no -o BatchMode=yes -i /tmp/build-key.pem \
-            "ubuntu@${PUBLIC_IP}" bash <<'EOF'
+            "dev@${PUBLIC_IP}" bash <<'EOF'
           sudo rm -f /etc/ssh/ssh_host_*
           sudo cloud-init clean --logs
           rm -f ~/.bash_history

@@ -90,6 +90,20 @@ Use the correct form throughout this command.
 
    - **install.sh changed**: Review what was added. If new system packages or config steps were added, run those specific steps manually. Do NOT re-run the entire install script.
 
+   - **System user rename** (install.sh contains user rename and current user is `ubuntu`): Apply the rename directly:
+     ```bash
+     sudo sed -i '/^ubuntu:/ { s/^ubuntu:/dev:/; s|:/home/ubuntu:|:/home/dev:| }' /etc/passwd
+     sudo sed -i 's/^ubuntu:/dev:/' /etc/shadow /etc/group /etc/gshadow /etc/subuid /etc/subgid 2>/dev/null || true
+     sudo mv /home/ubuntu /home/dev 2>/dev/null || true
+     [[ -f /etc/sudoers.d/90-cloud-init-users ]] && sudo sed -i 's/ubuntu/dev/g' /etc/sudoers.d/90-cloud-init-users
+     export USER=dev HOME=/home/dev
+     ```
+     Then tell the user:
+     1. The host user has been renamed from `ubuntu` to `dev`
+     2. They must disconnect (Ctrl-b d, then exit) and reconnect as `dev@`
+     3. Update their local SSH config: change `User ubuntu` to `User dev` in `~/.ssh/config`
+     4. Update shell aliases if they use `cc`/`ccc`
+
    - **GitHub Actions changed** (`.github/`): No server-side action needed — these run in CI.
 
    - **CLAUDE.md or docs changed**: No action needed.

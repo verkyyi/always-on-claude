@@ -106,7 +106,7 @@ aws ec2 wait instance-running --region "$REGION" --instance-ids "$INSTANCE_ID"
 
 Get public IP, then poll SSH:
 ```bash
-ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -o BatchMode=yes -i ~/.ssh/$KEY_NAME.pem ubuntu@$IP "echo ok"
+ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -o BatchMode=yes -i ~/.ssh/$KEY_NAME.pem dev@$IP "echo ok"
 ```
 
 ---
@@ -114,12 +114,12 @@ ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -o BatchMode=yes -i ~/.ssh/$
 ## Step 7 — Wait for setup
 
 ```bash
-ssh -t -i $KEY ubuntu@$IP "cloud-init status --wait >/dev/null 2>&1"
+ssh -t -i $KEY dev@$IP "cloud-init status --wait >/dev/null 2>&1"
 ```
 
 Verify container is running:
 ```bash
-ssh -i $KEY ubuntu@$IP "sg docker -c 'docker ps --format {{.Names}}' | grep -q claude-dev"
+ssh -i $KEY dev@$IP "sg docker -c 'docker ps --format {{.Names}}' | grep -q claude-dev"
 ```
 
 ---
@@ -127,7 +127,7 @@ ssh -i $KEY ubuntu@$IP "sg docker -c 'docker ps --format {{.Names}}' | grep -q c
 ## Step 8 — Interactive auth
 
 ```bash
-ssh -t -i $KEY ubuntu@$IP "sg docker -c 'docker cp ~/dev-env/scripts/deploy/setup-auth.sh claude-dev:/tmp/setup-auth.sh && docker exec -it claude-dev bash /tmp/setup-auth.sh'"
+ssh -t -i $KEY dev@$IP "sg docker -c 'docker cp ~/dev-env/scripts/deploy/setup-auth.sh claude-dev:/tmp/setup-auth.sh && docker exec -it claude-dev bash /tmp/setup-auth.sh'"
 ```
 
 Tell the user what to expect before running it (git config, GitHub CLI, Claude login — each requires browser auth).
@@ -164,7 +164,7 @@ Add (or update) an SSH config entry so the user can connect with just `ssh $INST
 ```
 Host $INSTANCE_NAME
     HostName $IP
-    User ubuntu
+    User dev
     IdentityFile ~/.ssh/$KEY_NAME.pem
 ```
 

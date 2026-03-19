@@ -177,7 +177,7 @@ ok "Install complete"
 info "Preparing instance for snapshot"
 
 # Remove host-specific state that shouldn't be baked into the AMI
-ssh -o StrictHostKeyChecking=no -o BatchMode=yes -i "$KEY_FILE" "ubuntu@${PUBLIC_IP}" bash <<'CLEANUP'
+ssh -o StrictHostKeyChecking=no -o BatchMode=yes -i "$KEY_FILE" "dev@${PUBLIC_IP}" bash <<'CLEANUP'
 # Remove SSH host keys (regenerated on boot)
 sudo rm -f /etc/ssh/ssh_host_*
 

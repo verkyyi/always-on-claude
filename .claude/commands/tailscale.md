@@ -97,7 +97,7 @@ This runs from the user's **local Mac**. Source `.env.workspace` to get `INSTANC
 
 SSH into the remote and check if Tailscale is installed and connected:
 ```bash
-ssh -i $SSH_KEY ubuntu@$PUBLIC_IP "command -v tailscale && sudo tailscale status 2>&1 || echo 'not installed'"
+ssh -i $SSH_KEY dev@$PUBLIC_IP "command -v tailscale && sudo tailscale status 2>&1 || echo 'not installed'"
 ```
 
 If already installed AND connected, show the status and skip to Step 5 (verify + lockdown).
@@ -108,12 +108,12 @@ If already installed AND connected, show the status and skip to Step 5 (verify +
 
 If not installed, SSH in and install:
 ```bash
-ssh -i $SSH_KEY ubuntu@$PUBLIC_IP "curl -fsSL https://tailscale.com/install.sh | sh"
+ssh -i $SSH_KEY dev@$PUBLIC_IP "curl -fsSL https://tailscale.com/install.sh | sh"
 ```
 
 Verify:
 ```bash
-ssh -i $SSH_KEY ubuntu@$PUBLIC_IP "command -v tailscale && echo 'installed' || echo 'install failed'"
+ssh -i $SSH_KEY dev@$PUBLIC_IP "command -v tailscale && echo 'installed' || echo 'install failed'"
 ```
 
 ---
@@ -122,12 +122,12 @@ ssh -i $SSH_KEY ubuntu@$PUBLIC_IP "command -v tailscale && echo 'installed' || e
 
 Run `tailscale up --ssh` on the remote. This will print an auth URL:
 ```bash
-ssh -t -i $SSH_KEY ubuntu@$PUBLIC_IP "sudo tailscale up --ssh"
+ssh -t -i $SSH_KEY dev@$PUBLIC_IP "sudo tailscale up --ssh"
 ```
 
 Tell the user to open the URL in their browser to authenticate. Wait for them to confirm, then verify:
 ```bash
-ssh -i $SSH_KEY ubuntu@$PUBLIC_IP "sudo tailscale status"
+ssh -i $SSH_KEY dev@$PUBLIC_IP "sudo tailscale status"
 ```
 
 ---
@@ -136,7 +136,7 @@ ssh -i $SSH_KEY ubuntu@$PUBLIC_IP "sudo tailscale status"
 
 Ask the user what hostname they'd like (suggest the current `INSTANCE_NAME` as default). Then:
 ```bash
-ssh -i $SSH_KEY ubuntu@$PUBLIC_IP "sudo tailscale set --hostname <name>"
+ssh -i $SSH_KEY dev@$PUBLIC_IP "sudo tailscale set --hostname <name>"
 ```
 
 ---
@@ -145,7 +145,7 @@ ssh -i $SSH_KEY ubuntu@$PUBLIC_IP "sudo tailscale set --hostname <name>"
 
 Test SSH via Tailscale hostname from the local machine:
 ```bash
-ssh -o ConnectTimeout=5 ubuntu@<hostname> "echo connected"
+ssh -o ConnectTimeout=5 dev@<hostname> "echo connected"
 ```
 
 If this fails, do NOT proceed to lockdown. Troubleshoot first.
@@ -182,7 +182,7 @@ aws ec2 revoke-security-group-ingress --group-id $SG_ID --protocol tcp --port 22
 
 Verify the public IP is blocked:
 ```bash
-ssh -o ConnectTimeout=5 -i $SSH_KEY ubuntu@$PUBLIC_IP "echo test" 2>&1 || echo "blocked (expected)"
+ssh -o ConnectTimeout=5 -i $SSH_KEY dev@$PUBLIC_IP "echo test" 2>&1 || echo "blocked (expected)"
 ```
 
 ---

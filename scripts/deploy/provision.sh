@@ -22,7 +22,7 @@ KEY_NAME="${KEY_NAME:-claude-dev-key}"
 AWS_REGION="${AWS_REGION:-$(aws configure get region 2>/dev/null || echo "us-east-1")}"
 INSTANCE_TYPE="${INSTANCE_TYPE:-t4g.small}"
 SG_NAME="${SG_NAME:-claude-dev-sg}"
-SSH_USER="${SSH_USER:-ubuntu}"
+SSH_USER="${SSH_USER:-dev}"
 TAG="always-on-claude"
 
 # --- Helpers ----------------------------------------------------------------
@@ -221,7 +221,7 @@ if [[ "$USE_CUSTOM_AMI" == "1" ]]; then
     USER_DATA=$(cat <<'USERDATA'
 #!/bin/bash
 exec > /var/log/install.log 2>&1
-su - ubuntu -c 'cd ~/dev-env && git pull --ff-only 2>/dev/null; sudo --preserve-env=HOME docker compose up -d'
+su - dev -c 'cd ~/dev-env && git pull --ff-only 2>/dev/null; sudo --preserve-env=HOME docker compose up -d'
 USERDATA
 )
 else
@@ -230,6 +230,7 @@ else
 #!/bin/bash
 exec > /var/log/install.log 2>&1
 su - ubuntu -c "NON_INTERACTIVE=1 bash -c 'curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/scripts/deploy/install.sh | bash'"
+# install.sh renames ubuntu → dev; subsequent logins use dev
 USERDATA
 )
 fi

@@ -17,7 +17,7 @@ fi
 
 # Detect the non-root user (the one who owns ~/dev-env)
 if [[ $EUID -eq 0 ]]; then
-    RUN_USER="${SUDO_USER:-ubuntu}"
+    RUN_USER="${SUDO_USER:-dev}"
 else
     RUN_USER="$USER"
 fi
