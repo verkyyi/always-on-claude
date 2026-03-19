@@ -104,7 +104,7 @@ show_branches() {
     echo ""
 }
 
-# --- Launch Claude Code in selected workspace ---
+# --- Launch Claude Code in selected workspace (inside container) ---
 launch() {
     local selected="$1"
 
@@ -118,6 +118,17 @@ launch() {
         "docker exec -it -w '$selected' ${CONTAINER_NAME} bash -lc 'exec claude'"
 }
 
+# --- Launch Claude Code on the host (for workspace management / updates) ---
+launch_host() {
+    local dir="$1"
+
+    echo "  -> $dir (host)"
+    echo ""
+
+    exec tmux new-session -A -s "claude-manager" \
+        "cd '$dir' && claude"
+}
+
 # --- Main ---
 discover
 
@@ -129,8 +140,8 @@ while true; do
     echo ""
 
     if [[ "$choice" == "m" ]]; then
-        # Launch Claude in ~/dev-env for workspace management
-        launch "/home/dev/dev-env"
+        # Launch Claude on the host for workspace management and updates
+        launch_host "$COMPOSE_DIR"
     elif [[ "$choice" =~ ^[0-9]+$ && "$choice" -ge 1 && "$choice" -le "${#repos[@]}" ]]; then
         IFS='|' read -r selected_path selected_branch <<< "${repos[$((choice - 1))]}"
     elif [[ -z "$choice" || "$choice" == $'\n' ]]; then
