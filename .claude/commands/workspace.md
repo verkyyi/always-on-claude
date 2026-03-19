@@ -11,7 +11,7 @@ Then stop — do not proceed with any further steps.
 
 ---
 
-You are helping the user manage git workspaces from inside a running Claude session.
+You are helping the user manage git workspaces. This runs on the **host** — `~/projects` is bind-mounted into the container, so changes are visible to both sides.
 
 ## Steps
 

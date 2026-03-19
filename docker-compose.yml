@@ -28,9 +28,6 @@ services:
       # Mount as a single file (overrides the ro mount for just this file)
       - ~/.ssh/known_hosts:/home/dev/.ssh/known_hosts
 
-      # Dev-env scripts
-      - ~/dev-env:/home/dev/dev-env:ro
-
     environment:
       - NODE_ENV=development
 

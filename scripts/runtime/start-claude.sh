@@ -12,7 +12,8 @@ set -euo pipefail
 
 COMPOSE_DIR="$HOME/dev-env"
 CONTAINER_NAME="claude-dev"
-WORKTREE_HELPER="/home/dev/dev-env/scripts/runtime/worktree-helper.sh"
+WORKTREE_HELPER="$COMPOSE_DIR/scripts/runtime/worktree-helper.sh"
+CONTAINER_PROJECTS="/home/dev/projects"
 
 # Start container if not running
 if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
@@ -25,11 +26,7 @@ fi
 
 # --- Discover repos and worktrees ---
 discover() {
-    mapfile -t entries < <(
-        docker exec "$CONTAINER_NAME" bash -c \
-            "bash $WORKTREE_HELPER list-repos 2>/dev/null" \
-        | sort
-    )
+    mapfile -t entries < <(bash "$WORKTREE_HELPER" list-repos 2>/dev/null | sort)
 
     repos=()
     repo_paths=()
@@ -45,10 +42,12 @@ discover() {
 # --- Get worktrees for a specific repo ---
 get_worktrees() {
     local repo_path="$1"
-    mapfile -t worktrees < <(
-        docker exec "$CONTAINER_NAME" bash -c \
-            "bash $WORKTREE_HELPER list-worktrees '$repo_path' 2>/dev/null" \
-    )
+    mapfile -t worktrees < <(bash "$WORKTREE_HELPER" list-worktrees "$repo_path" 2>/dev/null)
+}
+
+# --- Translate host path to container path ---
+to_container_path() {
+    echo "${1/$HOME\/projects/$CONTAINER_PROJECTS}"
 }
 
 # --- Layer 1: Pick a repo ---
@@ -71,7 +70,7 @@ show_repos() {
     local i=1
     for item in "${repos[@]+"${repos[@]}"}"; do
         IFS='|' read -r path branch <<< "$item"
-        local short_path="${path#/home/dev/}"
+        local short_path="${path#$HOME/}"
         echo "  [$i] ${short_path} (${branch})"
         ((i++))
     done
@@ -87,7 +86,7 @@ show_repos() {
 # --- Layer 2: Pick a branch/worktree within a repo ---
 show_branches() {
     local repo_path="$1" repo_branch="$2"
-    local short_path="${repo_path#/home/dev/}"
+    local short_path="${repo_path#$HOME/}"
 
     echo ""
     echo "  === ${short_path} ==="
@@ -107,6 +106,8 @@ show_branches() {
 # --- Launch Claude Code in selected workspace (inside container) ---
 launch() {
     local selected="$1"
+    local container_path
+    container_path=$(to_container_path "$selected")
 
     echo "  -> $selected"
     echo ""
@@ -115,7 +116,7 @@ launch() {
     session_name="claude-$(basename "$selected" | tr './:' '-')"
 
     exec tmux new-session -A -s "$session_name" \
-        "docker exec -it -w '$selected' ${CONTAINER_NAME} bash -lc 'exec claude'"
+        "docker exec -it -w '$container_path' ${CONTAINER_NAME} bash -lc 'exec claude'"
 }
 
 # --- Launch Claude Code on the host (for workspace management / updates) ---
@@ -149,7 +150,7 @@ while true; do
         if [[ ${#repos[@]} -gt 0 ]]; then
             IFS='|' read -r selected_path selected_branch <<< "${repos[0]}"
         else
-            launch "/home/dev"
+            launch "$HOME/projects"
         fi
     else
         continue
