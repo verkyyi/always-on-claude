@@ -126,7 +126,7 @@ launch_host() {
     echo ""
 
     exec tmux new-session -A -s "claude-manager" \
-        "cd '$dir' && claude"
+        "bash -lc 'cd \"$dir\" && exec claude'"
 }
 
 # --- Main ---

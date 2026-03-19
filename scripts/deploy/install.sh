@@ -224,6 +224,32 @@ fi
 info "Shell integration"
 step="bash_profile setup"
 
+# PATH additions — must be in .bash_profile (not just .bashrc) because
+# Ubuntu's .bashrc guards on interactive and exits early for non-interactive
+# shells like tmux commands and bash -lc
+if ! grep -q '\.local/bin' ~/.bash_profile 2>/dev/null; then
+    {
+        echo ""
+        echo '# PATH additions (must be before .bashrc which guards on interactive)'
+        echo 'export PATH="$HOME/.local/bin:$PATH"'
+    } >> ~/.bash_profile
+    ok "Added ~/.local/bin to PATH in .bash_profile"
+else
+    skip "~/.local/bin already in .bash_profile PATH"
+fi
+
+# Ensure .bash_profile sources .bashrc (bash skips .profile when .bash_profile exists)
+if ! grep -q 'source.*bashrc\|\.bashrc' ~/.bash_profile 2>/dev/null; then
+    {
+        echo ""
+        echo "# Source .bashrc (bash skips .profile when .bash_profile exists)"
+        echo '[[ -f ~/.bashrc ]] && source ~/.bashrc'
+    } >> ~/.bash_profile
+    ok "Added .bashrc sourcing to .bash_profile"
+else
+    skip ".bashrc already sourced from .bash_profile"
+fi
+
 if ! grep -q "ssh-login.sh" ~/.bash_profile 2>/dev/null; then
     {
         echo ""
@@ -291,6 +317,13 @@ echo ""
 echo "============================================"
 echo "  Phase 1 complete! Container is running."
 echo "============================================"
+
+# Mark this host as provisioned (used by slash commands to detect environment)
+cat > "$DEV_ENV/.provisioned" <<EOF
+provisioned=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+commit=$(git -C "$DEV_ENV" rev-parse --short HEAD 2>/dev/null || echo "unknown")
+EOF
+ok "Wrote provisioned marker"
 
 if [[ "$NON_INTERACTIVE" == "1" ]]; then
     echo ""

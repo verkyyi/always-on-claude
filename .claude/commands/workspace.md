@@ -1,5 +1,16 @@
 # Workspace Manager
 
+## Environment check
+
+First, check if this is a provisioned host:
+  test -f ~/dev-env/.provisioned && echo "provisioned" || echo "not provisioned"
+
+If "not provisioned", tell the user:
+"This command is only available on a provisioned workspace. SSH into your instance and use [m] to manage workspaces."
+Then stop — do not proceed with any further steps.
+
+---
+
 You are helping the user manage git workspaces from inside a running Claude session.
 
 ## Steps

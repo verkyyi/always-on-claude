@@ -15,3 +15,6 @@ Thumbs.db
 
 # Claude Code worktrees (created by `claude --worktree`)
 .claude/worktrees/
+
+# Provisioned host marker (created by install.sh, only exists on remote hosts)
+.provisioned

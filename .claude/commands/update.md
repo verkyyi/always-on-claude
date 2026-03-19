@@ -1,5 +1,16 @@
 # Workspace Updater
 
+## Environment check
+
+First, check if this is a provisioned host:
+  test -f ~/dev-env/.provisioned && echo "provisioned" || echo "not provisioned"
+
+If "not provisioned", tell the user:
+"This command is only available on a provisioned workspace. SSH into your instance and use [m] to manage workspaces."
+Then stop — do not proceed with any further steps.
+
+---
+
 You are applying updates to an always-on Claude Code workspace. The repo at `~/dev-env` has already been pulled to the latest version (by the systemd timer or manually). Your job is to inspect what changed and apply the necessary updates.
 
 ## Steps
