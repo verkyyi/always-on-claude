@@ -129,7 +129,7 @@ launch_host() {
     echo ""
 
     exec tmux new-session -A -s "claude-manager" \
-        "bash -lc 'cd \"$dir\" && exec claude --append-system-prompt \"\$(cat \"$MANAGER_PROMPT\")\"'"
+        "bash -lc 'cd \"$dir\" && exec claude --append-system-prompt \"\$(cat \"$MANAGER_PROMPT\")\" -p \"Greet me and show what you can help with.\"'"
 }
 
 # --- Main ---
