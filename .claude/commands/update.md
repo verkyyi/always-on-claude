@@ -9,9 +9,21 @@ If "not provisioned", tell the user:
 "This command is only available on a provisioned workspace. SSH into your instance and use [m] to manage workspaces."
 Then stop — do not proceed with any further steps.
 
+Next, detect workspace type:
+```bash
+source .env.workspace 2>/dev/null || true
+echo "WORKSPACE_TYPE=${WORKSPACE_TYPE:-ec2}"
+```
+
 ---
 
 You are applying updates to an always-on Claude Code workspace. The repo at `~/dev-env` has already been pulled to the latest version (by the systemd timer or manually). Your job is to inspect what changed and apply the necessary updates.
+
+**Important:** The docker compose command differs by workspace type:
+- `local-mac`: `docker compose -f docker-compose.yml -f docker-compose.mac.yml` (no sudo)
+- `ec2` (or unset): `sudo --preserve-env=HOME docker compose`
+
+Use the correct form throughout this command.
 
 ## Steps
 
@@ -43,12 +55,24 @@ You are applying updates to an always-on Claude Code workspace. The repo at `~/d
    - **Scripts changed** (`scripts/runtime/`, `scripts/deploy/`): Already live via bind mount — no action needed, just confirm.
 
    - **Dockerfile or docker-compose.yml changed**: Pull new image and restart container:
+     For `local-mac`:
+     ```bash
+     cd ~/dev-env && docker compose -f docker-compose.yml -f docker-compose.mac.yml pull
+     tmux list-sessions -F '#{session_name}' 2>/dev/null | grep '^claude-' || echo "No active sessions"
+     ```
+     For `ec2` (or unset):
      ```bash
      cd ~/dev-env && sudo --preserve-env=HOME docker compose pull
-     # Check for active sessions before restarting
      tmux list-sessions -F '#{session_name}' 2>/dev/null | grep '^claude-' || echo "No active sessions"
      ```
      If no active sessions, restart:
+     For `local-mac`:
+     ```bash
+     cd ~/dev-env && docker compose -f docker-compose.yml -f docker-compose.mac.yml up -d
+     docker compose -f docker-compose.yml -f docker-compose.mac.yml exec -T -u root dev bash -c "chown -R dev:dev /home/dev/projects /home/dev/.claude" 2>/dev/null || true
+     docker image prune -f
+     ```
+     For `ec2` (or unset):
      ```bash
      cd ~/dev-env && sudo --preserve-env=HOME docker compose up -d
      sudo --preserve-env=HOME docker compose exec -T -u root dev bash -c "chown -R dev:dev /home/dev/projects /home/dev/.claude" 2>/dev/null || true

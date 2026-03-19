@@ -1,8 +1,8 @@
 # Always-On Claude Code
 
-Your own persistent Claude Code workspace in the cloud. SSH in from any device, reconnect where you left off.
+Your own persistent Claude Code workspace — on AWS or a local Mac. SSH in from any device, reconnect where you left off.
 
-**~$30/mo on AWS. One slash command. ~40 seconds to launch.**
+**Cloud: ~$14/mo on AWS. Local: $0 on your own Mac. One slash command to set up.**
 
 ---
 
@@ -10,14 +10,29 @@ Your own persistent Claude Code workspace in the cloud. SSH in from any device, 
 
 | Running Claude Code locally... | Always-On Claude Code |
 |---|---|
-| Dies when your laptop closes | Runs 24/7 in the cloud |
+| Dies when your laptop closes | Runs 24/7 on a server or Mac |
 | Tied to one machine | SSH from laptop, phone, tablet |
 | Session lost on disconnect | Reconnect and pick up where you left off |
 | No background tasks | Claude keeps working while you sleep |
 
 ---
 
-## Quick Start
+## Two Deployment Options
+
+| | Cloud (AWS EC2) | Local Mac |
+|---|---|---|
+| **Best for** | Dedicated remote server, accessible anywhere | Mac mini/Studio already on your desk |
+| **Cost** | ~$14/mo (EC2 + EBS) | $0 (your hardware) |
+| **Setup** | `/provision` | `/provision-local` |
+| **Teardown** | `/destroy` | `/destroy-local` |
+| **Networking** | Public IP or Tailscale | LAN SSH or Tailscale |
+| **Auto-start** | systemd service | launchd agent |
+
+Both options run the same Docker container, same workspace picker, same auth flow.
+
+---
+
+## Quick Start: Cloud (AWS)
 
 ### Prerequisites
 
@@ -67,7 +82,60 @@ Back in your local Claude Code session:
 /destroy
 ```
 
-Claude finds all resources by tag, confirms with you, and deletes everything.
+---
+
+## Quick Start: Local Mac
+
+### Prerequisites
+
+- **Mac** (mini, Studio, or any Mac you'll keep running) with macOS 13+
+- **Claude subscription** active (Pro or Max)
+- Docker Desktop or Colima (the setup will guide you)
+
+### 1. Clone and provision
+
+```bash
+git clone https://github.com/verkyyi/always-on-claude.git
+cd always-on-claude
+claude
+```
+
+Inside the Claude Code session:
+
+```
+/provision-local
+```
+
+Claude installs prerequisites via Homebrew, sets up Docker, pulls the container, configures SSH, and sets up launchd for auto-start.
+
+### 2. From this Mac
+
+```bash
+cc    # workspace picker
+ccc   # container shell
+```
+
+### 3. From other devices
+
+Enable Remote Login in System Settings > General > Sharing, then:
+
+```bash
+ssh your-user@your-mac-hostname
+```
+
+Same login menu as the cloud version — press Enter for Claude Code.
+
+### 4. Tear down
+
+```
+/destroy-local
+```
+
+### Tips for always-on use
+
+- **Prevent sleep**: System Settings > Energy Saver > "Prevent automatic sleeping when the display is off"
+- **Tailscale**: Run `/tailscale` for private access from anywhere without exposing SSH publicly
+- **Auto-login**: Configure in System Settings if you want the Mac to recover unattended after a reboot
 
 ---
 
@@ -78,15 +146,18 @@ All lifecycle operations run from inside a Claude Code session in this repo:
 | Command | What it does |
 |---|---|
 | `/provision` | Launch a new workspace on AWS (~40s) |
+| `/provision-local` | Set up a local Mac as an always-on workspace |
 | `/destroy` | Tear down all AWS resources |
-| `/update` | Apply updates to a running workspace |
-| `/tailscale` | Set up Tailscale for private SSH (no public IP needed) |
-| `/workspace` | Manage repos and git worktrees on the remote |
+| `/destroy-local` | Tear down local Mac workspace |
+| `/update` | Apply updates to a running workspace (either type) |
+| `/tailscale` | Set up Tailscale for private SSH (either type) |
+| `/workspace` | Manage repos and git worktrees |
 
 ---
 
 ## What You Get
 
+**Cloud (EC2):**
 ```
 Your Mac / Phone / Tablet
     │
@@ -101,6 +172,22 @@ Your Mac / Phone / Tablet
               └── Workspace picker on SSH connect
 ```
 
+**Local Mac:**
+```
+Your Phone / Tablet / Other Mac
+    │
+    └── SSH (LAN or Tailscale)
+         └── macOS (Mac mini / Studio)
+              ├── Docker container (claude-dev)
+              │    ├── Claude Code
+              │    ├── Node.js 22, Bun, npm
+              │    ├── Git, GitHub CLI, AWS CLI
+              │    └── Your project repos
+              ├── tmux (session persistence)
+              ├── launchd (auto-start on boot)
+              └── Workspace picker on SSH connect
+```
+
 **Everything persists** — auth, settings, repos, tmux sessions, Claude history — all survive container restarts and reconnects.
 
 ---
@@ -109,7 +196,8 @@ Your Mac / Phone / Tablet
 
 | Component | Purpose |
 |---|---|
-| **Pre-built AMI** | Docker + Claude Code pre-installed (~40s boot) |
+| **Pre-built AMI** (cloud) | Docker + Claude Code pre-installed (~40s boot) |
+| **Homebrew setup** (local) | All tools installed via `brew`, auto-start via launchd |
 | **Docker container** | Isolated workspace with dev tools, bind-mounted for persistence |
 | **tmux** | Sessions survive SSH disconnects |
 | **Login menu** | SSH in → choose Claude Code, bash, or host shell |
@@ -118,13 +206,19 @@ Your Mac / Phone / Tablet
 
 ## Cost
 
+**Cloud (AWS):**
+
 | What | Cost |
 |---|---|
 | EC2 t4g.small (on-demand) | ~$12/mo |
 | 20GB gp3 EBS | ~$1.60/mo |
 | **Total** | **~$14/mo** |
 
-Stop the instance when not in use to save money. No additional fees — you bring your own Claude subscription.
+Stop the instance when not in use to save money.
+
+**Local Mac:** $0 beyond the hardware you already own (just electricity).
+
+No additional fees for either option — you bring your own Claude subscription.
 
 ---
 
@@ -133,11 +227,14 @@ Stop the instance when not in use to save money. No additional fees — you brin
 If you prefer running scripts directly instead of slash commands:
 
 ```bash
-# Provision
+# Cloud: Provision EC2
 bash <(curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/scripts/deploy/provision.sh)
 
-# Destroy
+# Cloud: Destroy EC2
 bash <(curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/scripts/deploy/destroy.sh)
+
+# Local Mac: Bootstrap
+bash scripts/deploy/install-mac.sh
 ```
 
 For script details, see [deployment scripts](docs/deployment-scripts.md).

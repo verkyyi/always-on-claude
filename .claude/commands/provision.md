@@ -141,6 +141,7 @@ Write provisioning details to `.env.workspace` (already gitignored via `.env.*` 
 ```bash
 cat > .env.workspace << EOF
 # Provisioned $(date +%Y-%m-%d)
+WORKSPACE_TYPE=ec2
 INSTANCE_ID=$INSTANCE_ID
 PUBLIC_IP=$IP
 REGION=$REGION

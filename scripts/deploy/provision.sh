@@ -304,6 +304,22 @@ for i in $(seq 1 60); do
     sleep 3
 done
 
+# Write .env.workspace for slash commands that detect workspace type
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+cat > "$REPO_DIR/.env.workspace" <<EOF
+# Provisioned $(date +%Y-%m-%d)
+WORKSPACE_TYPE=ec2
+INSTANCE_ID=$INSTANCE_ID
+PUBLIC_IP=$PUBLIC_IP
+REGION=$AWS_REGION
+INSTANCE_TYPE=$INSTANCE_TYPE
+INSTANCE_NAME=$INSTANCE_NAME
+SSH_KEY=$KEY_FILE
+SG_ID=$SG_ID
+EOF
+
 echo ""
 echo "============================================"
 echo "  Provisioning complete!"
