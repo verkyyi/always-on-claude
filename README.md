@@ -17,18 +17,22 @@ Your own persistent Claude Code workspace — on AWS or a local Mac. SSH in from
 
 ---
 
-## Two Deployment Options
+## Three Options
 
-| | Cloud (AWS EC2) | Local Mac |
-|---|---|---|
-| **Best for** | Dedicated remote server, accessible anywhere | Mac mini/Studio already on your desk |
-| **Cost** | ~$14/mo (EC2 + EBS) | $0 (your hardware) |
-| **Setup** | `/provision` | `/provision-local` |
-| **Teardown** | `/destroy` | `/destroy-local` |
-| **Networking** | Public IP or Tailscale | LAN SSH or Tailscale |
-| **Auto-start** | systemd service | launchd agent |
+| | Hosted | Cloud (AWS EC2) | Local Mac |
+|---|---|---|---|
+| **Best for** | Zero setup, no AWS needed | Dedicated remote server | Mac mini/Studio on your desk |
+| **Cost** | $39/mo | ~$14/mo (EC2 + EBS) | $0 (your hardware) |
+| **Setup** | [Pay and connect](https://aoc.ainbox.io) | `/provision` | `/provision-local` |
+| **Teardown** | Cancel subscription | `/destroy` | `/destroy-local` |
+| **Networking** | Public IP | Public IP or Tailscale | LAN SSH or Tailscale |
+| **You manage** | Nothing | AWS account + instance | Docker + Mac |
 
-Both options run the same Docker container, same workspace picker, same auth flow.
+Cloud and Local run the same Docker container, same workspace picker, same auth flow.
+
+### Hosted
+
+Don't want to manage infrastructure? **[Always-On Claude Hosted](https://aoc.ainbox.io)** gives you a fully managed workspace — no AWS account, no Docker, no setup. Pay, get an SSH key, connect.
 
 ---
 
