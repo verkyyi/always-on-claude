@@ -20,7 +20,7 @@ set -euo pipefail
 INSTANCE_NAME="${INSTANCE_NAME:-claude-dev}"
 KEY_NAME="${KEY_NAME:-claude-dev-key}"
 AWS_REGION="${AWS_REGION:-$(aws configure get region 2>/dev/null || echo "us-east-1")}"
-INSTANCE_TYPE="${INSTANCE_TYPE:-t3.medium}"
+INSTANCE_TYPE="${INSTANCE_TYPE:-t4g.small}"
 SG_NAME="${SG_NAME:-claude-dev-sg}"
 SSH_USER="${SSH_USER:-ubuntu}"
 TAG="always-on-claude"
@@ -42,7 +42,7 @@ echo ""
 echo "  What this will do:"
 echo "    1. Create an SSH key pair in AWS (if not exists)"
 echo "    2. Create a security group allowing SSH from anywhere"
-echo "    3. Launch an EC2 instance ($INSTANCE_TYPE, 30GB)"
+echo "    3. Launch an EC2 instance ($INSTANCE_TYPE, 20GB)"
 echo "    4. Set up Claude Code workspace (~40s with pre-built AMI)"
 echo ""
 echo "  Prerequisites:"
@@ -50,9 +50,9 @@ echo "    - AWS CLI configured with valid credentials (aws configure)"
 echo "    - An AWS account (this will create billable resources)"
 echo ""
 echo "  Cost:"
-echo "    - $INSTANCE_TYPE in $AWS_REGION: ~\$0.04/hr (~\$30/mo if left running)"
-echo "    - 30GB gp3 EBS: ~\$2.40/mo"
-echo "    - Stop the instance when not in use to save money"
+echo "    - $INSTANCE_TYPE in $AWS_REGION: ~\$0.017/hr (~\$12/mo if left running)"
+echo "    - 20GB gp3 EBS: ~\$1.60/mo"
+echo "    - Public IPv4: ~\$3.65/mo"
 echo ""
 echo "  Resources created (tagged Project=$TAG):"
 echo "    - EC2 instance: $INSTANCE_NAME"
@@ -179,28 +179,35 @@ fi
 
 info "Finding AMI"
 
+# Determine architecture from instance type (t4g/m7g/c7g = arm64, otherwise x86_64)
+case "$INSTANCE_TYPE" in
+    *g.*|*gd.*) AMI_ARCH="arm64" ;;
+    *)          AMI_ARCH="amd64" ;;
+esac
+
 # Try pre-built AMI first (tagged by build-ami.sh), then fall back to stock Ubuntu
 CUSTOM_AMI=$(aws ec2 describe-images \
     --region "$AWS_REGION" \
     --filters "Name=tag:Project,Values=$TAG" "Name=state,Values=available" "Name=is-public,Values=true" \
+        "Name=architecture,Values=${AMI_ARCH/amd64/x86_64}" \
     --query 'Images | sort_by(@, &CreationDate) | [-1].ImageId' \
     --output text 2>/dev/null || echo "None")
 
 if [[ "$CUSTOM_AMI" != "None" && -n "$CUSTOM_AMI" ]]; then
     AMI_ID="$CUSTOM_AMI"
     USE_CUSTOM_AMI=1
-    ok "Pre-built AMI: $AMI_ID (fast path — ~40s)"
+    ok "Pre-built AMI: $AMI_ID ($AMI_ARCH, fast path — ~40s)"
 else
     AMI_ID=$(aws ec2 describe-images \
         --owners 099720109477 \
         --region "$AWS_REGION" \
         --filters \
-            "Name=name,Values=ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*" \
+            "Name=name,Values=ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-${AMI_ARCH}-server-*" \
             "Name=state,Values=available" \
         --query 'Images | sort_by(@, &CreationDate) | [-1].ImageId' \
         --output text)
     USE_CUSTOM_AMI=0
-    ok "Stock Ubuntu AMI: $AMI_ID (full install — ~90s)"
+    ok "Stock Ubuntu AMI: $AMI_ID ($AMI_ARCH, full install — ~90s)"
 fi
 
 [[ "$AMI_ID" == "None" || -z "$AMI_ID" ]] && die "Could not find any suitable AMI in $AWS_REGION"
@@ -234,7 +241,7 @@ INSTANCE_ID=$(aws ec2 run-instances \
     --key-name "$KEY_NAME" \
     --security-group-ids "$SG_ID" \
     --user-data "$USER_DATA" \
-    --block-device-mappings 'DeviceName=/dev/sda1,Ebs={VolumeSize=30,VolumeType=gp3,DeleteOnTermination=true}' \
+    --block-device-mappings 'DeviceName=/dev/sda1,Ebs={VolumeSize=20,VolumeType=gp3,DeleteOnTermination=true}' \
     --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$INSTANCE_NAME},{Key=Project,Value=$TAG}]" \
     --query 'Instances[0].InstanceId' \
     --output text)

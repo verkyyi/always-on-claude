@@ -27,7 +27,7 @@ Ask the user ONE question with sensible defaults:
 I'll provision an always-on Claude Code server:
 
   Region:        us-east-1
-  Instance type: t3.medium
+  Instance type: t4g.small
   Instance name: claude-dev
   SSH key:       claude-dev-key
 
@@ -71,7 +71,7 @@ SG_ID=$(aws ec2 describe-security-groups --region "$REGION" --filters "Name=grou
 ```bash
 aws ec2 describe-images \
     --owners 099720109477 --region "$REGION" \
-    --filters "Name=name,Values=ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*" "Name=state,Values=available" \
+    --filters "Name=name,Values=ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-arm64-server-*" "Name=state,Values=available" \
     --query 'Images | sort_by(@, &CreationDate) | [-1].ImageId' --output text
 ```
 
@@ -89,7 +89,7 @@ aws ec2 run-instances \
     --user-data '#!/bin/bash
 exec > /var/log/install.log 2>&1
 su - ubuntu -c "NON_INTERACTIVE=1 bash -c '\''curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/scripts/deploy/install.sh | bash'\''"' \
-    --block-device-mappings 'DeviceName=/dev/sda1,Ebs={VolumeSize=30,VolumeType=gp3,DeleteOnTermination=true}' \
+    --block-device-mappings 'DeviceName=/dev/sda1,Ebs={VolumeSize=20,VolumeType=gp3,DeleteOnTermination=true}' \
     --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=claude-dev},{Key=Project,Value=always-on-claude}]' \
     --query 'Instances[0].InstanceId' --output text
 ```
