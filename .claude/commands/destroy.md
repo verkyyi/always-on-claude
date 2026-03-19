@@ -68,13 +68,15 @@ rm -f ~/.ssh/$KEY_NAME.pem
 
 ---
 
-## Step 5 — Clean up workspace file
+## Step 5 — Clean up local files
 
-If `.env.workspace` exists, delete it:
+Remove `.env.workspace` and the SSH config entry for this instance:
 
 ```bash
 rm -f .env.workspace
 ```
+
+Remove the `Host $INSTANCE_NAME` block from `~/.ssh/config` (the Host line and all indented lines below it).
 
 ---
 

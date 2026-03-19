@@ -153,17 +153,32 @@ EOF
 
 ---
 
-## Step 10 — Summary
+## Step 10 — SSH config
+
+Add (or update) an SSH config entry so the user can connect with just `ssh $INSTANCE_NAME`:
+
+- If `~/.ssh/config` already has a `Host $INSTANCE_NAME` block, update the `HostName` to the new IP
+- Otherwise, prepend a new block before the `Host *` wildcard entry:
+
+```
+Host $INSTANCE_NAME
+    HostName $IP
+    User ubuntu
+    IdentityFile ~/.ssh/$KEY_NAME.pem
+```
+
+---
+
+## Step 11 — Summary
 
 ```
 Provisioning complete!
 
   Instance:  $INSTANCE_ID
   Public IP: $IP
-  SSH key:   ~/.ssh/$KEY_NAME.pem
 
   Connect:
-    ssh -i ~/.ssh/$KEY_NAME.pem ubuntu@$IP
+    ssh $INSTANCE_NAME
 
   To tear down:
     /destroy
