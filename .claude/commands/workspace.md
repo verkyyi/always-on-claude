@@ -39,5 +39,5 @@ You are helping the user manage git workspaces. This runs on the **host** — `~
 
 4. After cloning, creating, or deleting a workspace, remind the user:
 
-   > To switch to this workspace, start a new session — open a new SSH connection or use `tmux new-window`.
-   > Claude's working directory is set at launch and cannot change mid-session.
+   > Your new repo will appear in the login menu next time you SSH in.
+   > To switch now: press Ctrl-b d to detach, then reconnect via SSH.

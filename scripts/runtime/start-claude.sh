@@ -76,10 +76,11 @@ show_repos() {
     done
 
     if [[ ${#repos[@]} -eq 0 ]]; then
-        echo "  (no repos found)"
+        echo "  (no repos found — press [m] to clone your first repo)"
     fi
 
     echo "  [m] Manage workspaces"
+    echo "      Clone repos, create worktrees, and more"
     echo ""
 }
 
@@ -123,11 +124,28 @@ launch() {
 launch_host() {
     local dir="$1"
 
+    local manager_prompt
+    manager_prompt=$(cat <<'PROMPT'
+You are the Workspace Manager. When the user starts this session, proactively greet them and show what you can help with:
+
+## What I can do
+- **Clone a repo** — give me a GitHub URL and I'll clone it to ~/projects/
+- **Create a worktree** — spin up a parallel branch for side-by-side work
+- **Delete a worktree** — clean up branches you no longer need
+- **Show status** — list all repos, branches, and worktrees
+
+## How to connect to a workspace after changes
+After cloning or creating a worktree, press **Ctrl-b d** to detach from this session, then SSH back in. Your new repo will appear in the login menu — pick it to launch Claude Code inside the container.
+
+Use /workspace to run the workspace manager slash command.
+PROMPT
+    )
+
     echo "  -> $dir (host)"
     echo ""
 
     exec tmux new-session -A -s "claude-manager" \
-        "bash -lc 'cd \"$dir\" && exec claude'"
+        "bash -lc 'cd \"$dir\" && exec claude --append-system-prompt \"$manager_prompt\"'"
 }
 
 # --- Main ---
