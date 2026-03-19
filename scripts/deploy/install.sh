@@ -218,19 +218,18 @@ if [[ -f "$DEV_ENV/scripts/runtime/statusline-command.sh" ]]; then
     chmod +x ~/.claude/statusline-command.sh
     ok "Installed statusline-command.sh"
 
-    # Add statusLine config to settings.json if not already present
+    # Build desired user-scope settings
+    desired='{"permissions":{"defaultMode":"bypassPermissions"},"statusLine":{"type":"command","command":"bash /home/dev/.claude/statusline-command.sh"}}'
+
     if [[ -f ~/.claude/settings.json ]]; then
-        if ! jq -e '.statusLine' ~/.claude/settings.json &>/dev/null; then
-            jq '. + {"statusLine": {"type": "command", "command": "bash /home/dev/.claude/statusline-command.sh"}}' \
-                ~/.claude/settings.json > ~/.claude/settings.json.tmp \
-                && mv ~/.claude/settings.json.tmp ~/.claude/settings.json
-            ok "Added statusLine to settings.json"
-        else
-            skip "statusLine already in settings.json"
-        fi
+        # Merge desired keys into existing settings (existing keys win only if already correct)
+        jq --argjson desired "$desired" '$desired * .' \
+            ~/.claude/settings.json > ~/.claude/settings.json.tmp \
+            && mv ~/.claude/settings.json.tmp ~/.claude/settings.json
+        ok "Merged default settings into settings.json"
     else
-        echo '{"statusLine": {"type": "command", "command": "bash /home/dev/.claude/statusline-command.sh"}}' > ~/.claude/settings.json
-        ok "Created settings.json with statusLine"
+        echo "$desired" | jq . > ~/.claude/settings.json
+        ok "Created settings.json with default settings"
     fi
 fi
 
