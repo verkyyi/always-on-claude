@@ -127,7 +127,7 @@ ssh -i $KEY ubuntu@$IP "sg docker -c 'docker ps --format {{.Names}}' | grep -q c
 ## Step 8 — Interactive auth
 
 ```bash
-ssh -t -i $KEY ubuntu@$IP "cd ~/dev-env && sg docker -c 'docker compose exec -it dev bash /home/dev/dev-env/scripts/deploy/setup-auth.sh'"
+ssh -t -i $KEY ubuntu@$IP "sg docker -c 'docker cp ~/dev-env/scripts/deploy/setup-auth.sh claude-dev:/tmp/setup-auth.sh && docker exec -it claude-dev bash /tmp/setup-auth.sh'"
 ```
 
 Tell the user what to expect before running it (git config, GitHub CLI, Claude login — each requires browser auth).
@@ -169,7 +169,24 @@ Host $INSTANCE_NAME
 
 ---
 
-## Step 11 — Summary
+## Step 11 — Shell aliases
+
+Add `cc` and `ccc` aliases to the user's shell config (`~/.zshrc` on macOS, `~/.bashrc` on Linux):
+
+- If aliases already exist, update them
+- Otherwise, append:
+
+```bash
+# Claude Code workspace shortcuts
+alias cc="ssh $INSTANCE_NAME"
+alias ccc="ssh -o SetEnv=NO_CLAUDE=1 $INSTANCE_NAME"
+```
+
+Tell the user to run `source ~/.zshrc` (or open a new terminal) to activate.
+
+---
+
+## Step 12 — Summary
 
 ```
 Provisioning complete!
@@ -178,7 +195,8 @@ Provisioning complete!
   Public IP: $IP
 
   Connect:
-    ssh $INSTANCE_NAME
+    cc   — workspace picker
+    ccc  — host shell
 
   To tear down:
     /destroy
