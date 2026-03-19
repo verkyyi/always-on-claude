@@ -197,6 +197,28 @@ fi
 # Slash commands now live in .claude/commands/ inside the repo
 # and are picked up automatically as project-level commands — no copy needed
 
+# Status line script — copy into ~/.claude/ so it's available inside the container
+if [[ -f "$DEV_ENV/scripts/runtime/statusline-command.sh" ]]; then
+    cp "$DEV_ENV/scripts/runtime/statusline-command.sh" ~/.claude/statusline-command.sh
+    chmod +x ~/.claude/statusline-command.sh
+    ok "Installed statusline-command.sh"
+
+    # Add statusLine config to settings.json if not already present
+    if [[ -f ~/.claude/settings.json ]]; then
+        if ! jq -e '.statusLine' ~/.claude/settings.json &>/dev/null; then
+            jq '. + {"statusLine": {"type": "command", "command": "bash /home/dev/.claude/statusline-command.sh"}}' \
+                ~/.claude/settings.json > ~/.claude/settings.json.tmp \
+                && mv ~/.claude/settings.json.tmp ~/.claude/settings.json
+            ok "Added statusLine to settings.json"
+        else
+            skip "statusLine already in settings.json"
+        fi
+    else
+        echo '{"statusLine": {"type": "command", "command": "bash /home/dev/.claude/statusline-command.sh"}}' > ~/.claude/settings.json
+        ok "Created settings.json with statusLine"
+    fi
+fi
+
 # --- Shell integration (ssh-login.sh) ---------------------------------------
 
 info "Shell integration"
