@@ -78,13 +78,20 @@ Tell the user to visit https://login.tailscale.com/admin/machines, select their 
 
 ---
 
-## Step 6 — Update local SSH config
+## Step 6 — Update local SSH config and shell aliases
 
 Update the existing `Host $INSTANCE_NAME` block in `~/.ssh/config`:
 - Change `HostName` to the Tailscale hostname
 - Remove `IdentityFile` (Tailscale handles auth)
 
 Show the user the before/after and confirm before editing.
+
+Update the `ccc` alias in the user's shell config (`~/.zshrc` on macOS, `~/.bashrc` on Linux). Tailscale SSH doesn't support OpenSSH's `AcceptEnv`/`SetEnv`, so env vars must be passed via the remote command:
+```bash
+alias ccc="ssh -t $INSTANCE_NAME 'NO_CLAUDE=1 exec bash -l'"
+```
+
+If the alias already uses `SetEnv`, replace it. Tell the user to run `source ~/.zshrc` to activate.
 
 ---
 

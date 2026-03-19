@@ -179,7 +179,7 @@ Add `cc` and `ccc` aliases to the user's shell config (`~/.zshrc` on macOS, `~/.
 ```bash
 # Claude Code workspace shortcuts
 alias cc="ssh -t $INSTANCE_NAME 'exec bash ~/dev-env/scripts/runtime/start-claude.sh'"
-alias ccc="ssh -o SetEnv=NO_CLAUDE=1 $INSTANCE_NAME"
+alias ccc="ssh -t $INSTANCE_NAME 'NO_CLAUDE=1 exec bash -l'"
 ```
 
 Tell the user to run `source ~/.zshrc` (or open a new terminal) to activate.
