@@ -233,6 +233,25 @@ if [[ -f "$DEV_ENV/scripts/runtime/statusline-command.sh" ]]; then
     fi
 fi
 
+# tmux config — host-side status bar with workspace identity, resource usage
+if [[ -f "$DEV_ENV/scripts/runtime/tmux.conf" ]]; then
+    cp "$DEV_ENV/scripts/runtime/tmux.conf" ~/.tmux.conf
+    ok "Installed ~/.tmux.conf"
+else
+    skip "tmux.conf not found in repo"
+fi
+
+if [[ -f "$DEV_ENV/scripts/runtime/tmux-status.sh" ]]; then
+    cp "$DEV_ENV/scripts/runtime/tmux-status.sh" ~/.tmux-status.sh
+    chmod +x ~/.tmux-status.sh
+    ok "Installed ~/.tmux-status.sh"
+else
+    skip "tmux-status.sh not found in repo"
+fi
+
+# Reload tmux config if tmux is running
+tmux source-file ~/.tmux.conf 2>/dev/null && ok "Reloaded tmux config" || true
+
 # --- SSH server config --------------------------------------------------------
 
 info "SSH server config"

@@ -134,6 +134,7 @@ else
     mkdir -p ~/.ssh
     aws ec2 create-key-pair \
         --key-name "$KEY_NAME" \
+        --key-type ed25519 \
         --region "$AWS_REGION" \
         --query 'KeyMaterial' \
         --output text > "$KEY_FILE"

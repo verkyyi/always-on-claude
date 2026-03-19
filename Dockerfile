@@ -51,15 +51,6 @@ WORKDIR /home/dev
 RUN curl -fsSL https://bun.sh/install | bash
 ENV PATH="/home/dev/.bun/bin:${PATH}"
 
-# tmux config — mouse support, truecolor, Ctrl+A prefix
-RUN echo 'set -g mouse on\n\
-set -g default-terminal "tmux-256color"\n\
-set -ga terminal-overrides ",xterm-256color:Tc"\n\
-set -g prefix C-a\n\
-unbind C-b\n\
-bind C-a send-prefix\n\
-set -g history-limit 50000' > /home/dev/.tmux.conf
-
 # Shell aliases
 RUN echo '\n\
 alias cc="claude --dangerously-skip-permissions"\n\
