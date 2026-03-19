@@ -235,6 +235,13 @@ else
     skip "ssh-login.sh already in .bash_profile"
 fi
 
+# --- Auto-updater (systemd timer) -------------------------------------------
+
+info "Auto-updater"
+step="auto-updater setup"
+
+bash "$DEV_ENV/scripts/deploy/install-updater.sh"
+
 # --- Make scripts executable ------------------------------------------------
 
 step="chmod scripts"
@@ -374,7 +381,7 @@ echo ""
 echo "  Next steps:"
 echo "    1. Log out: exit"
 echo "    2. SSH back in: ssh $USER@$(hostname)"
-echo "    3. The login menu will appear — press Enter for Claude Code"
+echo "    3. The workspace picker will appear — select a repo to start"
 echo ""
 if [[ "$TAILSCALE" == "1" ]] && tailscale status &>/dev/null 2>&1; then
     ts_name=$(tailscale status --self --peers=false | awk '{print $2}' 2>/dev/null || hostname)

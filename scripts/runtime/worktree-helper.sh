@@ -5,6 +5,7 @@
 #   create <repo-path> <branch>   — create a worktree for the given branch
 #   remove <worktree-path>        — remove a worktree and prune
 #   list-repos                    — discover all repos and worktrees under /home/dev
+#   list-worktrees <repo-path>    — list worktrees for a specific repo
 #
 # Runs inside the container; bind-mounted via ~/dev-env:/home/dev/dev-env:ro
 
@@ -74,6 +75,29 @@ cmd_list_repos() {
     done < <(find /home/dev -maxdepth 3 -name ".git" \( -type d -o -type f \) 2>/dev/null | sort)
 }
 
+cmd_list_worktrees() {
+    local repo_path="$1"
+
+    if [[ ! -d "$repo_path/.git" ]]; then
+        echo "Error: not a git repo: $repo_path" >&2
+        exit 1
+    fi
+
+    # git worktree list shows main + worktrees; skip the main repo itself
+    local wt_path="" wt_branch=""
+    while IFS= read -r line; do
+        if [[ "$line" == "worktree "* ]]; then
+            wt_path="${line#worktree }"
+        elif [[ "$line" == "branch "* ]]; then
+            wt_branch="${line#branch refs/heads/}"
+            # Skip the main repo itself
+            if [[ "$wt_path" != "$repo_path" ]]; then
+                echo "${wt_path}|${wt_branch}"
+            fi
+        fi
+    done < <(git -C "$repo_path" worktree list --porcelain 2>/dev/null)
+}
+
 case "${1:-}" in
     create)
         [[ $# -lt 3 ]] && { echo "Usage: $0 create <repo-path> <branch>" >&2; exit 1; }
@@ -86,8 +110,12 @@ case "${1:-}" in
     list-repos)
         cmd_list_repos
         ;;
+    list-worktrees)
+        [[ $# -lt 2 ]] && { echo "Usage: $0 list-worktrees <repo-path>" >&2; exit 1; }
+        cmd_list_worktrees "$2"
+        ;;
     *)
-        echo "Usage: $0 {create|remove|list-repos}" >&2
+        echo "Usage: $0 {create|remove|list-repos|list-worktrees}" >&2
         exit 1
         ;;
 esac

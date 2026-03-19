@@ -1,16 +1,18 @@
 #!/bin/bash
 # start-claude.sh — Auto-starts the dev container if needed,
-# then presents a workspace picker and launches Claude Code
+# then presents a two-layer workspace picker and launches Claude Code
 # inside a named tmux session.
 #
+# Layer 1: Pick a repo (or manage workspaces)
+# Layer 2: Pick a branch/worktree within that repo (skipped if no worktrees)
+#
 # Called automatically from ssh-login.sh on SSH login.
-# Worktree create/delete is handled by the /workspace slash command
-# inside Claude Code — this script only does selection.
 
 set -euo pipefail
 
 COMPOSE_DIR="$HOME/dev-env"
 CONTAINER_NAME="claude-dev"
+WORKTREE_HELPER="/home/dev/dev-env/scripts/runtime/worktree-helper.sh"
 
 # Start container if not running
 if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
@@ -21,7 +23,36 @@ if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
         "chown -R dev:dev /home/dev/projects" 2>/dev/null || true
 fi
 
-show_menu() {
+# --- Discover repos and worktrees ---
+discover() {
+    mapfile -t entries < <(
+        docker exec "$CONTAINER_NAME" bash -c \
+            "bash $WORKTREE_HELPER list-repos 2>/dev/null" \
+        | sort
+    )
+
+    repos=()
+    repo_paths=()
+    for entry in "${entries[@]}"; do
+        IFS='|' read -r kind path branch <<< "$entry"
+        if [[ "$kind" == "REPO" ]]; then
+            repos+=("$path|$branch")
+            repo_paths+=("$path")
+        fi
+    done
+}
+
+# --- Get worktrees for a specific repo ---
+get_worktrees() {
+    local repo_path="$1"
+    mapfile -t worktrees < <(
+        docker exec "$CONTAINER_NAME" bash -c \
+            "bash $WORKTREE_HELPER list-worktrees '$repo_path' 2>/dev/null" \
+    )
+}
+
+# --- Layer 1: Pick a repo ---
+show_repos() {
     # Show active claude-* tmux sessions
     local sessions
     sessions=$(tmux list-sessions -F '#{session_name} #{?session_attached,(attached),(idle)}' 2>/dev/null \
@@ -35,84 +66,107 @@ show_menu() {
         done <<< "$sessions"
     fi
 
-    # Discover repos and worktrees via worktree-helper.sh
-    mapfile -t entries < <(
-        docker exec "$CONTAINER_NAME" bash -c \
-            'bash /home/dev/dev-env/scripts/runtime/worktree-helper.sh list-repos 2>/dev/null' \
-        | sort
-    )
-
-    repos=()
-    worktrees=()
-    for entry in "${entries[@]}"; do
-        IFS='|' read -r kind path branch <<< "$entry"
-        case "$kind" in
-            REPO)     repos+=("$path|$branch") ;;
-            WORKTREE) worktrees+=("$path|$branch") ;;
-        esac
-    done
-
-    # Build combined list (repos first, then worktrees)
-    all=()
-    for item in "${repos[@]+"${repos[@]}"}"; do all+=("$item"); done
-    for item in "${worktrees[@]+"${worktrees[@]}"}"; do all+=("WT:$item"); done
-
     echo ""
-    echo "  === Workspaces ==="
+    echo "  === Repositories ==="
     local i=1
-    for item in "${all[@]}"; do
-        local display_path display_branch suffix=""
-        if [[ "$item" == WT:* ]]; then
-            item="${item#WT:}"
-            suffix=" (worktree)"
-        fi
-        IFS='|' read -r display_path display_branch <<< "$item"
-        local short_path="${display_path#/home/dev/}"
-        echo "  [$i] ${short_path} (${display_branch})${suffix}"
+    for item in "${repos[@]+"${repos[@]}"}"; do
+        IFS='|' read -r path branch <<< "$item"
+        local short_path="${path#/home/dev/}"
+        echo "  [$i] ${short_path} (${branch})"
         ((i++))
     done
 
-    echo "  [h] ~ (home)"
-    echo "  [r] Refresh list"
+    if [[ ${#repos[@]} -eq 0 ]]; then
+        echo "  (no repos found)"
+    fi
+
+    echo "  [m] Manage workspaces"
     echo ""
 }
 
-show_menu
+# --- Layer 2: Pick a branch/worktree within a repo ---
+show_branches() {
+    local repo_path="$1" repo_branch="$2"
+    local short_path="${repo_path#/home/dev/}"
 
+    echo ""
+    echo "  === ${short_path} ==="
+    echo "  [1] ${repo_branch} (repo)"
+
+    local i=2
+    for wt in "${worktrees[@]+"${worktrees[@]}"}"; do
+        IFS='|' read -r wt_path wt_branch <<< "$wt"
+        echo "  [$i] ${wt_branch} (worktree)"
+        ((i++))
+    done
+
+    echo "  [b] ← Back"
+    echo ""
+}
+
+# --- Launch Claude Code in selected workspace ---
+launch() {
+    local selected="$1"
+
+    echo "  -> $selected"
+    echo ""
+
+    # Create unique tmux session name
+    session_name="claude-$(basename "$selected" | tr './:' '-')"
+
+    exec tmux new-session -A -s "$session_name" \
+        "docker exec -it -w '$selected' ${CONTAINER_NAME} bash -lc 'exec claude'"
+}
+
+# --- Main ---
+discover
+
+# Layer 1 loop
 while true; do
+    show_repos
+
     read -n 1 -p "  > " choice || true
     echo ""
 
-    # Flat list for index lookup
-    all_flat=()
-    for item in "${repos[@]+"${repos[@]}"}"; do all_flat+=("$item"); done
-    for item in "${worktrees[@]+"${worktrees[@]}"}"; do all_flat+=("$item"); done
-
-    if [[ "$choice" =~ ^[0-9]+$ && "$choice" -ge 1 && "$choice" -le "${#all_flat[@]}" ]]; then
-        IFS='|' read -r selected _ <<< "${all_flat[$((choice - 1))]}"
-        break
-    elif [[ "$choice" == "h" ]]; then
-        selected="/home/dev"
-        break
-    elif [[ "$choice" == "r" ]]; then
-        show_menu
-        continue
-    else
-        # Default: first repo, or home if none found
-        if [[ ${#all_flat[@]} -gt 0 ]]; then
-            IFS='|' read -r selected _ <<< "${all_flat[0]}"
+    if [[ "$choice" == "m" ]]; then
+        # Launch Claude in ~/dev-env for workspace management
+        launch "/home/dev/dev-env"
+    elif [[ "$choice" =~ ^[0-9]+$ && "$choice" -ge 1 && "$choice" -le "${#repos[@]}" ]]; then
+        IFS='|' read -r selected_path selected_branch <<< "${repos[$((choice - 1))]}"
+    elif [[ -z "$choice" || "$choice" == $'\n' ]]; then
+        # Default: first repo, or home if none
+        if [[ ${#repos[@]} -gt 0 ]]; then
+            IFS='|' read -r selected_path selected_branch <<< "${repos[0]}"
         else
-            selected="/home/dev"
+            launch "/home/dev"
         fi
-        break
+    else
+        continue
     fi
+
+    # Check for worktrees
+    get_worktrees "$selected_path"
+
+    # If no worktrees, skip Layer 2 and launch directly
+    if [[ ${#worktrees[@]} -eq 0 ]]; then
+        launch "$selected_path"
+    fi
+
+    # Layer 2 loop
+    while true; do
+        show_branches "$selected_path" "$selected_branch"
+
+        read -n 1 -p "  > " choice2 || true
+        echo ""
+
+        if [[ "$choice2" == "b" ]]; then
+            break  # Back to Layer 1
+        elif [[ "$choice2" == "1" || -z "$choice2" || "$choice2" == $'\n' ]]; then
+            # Main repo
+            launch "$selected_path"
+        elif [[ "$choice2" =~ ^[0-9]+$ && "$choice2" -ge 2 && "$choice2" -le $(( ${#worktrees[@]} + 1 )) ]]; then
+            IFS='|' read -r wt_selected _ <<< "${worktrees[$((choice2 - 2))]}"
+            launch "$wt_selected"
+        fi
+    done
 done
-
-echo "  -> $selected"
-echo ""
-
-# Create unique tmux session name — sanitize dots/colons/slashes for tmux
-session_name="claude-$(basename "$selected" | tr './:' '-')"
-
-exec tmux new-session -A -s "$session_name" \
-    "docker exec -it -w '$selected' ${CONTAINER_NAME} bash -lc 'exec claude'"
