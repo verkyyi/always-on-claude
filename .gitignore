@@ -18,3 +18,6 @@ Thumbs.db
 
 # Provisioned host marker (created by install.sh, only exists on remote hosts)
 .provisioned
+
+# Update logs
+update.log
