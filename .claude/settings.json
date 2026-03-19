@@ -18,7 +18,7 @@
       "Bash(git:*)",
       "Bash(gh:*)",
       "Bash(echo:*)",
-      "Bash(rm:*.pem)",
+      "Bash(rm:*)",
       "Bash(atq:*)",
       "Bash(at:*)",
       "Bash(crontab:*)",
