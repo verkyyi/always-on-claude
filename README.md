@@ -1,6 +1,6 @@
 # Always-On Claude Code
 
-Your own persistent Claude Code workspace in the cloud. SSH in from any device, leave Claude working overnight, reconnect where you left off.
+Your own persistent Claude Code workspace in the cloud. SSH in from any device, reconnect where you left off.
 
 **~$30/mo on AWS. One command to set up. ~40 seconds to launch.**
 
@@ -13,7 +13,6 @@ Your own persistent Claude Code workspace in the cloud. SSH in from any device, 
 | Dies when your laptop closes | Runs 24/7 in the cloud |
 | Tied to one machine | SSH from laptop, phone, tablet |
 | Session lost on disconnect | Reconnect and pick up where you left off |
-| Can't run tasks overnight | Schedule work, sleep, review in the morning |
 | 15+ manual setup steps | One command |
 
 ---
@@ -82,7 +81,6 @@ Your Mac / Phone / Tablet
 
 **Built-in slash commands:**
 - `/workspace` — manage git worktrees from inside Claude (create, delete, list)
-- `/plan-overnight` — plan tasks, schedule them, go to sleep
 
 ---
 
@@ -98,7 +96,6 @@ Your Mac / Phone / Tablet
 For detailed implementation docs, see:
 
 - [Docker architecture](docs/docker-architecture.md) — container config, volumes, networking
-- [Overnight tasks](docs/overnight-tasks.md) — task format, scheduling, trigger-watcher
 - [CI/CD pipelines](docs/ci-cd.md) — Docker image + AMI build workflows
 - [Deployment scripts](docs/deployment-scripts.md) — install.sh, provision.sh, build-ami.sh internals
 
@@ -129,8 +126,7 @@ We never provide, share, or manage Claude credentials.
 
 ## Coming Soon
 
-- **Claude-guided lifecycle** — `/provision`, `/destroy`, and `/plan-overnight` slash commands that let Claude orchestrate AWS operations, handle errors, and walk you through setup interactively. See [roadmap details](docs/claude-guided-lifecycle.md).
-- **Overnight autonomous work** — schedule tasks for Claude to work on while you sleep, review results in the morning. See [design doc](docs/overnight-tasks.md).
+- **Claude-guided lifecycle** — `/provision` and `/destroy` slash commands that let Claude orchestrate AWS operations, handle errors, and walk you through setup interactively. See [roadmap details](docs/claude-guided-lifecycle.md).
 
 ---
 

@@ -10,7 +10,6 @@ The full workspace lifecycle — provision, setup, update, destroy — should be
 |---|---|---|
 | **Provision** | `/provision` | `provision.sh` |
 | **Auth setup** | Claude walks through it | `setup-auth.sh` |
-| **Plan overnight work** | `/plan-overnight` | Edit task files manually |
 | **Destroy** | `/destroy` | `destroy.sh` |
 
 ## How to install (preview)

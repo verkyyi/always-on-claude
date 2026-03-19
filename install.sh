@@ -6,7 +6,6 @@
 #
 # Options (env vars):
 #   TAILSCALE=1        — install and configure Tailscale for SSH access
-#   OVERNIGHT=1        — install at/cron for overnight autonomous tasks
 #   LOCAL_BUILD=1      — build Docker image locally instead of pulling from GHCR
 #   NON_INTERACTIVE=1  — skip Phase 2 (interactive auth), for use in user data scripts
 #
@@ -25,7 +24,6 @@ skip()  { echo "  SKIP: $* (already done)"; }
 
 TAILSCALE="${TAILSCALE:-0}"
 LOCAL_BUILD="${LOCAL_BUILD:-0}"
-OVERNIGHT="${OVERNIGHT:-0}"
 NON_INTERACTIVE="${NON_INTERACTIVE:-0}"
 IMAGE="ghcr.io/verkyyi/always-on-claude:latest"
 
@@ -128,27 +126,6 @@ else
     skip "Claude Code (host)"
 fi
 
-# --- Overnight tasks (optional) ---------------------------------------------
-
-if [[ "$OVERNIGHT" == "1" ]]; then
-    info "Overnight task dependencies"
-    step="at install"
-
-    if ! dpkg -s at &>/dev/null 2>&1; then
-        sudo apt-get install -y -qq at
-        ok "at installed"
-    else
-        skip "at"
-    fi
-
-    if ! systemctl is-active --quiet atd 2>/dev/null; then
-        sudo systemctl enable --now atd
-        ok "atd enabled"
-    else
-        skip "atd"
-    fi
-fi
-
 # --- Tailscale (optional) --------------------------------------------------
 
 if [[ "$TAILSCALE" == "1" ]]; then
@@ -194,7 +171,6 @@ step="host directories"
 mkdir -p ~/.claude/commands
 mkdir -p ~/.claude/debug
 mkdir -p ~/projects
-mkdir -p ~/overnight/logs
 mkdir -p ~/.gitconfig.d
 
 # Critical: must exist as a FILE with valid JSON before compose up
@@ -235,20 +211,6 @@ if ! grep -q "ssh-login.sh" ~/.bash_profile 2>/dev/null; then
     ok "Added ssh-login.sh to .bash_profile"
 else
     skip "ssh-login.sh already in .bash_profile"
-fi
-
-# --- Cron: trigger-watcher (optional) ---------------------------------------
-
-if [[ "$OVERNIGHT" == "1" ]]; then
-    info "Trigger watcher cron"
-    step="trigger-watcher cron"
-
-    if ! crontab -l 2>/dev/null | grep -q "trigger-watcher.sh"; then
-        (crontab -l 2>/dev/null; echo "* * * * * bash ~/dev-env/trigger-watcher.sh >> ~/overnight/trigger-watcher.log 2>&1") | crontab -
-        ok "Installed trigger-watcher cron"
-    else
-        skip "trigger-watcher cron already installed"
-    fi
 fi
 
 # --- Make scripts executable ------------------------------------------------
@@ -293,7 +255,7 @@ ok "Container running"
 # Fix container permissions (volumes mount as root)
 step="fix container permissions"
 run_docker docker compose exec -T -u root dev bash -c \
-    "chown -R dev:dev /home/dev/projects /home/dev/.claude /home/dev/overnight" 2>/dev/null || true
+    "chown -R dev:dev /home/dev/projects /home/dev/.claude" 2>/dev/null || true
 ok "Fixed container permissions"
 
 echo ""
@@ -371,15 +333,6 @@ if run_docker docker ps --format '{{.Names}}' | grep -q "claude-dev"; then
     ok "Container 'claude-dev' is running"
 else
     echo "  WARN: Container not running"
-fi
-
-# Check cron (only if overnight enabled)
-if [[ "$OVERNIGHT" == "1" ]]; then
-    if crontab -l 2>/dev/null | grep -q "trigger-watcher.sh"; then
-        ok "trigger-watcher cron is installed"
-    else
-        echo "  WARN: trigger-watcher cron not found"
-    fi
 fi
 
 # Check tailscale (only if enabled)

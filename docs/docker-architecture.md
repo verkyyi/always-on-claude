@@ -19,7 +19,6 @@ All data persists across container restarts via bind mounts:
 | `~/.claude` | `/home/dev/.claude` | Auth tokens, settings, history |
 | `~/.claude.json` | `/home/dev/.claude.json` | Onboarding state |
 | `~/projects` | `/home/dev/projects` | Code repos |
-| `~/overnight` | `/home/dev/overnight` | Task files + run logs |
 | `~/.gitconfig.d` | `/home/dev/.gitconfig.d` | Git config |
 | `~/.ssh` | `/home/dev/.ssh` | SSH keys (read-only) |
 | `~/dev-env` | `/home/dev/dev-env` | Scripts (read-only) |

@@ -56,7 +56,7 @@ Core (the always-on experience):
   worktree-helper.sh  — Create/remove/list git worktrees for parallel sessions
 
 Deployment:
-  install.sh          — One-line server setup (pulls pre-built image, optional Tailscale/overnight)
+  install.sh          — One-line server setup (pulls pre-built image, optional Tailscale)
   provision.sh        — AWS provisioning: direct EC2 launch, ~40s with pre-built AMI
   destroy.sh          — Tear down EC2 resources by Project tag
   build-ami.sh        — Build and publish pre-baked AMI (Docker + Claude Code pre-installed)
@@ -65,10 +65,6 @@ Deployment:
 
 Add-ons (slash commands — live in .claude/commands/, auto-discovered):
   .claude/commands/provision.md       — Slash command: orchestrates full AWS provisioning via Claude
-  .claude/commands/plan-overnight.md  — Slash command: scans TODOs/issues, writes task file
-  trigger-watcher.sh          — Host cron: detects .scheduled files, runs `at`
-  run-tasks.sh                — Parses task file, runs each via `claude -p`, logs output
-  overnight-tasks.sh          — Simpler manual alternative
 
 Add-ons (git health):
   git-check.sh        — Daily repo health: uncommitted changes, lint, tests, coverage
@@ -117,7 +113,7 @@ if [[ $EUID -eq 0 ]]; then sudo() { "$@"; }; fi
 - **Pre-built image** from `ghcr.io/verkyyi/always-on-claude:latest` (multi-arch: amd64 + arm64)
 - **Local build override**: `docker compose -f docker-compose.yml -f docker-compose.build.yml build`
 - **Host networking** (`network_mode: host`) — required for EC2 instance metadata / IAM roles
-- **Bind mounts** persist auth, projects, and task data across container rebuilds
+- **Bind mounts** persist auth and projects across container rebuilds
 - `~/.claude.json` is mounted **separately** from `~/.claude/` (onboarding state lives in home dir root, not inside .claude/)
 - `~/.ssh` is mounted **read-only** — use HTTPS clones + `gh auth login`, not SSH git
 - Container runs as `dev:dev` (UID/GID 1000:1000) — Claude Code refuses to run as root

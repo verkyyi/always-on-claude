@@ -34,7 +34,6 @@ Runs on the server (or during AMI build). Sets up everything from a stock Ubuntu
 | Var | Default | Purpose |
 |---|---|---|
 | `TAILSCALE` | `0` | Install Tailscale for VPN SSH |
-| `OVERNIGHT` | `0` | Install at/cron for overnight tasks |
 | `LOCAL_BUILD` | `0` | Build Docker image locally instead of pulling |
 | `NON_INTERACTIVE` | `0` | Skip Phase 2 (auth), for User Data scripts |
 
