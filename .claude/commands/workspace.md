@@ -1,24 +1,17 @@
 # Workspace Manager
 
-## Environment check
-
-First, check if this is a provisioned host:
-  test -f ~/dev-env/.provisioned && echo "provisioned" || echo "not provisioned"
-
-If "not provisioned", tell the user:
-"This command is only available on a provisioned workspace. SSH into your instance and use [m] to manage workspaces."
-Then stop — do not proceed with any further steps.
-
----
-
 You are helping the user manage git workspaces. This runs on the **host** — `~/projects` is bind-mounted into the container, so changes are visible to both sides.
 
 ## Steps
 
-1. Run this command to discover all repos and worktrees:
+1. Run this single command to check environment and discover repos:
    ```bash
-   bash ~/dev-env/scripts/runtime/worktree-helper.sh list-repos
+   if ! test -f ~/dev-env/.provisioned; then echo "NOT_PROVISIONED"; else bash ~/dev-env/scripts/runtime/worktree-helper.sh list-repos; fi
    ```
+
+   If the output is `NOT_PROVISIONED`, tell the user:
+   "This command is only available on a provisioned workspace. SSH into your instance and use [m] to manage workspaces."
+   Then stop.
 
 2. Present the results clearly, showing:
    - **Repos** with their current branch
