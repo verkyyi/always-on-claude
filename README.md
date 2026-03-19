@@ -90,6 +90,8 @@ Back in your local Claude Code session:
 
 ## Quick Start: Local Mac
 
+> **⚠️ Local Mac provisioning is under active testing.** Known issues: bash 3.2 compatibility in runtime scripts, Docker Desktop CLI symlink breakage from macOS App Translocation. See [mac provisioning issues](#known-issues-local-mac).
+
 ### Prerequisites
 
 - **Mac** (mini, Studio, or any Mac you'll keep running) with macOS 13+
@@ -250,6 +252,17 @@ For script details, see [deployment scripts](docs/deployment-scripts.md).
 - [Docker architecture](docs/docker-architecture.md) — container config, volumes, networking
 - [CI/CD pipelines](docs/ci-cd.md) — Docker image + AMI build workflows
 - [Deployment scripts](docs/deployment-scripts.md) — install.sh, provision.sh, build-ami.sh internals
+
+---
+
+## Known Issues: Local Mac
+
+| Issue | Status | Workaround |
+|---|---|---|
+| `mapfile: command not found` on SSH login | Fixed | Runtime scripts updated to use `while read` loops |
+| `unbound variable` on empty arrays | Open | `set -u` + empty arrays fails on bash 3.2; need `${arr[@]+"${arr[@]}"}` guards |
+| Docker CLI not found after install | Open | macOS App Translocation breaks `/usr/local/bin/docker` symlinks; fix with `xattr -d com.apple.quarantine /Applications/Docker.app` then restart Docker |
+| `docker compose up -d` missing mac override | Open | `start-claude.sh` should use `-f docker-compose.yml -f docker-compose.mac.yml` on local-mac workspaces |
 
 ---
 

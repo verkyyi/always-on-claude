@@ -27,7 +27,10 @@ fi
 
 # --- Discover repos and worktrees ---
 discover() {
-    mapfile -t entries < <(bash "$WORKTREE_HELPER" list-repos 2>/dev/null | sort)
+    entries=()
+    while IFS= read -r line; do
+        [[ -n "$line" ]] && entries+=("$line")
+    done < <(bash "$WORKTREE_HELPER" list-repos 2>/dev/null | sort)
 
     repos=()
     repo_paths=()
@@ -43,7 +46,10 @@ discover() {
 # --- Get worktrees for a specific repo ---
 get_worktrees() {
     local repo_path="$1"
-    mapfile -t worktrees < <(bash "$WORKTREE_HELPER" list-worktrees "$repo_path" 2>/dev/null)
+    worktrees=()
+    while IFS= read -r line; do
+        [[ -n "$line" ]] && worktrees+=("$line")
+    done < <(bash "$WORKTREE_HELPER" list-worktrees "$repo_path" 2>/dev/null)
 }
 
 # --- Translate host path to container path ---
