@@ -1,80 +1,127 @@
 # Tailscale Setup
 
+You are setting up Tailscale on a provisioned always-on Claude Code workspace, running from the user's **local Mac**. This enables private SSH access via Tailscale, removing the need for public SSH exposure.
+
 ## Environment check
 
-First, check if this is a provisioned host:
-  test -f ~/dev-env/.provisioned && echo "provisioned" || echo "not provisioned"
+First, load the workspace info:
+```bash
+cat .env.workspace 2>/dev/null || echo "NOT FOUND"
+```
 
-If "not provisioned", tell the user:
-"This command is only available on a provisioned workspace. SSH into your instance and use [m] to manage workspaces."
-Then stop — do not proceed with any further steps.
+If `.env.workspace` is missing, tell the user:
+"No workspace found. Run `/provision` first to create a workspace."
+Then stop.
+
+Source the file to get `INSTANCE_ID`, `PUBLIC_IP`, `SSH_KEY`, `SG_ID`, `REGION`, `INSTANCE_NAME`.
 
 ---
 
-You are setting up Tailscale on a provisioned always-on Claude Code workspace. This enables private SSH access via the user's Tailscale network, removing the need for public SSH exposure.
+## Step 1 — Check current status
 
-## Steps
+SSH into the remote and check if Tailscale is installed and connected:
+```bash
+ssh -i $SSH_KEY ubuntu@$PUBLIC_IP "command -v tailscale && sudo tailscale status 2>&1 || echo 'not installed'"
+```
 
-1. **Check current status** — detect whether Tailscale is installed and connected:
-   ```bash
-   command -v tailscale && echo "installed" || echo "not installed"
-   ```
-   If installed, check connection:
-   ```bash
-   tailscale status 2>&1 || true
-   ```
-   If already installed AND connected, show the current status and Tailscale IP. Tell the user everything is set up and offer to help reconfigure (change hostname, lock down security group). Do not re-run install or auth.
+If already installed AND connected, show the status and skip to Step 5 (verify + lockdown).
 
-2. **Install** — if `tailscale` is not installed:
-   ```bash
-   curl -fsSL https://tailscale.com/install.sh | sh
-   ```
-   Confirm it installed:
-   ```bash
-   command -v tailscale && echo "installed" || echo "install failed"
-   ```
+---
 
-3. **Authenticate** — if not connected (step 1 showed "Logged out" or failed):
-   ```bash
-   sudo tailscale up --ssh
-   ```
-   This prints an auth URL. Tell the user to open it in their browser to authenticate. Wait for them to confirm they've completed authentication, then verify:
-   ```bash
-   tailscale status
-   ```
+## Step 2 — Install Tailscale on remote
 
-4. **Set hostname** — ask the user what hostname they'd like for this machine (e.g. `my-dev-server`). Then run:
-   ```bash
-   sudo tailscale set --hostname <name>
-   ```
+If not installed, SSH in and install:
+```bash
+ssh -i $SSH_KEY ubuntu@$PUBLIC_IP "curl -fsSL https://tailscale.com/install.sh | sh"
+```
 
-5. **Verify and guide** — confirm everything is working:
-   ```bash
-   tailscale status
-   tailscale ip -4
-   ```
-   Then tell the user:
-   - Their Tailscale SSH address: `ssh dev@<hostname>` (using the hostname they chose)
-   - They should visit https://login.tailscale.com/admin/machines, select their machine, go to SSH, and set access mode to "Accept" (avoids periodic re-authentication prompts)
+Verify:
+```bash
+ssh -i $SSH_KEY ubuntu@$PUBLIC_IP "command -v tailscale && echo 'installed' || echo 'install failed'"
+```
 
-6. **Suggest security group lockdown** — now that Tailscale SSH works, the user can remove public SSH access. Look up the instance's security group:
-   ```bash
-   # Get instance ID and security group from instance metadata
-   TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 60")
-   INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-id)
-   REGION=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/placement/region)
-   SG_ID=$(aws ec2 describe-instances --instance-ids "$INSTANCE_ID" --region "$REGION" --query 'Reservations[0].Instances[0].SecurityGroups[0].GroupId' --output text)
-   echo "Instance: $INSTANCE_ID  Region: $REGION  Security Group: $SG_ID"
-   ```
-   Show the user the command to revoke public SSH and ask if they'd like to run it:
-   ```bash
-   aws ec2 revoke-security-group-ingress --group-id "$SG_ID" --protocol tcp --port 22 --cidr 0.0.0.0/0 --region "$REGION"
-   ```
-   **Important:** Warn the user that this removes ALL public SSH access. They should verify Tailscale SSH works first (`ssh dev@<hostname>` from another machine on their tailnet) before revoking. If they get locked out, they'll need to re-add the rule via the AWS console.
+---
+
+## Step 3 — Authenticate
+
+Run `tailscale up --ssh` on the remote. This will print an auth URL:
+```bash
+ssh -t -i $SSH_KEY ubuntu@$PUBLIC_IP "sudo tailscale up --ssh"
+```
+
+Tell the user to open the URL in their browser to authenticate. Wait for them to confirm, then verify:
+```bash
+ssh -i $SSH_KEY ubuntu@$PUBLIC_IP "sudo tailscale status"
+```
+
+---
+
+## Step 4 — Set hostname
+
+Ask the user what hostname they'd like (suggest the current `INSTANCE_NAME` as default). Then:
+```bash
+ssh -i $SSH_KEY ubuntu@$PUBLIC_IP "sudo tailscale set --hostname <name>"
+```
+
+---
+
+## Step 5 — Verify Tailscale SSH works
+
+Test SSH via Tailscale hostname from the local machine:
+```bash
+ssh -o ConnectTimeout=5 ubuntu@<hostname> "echo connected"
+```
+
+If this fails, do NOT proceed to lockdown. Troubleshoot first.
+
+Tell the user to visit https://login.tailscale.com/admin/machines, select their machine, go to SSH, and set access mode to "Accept" (avoids periodic re-auth prompts).
+
+---
+
+## Step 6 — Update local SSH config
+
+Update the existing `Host $INSTANCE_NAME` block in `~/.ssh/config`:
+- Change `HostName` to the Tailscale hostname
+- Remove `IdentityFile` (Tailscale handles auth)
+
+Show the user the before/after and confirm before editing.
+
+---
+
+## Step 7 — Lock down security group
+
+Now that Tailscale SSH works, revoke public SSH access:
+```bash
+aws ec2 revoke-security-group-ingress --group-id $SG_ID --protocol tcp --port 22 --cidr 0.0.0.0/0 --region $REGION
+```
+
+**Warn the user** before running: this removes ALL public SSH access. If Tailscale goes down, they'll need to re-add the rule via AWS console.
+
+Verify the public IP is blocked:
+```bash
+ssh -o ConnectTimeout=5 -i $SSH_KEY ubuntu@$PUBLIC_IP "echo test" 2>&1 || echo "blocked (expected)"
+```
+
+---
+
+## Step 8 — Summary
+
+```
+Tailscale setup complete!
+
+  Hostname:  <hostname>
+  Connect:   ssh $INSTANCE_NAME
+
+  Security group $SG_ID: public SSH revoked
+  To restore public access if needed:
+    aws ec2 authorize-security-group-ingress --group-id $SG_ID --protocol tcp --port 22 --cidr YOUR_IP/32 --region $REGION
+```
+
+---
 
 ## Important
 
-- This runs on the **host**, not inside the container
-- Each step checks before acting — never re-install or re-authenticate if already done
-- Always verify Tailscale SSH works before suggesting security group changes
-- The user must have an existing Tailscale account — we don't create one for them
+- This runs on your **local Mac**, not on the remote host
+- All remote commands are executed via SSH using credentials from `.env.workspace`
+- Always verify Tailscale SSH works before locking down the security group
+- The user must have an existing Tailscale account

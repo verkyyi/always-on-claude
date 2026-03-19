@@ -5,7 +5,6 @@
 #   curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/scripts/deploy/install.sh | bash
 #
 # Options (env vars):
-#   TAILSCALE=1        — install and configure Tailscale for SSH access
 #   LOCAL_BUILD=1      — build Docker image locally instead of pulling from GHCR
 #   NON_INTERACTIVE=1  — skip Phase 2 (interactive auth), for use in user data scripts
 #
@@ -22,7 +21,6 @@ info()  { echo ""; echo "=== $* ==="; }
 ok()    { echo "  OK: $*"; }
 skip()  { echo "  SKIP: $* (already done)"; }
 
-TAILSCALE="${TAILSCALE:-0}"
 LOCAL_BUILD="${LOCAL_BUILD:-0}"
 NON_INTERACTIVE="${NON_INTERACTIVE:-0}"
 IMAGE="ghcr.io/verkyyi/always-on-claude:latest"
@@ -138,20 +136,6 @@ if ! command -v claude &>/dev/null; then
     ok "Claude Code installed on host"
 else
     skip "Claude Code (host)"
-fi
-
-# --- Tailscale (optional) --------------------------------------------------
-
-if [[ "$TAILSCALE" == "1" ]]; then
-    info "Tailscale"
-    step="Tailscale install"
-
-    if ! command -v tailscale &>/dev/null; then
-        curl -fsSL https://tailscale.com/install.sh | sh
-        ok "Tailscale installed"
-    else
-        skip "Tailscale binary"
-    fi
 fi
 
 # --- Clone / update repo ----------------------------------------------------
@@ -387,37 +371,6 @@ echo ""
 echo "Phase 2: Interactive setup (needs browser)"
 echo ""
 
-# --- Tailscale auth (optional) ----------------------------------------------
-
-if [[ "$TAILSCALE" == "1" ]]; then
-    info "Tailscale authentication"
-    step="tailscale auth"
-
-    if tailscale status &>/dev/null 2>&1; then
-        skip "Tailscale already connected"
-    else
-        echo ""
-        echo "  Tailscale needs to be connected for SSH access."
-        echo "  This will open a URL — paste it in your browser to authenticate."
-        echo ""
-        read -rp "  Press Enter to run 'sudo tailscale up --ssh'... "
-        sudo tailscale up --ssh
-
-        echo ""
-        read -rp "  Enter a hostname for this machine (e.g. my-dev-server): " ts_hostname
-        if [[ -n "$ts_hostname" ]]; then
-            sudo tailscale set --hostname "$ts_hostname"
-            ok "Tailscale hostname set to $ts_hostname"
-        fi
-    fi
-
-    echo ""
-    echo "  TIP: Go to https://login.tailscale.com/admin/machines"
-    echo "  Select your machine -> SSH -> set access mode to 'Accept'"
-    echo "  (This avoids periodic re-authentication prompts)"
-    echo ""
-fi
-
 # --- In-container auth ------------------------------------------------------
 
 info "Container authentication"
@@ -444,15 +397,6 @@ else
     echo "  WARN: Container not running"
 fi
 
-# Check tailscale (only if enabled)
-if [[ "$TAILSCALE" == "1" ]]; then
-    if tailscale status &>/dev/null 2>&1; then
-        ok "Tailscale is connected"
-    else
-        echo "  WARN: Tailscale not connected"
-    fi
-fi
-
 echo ""
 echo "============================================"
 echo "  Setup complete!"
@@ -462,14 +406,4 @@ echo "  Next steps:"
 echo "    1. Log out: exit"
 echo "    2. SSH back in: ssh $USER@$(hostname)"
 echo "    3. The workspace picker will appear — select a repo to start"
-echo ""
-if [[ "$TAILSCALE" == "1" ]] && tailscale status &>/dev/null 2>&1; then
-    ts_name=$(tailscale status --self --peers=false | awk '{print $2}' 2>/dev/null || hostname)
-    echo "  Or via Tailscale: ssh $USER@$ts_name"
-    echo ""
-fi
-echo "  To lock down the security group (remove public SSH):"
-echo "    aws ec2 revoke-security-group-ingress \\"
-echo "      --group-id sg-YOUR_SG_ID \\"
-echo "      --protocol tcp --port 22 --cidr YOUR_IP/32"
 echo ""
