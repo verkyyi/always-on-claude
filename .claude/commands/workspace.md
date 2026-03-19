@@ -6,7 +6,7 @@ You are helping the user manage git worktrees from inside a running Claude sessi
 
 1. Run this command to discover all repos and worktrees:
    ```bash
-   bash ~/dev-env/worktree-helper.sh list-repos
+   bash ~/dev-env/scripts/runtime/worktree-helper.sh list-repos
    ```
 
 2. Present the results clearly, showing:
@@ -17,11 +17,11 @@ You are helping the user manage git worktrees from inside a running Claude sessi
 
    - **Create a new worktree** — ask which repo and branch name, then run:
      ```bash
-     bash ~/dev-env/worktree-helper.sh create <repo-path> <branch-name>
+     bash ~/dev-env/scripts/runtime/worktree-helper.sh create <repo-path> <branch-name>
      ```
    - **Delete a worktree** — confirm with the user first, then run:
      ```bash
-     bash ~/dev-env/worktree-helper.sh remove <worktree-path>
+     bash ~/dev-env/scripts/runtime/worktree-helper.sh remove <worktree-path>
      ```
    - **Show info** — display current workspace (`pwd`), branch (`git branch --show-current`), and status (`git status --short`)
 

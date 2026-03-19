@@ -35,10 +35,10 @@ case "$choice" in
         exec tmux new-session -A -s host
         ;;
     *)
-        if [[ -x ~/dev-env/start-claude.sh ]]; then
-            exec bash ~/dev-env/start-claude.sh
+        if [[ -x ~/dev-env/scripts/runtime/start-claude.sh ]]; then
+            exec bash ~/dev-env/scripts/runtime/start-claude.sh
         else
-            echo "  ⚠ start-claude.sh not found at ~/dev-env/start-claude.sh"
+            echo "  ⚠ start-claude.sh not found at ~/dev-env/scripts/runtime/start-claude.sh"
         fi
         ;;
 esac

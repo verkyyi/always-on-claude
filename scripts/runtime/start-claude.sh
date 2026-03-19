@@ -38,7 +38,7 @@ show_menu() {
     # Discover repos and worktrees via worktree-helper.sh
     mapfile -t entries < <(
         docker exec "$CONTAINER_NAME" bash -c \
-            'bash /home/dev/dev-env/worktree-helper.sh list-repos 2>/dev/null' \
+            'bash /home/dev/dev-env/scripts/runtime/worktree-helper.sh list-repos 2>/dev/null' \
         | sort
     )
 

@@ -88,7 +88,7 @@ aws ec2 run-instances \
     --security-group-ids "$SG_ID" \
     --user-data '#!/bin/bash
 exec > /var/log/install.log 2>&1
-su - ubuntu -c "NON_INTERACTIVE=1 bash -c '\''curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/install.sh | bash'\''"' \
+su - ubuntu -c "NON_INTERACTIVE=1 bash -c '\''curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/scripts/deploy/install.sh | bash'\''"' \
     --block-device-mappings 'DeviceName=/dev/sda1,Ebs={VolumeSize=30,VolumeType=gp3,DeleteOnTermination=true}' \
     --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=claude-dev},{Key=Project,Value=always-on-claude}]' \
     --query 'Instances[0].InstanceId' --output text
@@ -127,7 +127,7 @@ ssh -i $KEY ubuntu@$IP "sg docker -c 'docker ps --format {{.Names}}' | grep -q c
 ## Step 8 — Interactive auth
 
 ```bash
-ssh -t -i $KEY ubuntu@$IP "cd ~/dev-env && sg docker -c 'docker compose exec -it dev bash /home/dev/dev-env/setup-auth.sh'"
+ssh -t -i $KEY ubuntu@$IP "cd ~/dev-env && sg docker -c 'docker compose exec -it dev bash /home/dev/dev-env/scripts/deploy/setup-auth.sh'"
 ```
 
 Tell the user what to expect before running it (git config, GitHub CLI, Claude login — each requires browser auth).

@@ -11,7 +11,7 @@ on:
   push:
     branches: [main]
     paths:
-      - install.sh
+      - scripts/deploy/install.sh
       - .github/workflows/build-ami.yml
 
   # Manual trigger
@@ -117,7 +117,7 @@ jobs:
         run: |
           echo "Copying install.sh to build instance..."
           scp -o StrictHostKeyChecking=no -i /tmp/build-key.pem \
-            install.sh "ubuntu@${PUBLIC_IP}:/tmp/install.sh"
+            scripts/deploy/install.sh "ubuntu@${PUBLIC_IP}:/tmp/install.sh"
           echo "Running install.sh..."
           ssh -o StrictHostKeyChecking=no -o BatchMode=yes -i /tmp/build-key.pem \
             "ubuntu@${PUBLIC_IP}" \

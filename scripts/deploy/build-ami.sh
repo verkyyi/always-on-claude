@@ -167,7 +167,7 @@ echo "  Installing Docker, Claude Code, pulling image..."
 echo "  This takes 2-3 minutes..."
 
 ssh -o StrictHostKeyChecking=no -o BatchMode=yes -i "$KEY_FILE" "ubuntu@${PUBLIC_IP}" \
-    "NON_INTERACTIVE=1 bash -c 'curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/install.sh | bash'" \
+    "NON_INTERACTIVE=1 bash -c 'curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/scripts/deploy/install.sh | bash'" \
     2>&1 | while IFS= read -r line; do echo "  $line"; done
 
 ok "Install complete"

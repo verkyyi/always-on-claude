@@ -1,6 +1,6 @@
 #!/bin/bash
 # setup-auth.sh — In-container auth helper.
-# Run via: docker compose exec dev bash ~/dev-env/setup-auth.sh
+# Run via: docker compose exec dev bash ~/dev-env/scripts/deploy/setup-auth.sh
 #
 # Handles git config, GitHub CLI auth, and Claude Code login.
 # Idempotent — skips steps that are already done.

@@ -28,7 +28,7 @@ Your own persistent Claude Code workspace in the cloud. SSH in from any device, 
 ### Launch (~40 seconds)
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/provision.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/scripts/deploy/provision.sh)
 ```
 
 This creates an EC2 instance with Claude Code ready to go. You'll see a summary with your SSH command when it's done.
@@ -46,7 +46,7 @@ You'll see a login menu — press Enter for Claude Code.
 Choose option `[2]` for container bash, then:
 
 ```bash
-bash ~/dev-env/setup-auth.sh
+bash ~/dev-env/scripts/deploy/setup-auth.sh
 ```
 
 This walks you through git config, GitHub CLI, and Claude login (each needs a browser).
@@ -54,7 +54,7 @@ This walks you through git config, GitHub CLI, and Claude login (each needs a br
 ### Tear down
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/destroy.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/scripts/deploy/destroy.sh)
 ```
 
 Finds all resources by tag, confirms with you, deletes everything.

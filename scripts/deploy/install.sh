@@ -2,7 +2,7 @@
 # install.sh — One-line bootstrap for always-on-claude.
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/scripts/deploy/install.sh | bash
 #
 # Options (env vars):
 #   TAILSCALE=1        — install and configure Tailscale for SSH access
@@ -206,7 +206,7 @@ if ! grep -q "ssh-login.sh" ~/.bash_profile 2>/dev/null; then
     {
         echo ""
         echo "# Auto-launch Claude Code on SSH login"
-        echo "source ~/dev-env/ssh-login.sh"
+        echo "source ~/dev-env/scripts/runtime/ssh-login.sh"
     } >> ~/.bash_profile
     ok "Added ssh-login.sh to .bash_profile"
 else
@@ -216,7 +216,7 @@ fi
 # --- Make scripts executable ------------------------------------------------
 
 step="chmod scripts"
-chmod +x "$DEV_ENV"/*.sh 2>/dev/null || true
+chmod +x "$DEV_ENV"/scripts/deploy/*.sh "$DEV_ENV"/scripts/runtime/*.sh 2>/dev/null || true
 
 # --- Docker pull + start ----------------------------------------------------
 
@@ -319,7 +319,7 @@ echo "  Now we'll set up git, GitHub CLI, and Claude Code inside the container."
 echo ""
 read -rp "  Press Enter to continue... "
 
-run_docker docker compose exec -it dev bash /home/dev/dev-env/setup-auth.sh </dev/tty
+run_docker docker compose exec -it dev bash /home/dev/dev-env/scripts/deploy/setup-auth.sh </dev/tty
 
 # --- Final verification -----------------------------------------------------
 

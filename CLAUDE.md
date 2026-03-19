@@ -12,7 +12,7 @@ Always-on Claude Code workspaces where we handle the runtime — container, pers
 
 ## Lifecycle philosophy
 
-The full workspace lifecycle — **provision, setup, update, destroy** — should be **Claude Code-guided first, scripts as fallback**. Users run slash commands (`/provision`, `/destroy`) and Claude orchestrates the AWS calls, handles errors intelligently, and walks them through interactive steps. Shell scripts (`provision.sh`, `destroy.sh`, `install.sh`) exist as fallbacks for automation, CI/CD, and environments without Claude Code.
+The full workspace lifecycle — **provision, setup, update, destroy** — should be **Claude Code-guided first, scripts as fallback**. Users run slash commands (`/provision`, `/destroy`) and Claude orchestrates the AWS calls, handles errors intelligently, and walks them through interactive steps. Shell scripts (`scripts/deploy/provision.sh`, `scripts/deploy/destroy.sh`, `scripts/deploy/install.sh`) exist as fallbacks for automation, CI/CD, and environments without Claude Code.
 
 ## Business model: BYO Auth
 
@@ -47,31 +47,29 @@ What we provide:
 All scripts are bash. No test suite — test manually via `docker compose up -d` (pulls pre-built image) or `docker compose -f docker-compose.yml -f docker-compose.build.yml build` for local builds.
 
 ```
-Core (the always-on experience):
-  Dockerfile          — Ubuntu 24.04 + Node 22 + Claude Code + dev tools (multi-arch: amd64 + arm64)
-  docker-compose.yml  — Single service, pre-built image from GHCR, host networking, bind mounts
+Root (Docker config — stays here by convention):
+  Dockerfile               — Ubuntu 24.04 + Node 22 + Claude Code + dev tools (multi-arch: amd64 + arm64)
+  docker-compose.yml       — Single service, pre-built image from GHCR, host networking, bind mounts
   docker-compose.build.yml — Override for local builds (docker compose -f ... -f ... build)
-  ssh-login.sh        — Menu on SSH login: [1] Claude Code, [2] container bash, [3] host shell
-  start-claude.sh     — Workspace picker, auto-starts container, launches Claude in tmux
-  worktree-helper.sh  — Create/remove/list git worktrees for parallel sessions
 
-Deployment:
-  install.sh          — One-line server setup (pulls pre-built image, optional Tailscale)
-  provision.sh        — AWS provisioning: direct EC2 launch, ~40s with pre-built AMI
-  destroy.sh          — Tear down EC2 resources by Project tag
-  build-ami.sh        — Build and publish pre-baked AMI (Docker + Claude Code pre-installed)
-  setup-auth.sh       — Interactive auth: git config, gh auth login, claude login
+scripts/deploy/ (provisioning & server setup — run from Mac or during first boot):
+  provision.sh             — AWS provisioning: direct EC2 launch, ~40s with pre-built AMI
+  destroy.sh               — Tear down EC2 resources by Project tag
+  install.sh               — One-line server setup (pulls pre-built image, optional Tailscale)
+  build-ami.sh             — Build and publish pre-baked AMI (Docker + Claude Code pre-installed)
+  setup-auth.sh            — Interactive auth: git config, gh auth login, claude login
+
+scripts/runtime/ (day-to-day server use — run on SSH login or inside the container):
+  ssh-login.sh             — Menu on SSH login: [1] Claude Code, [2] container bash, [3] host shell
+  start-claude.sh          — Workspace picker, auto-starts container, launches Claude in tmux
+  worktree-helper.sh       — Create/remove/list git worktrees for parallel sessions
+
+CI/CD:
   .github/workflows/docker-publish.yml — Multi-arch build + push to GHCR on main
+  .github/workflows/build-ami.yml      — Build and publish pre-baked AMI on image update
 
 Add-ons (slash commands — live in .claude/commands/, auto-discovered):
-  .claude/commands/provision.md       — Slash command: orchestrates full AWS provisioning via Claude
-
-Add-ons (git health):
-  git-check.sh        — Daily repo health: uncommitted changes, lint, tests, coverage
-  git-check.cron      — Cron definition for daily git-check at 08:00
-
-Secrets:
-  load-secrets.sh     — Sources AWS SSM parameters into env vars
+  .claude/commands/provision.md        — Slash command: orchestrates full AWS provisioning via Claude
 ```
 
 ## Bash conventions

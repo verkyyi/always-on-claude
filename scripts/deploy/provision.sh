@@ -2,7 +2,7 @@
 # provision.sh — Run on your Mac to provision an EC2 instance and bootstrap it.
 #
 # One command from zero (assumes AWS CLI is configured):
-#   bash <(curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/provision.sh)
+#   bash <(curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/scripts/deploy/provision.sh)
 #
 # What it does:
 #   1. Creates/reuses an SSH key pair and security group
@@ -221,7 +221,7 @@ else
     USER_DATA=$(cat <<'USERDATA'
 #!/bin/bash
 exec > /var/log/install.log 2>&1
-su - ubuntu -c "NON_INTERACTIVE=1 bash -c 'curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/install.sh | bash'"
+su - ubuntu -c "NON_INTERACTIVE=1 bash -c 'curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/scripts/deploy/install.sh | bash'"
 USERDATA
 )
 fi
@@ -311,8 +311,8 @@ echo ""
 echo "  First time? Run auth setup inside the container:"
 echo "    1. SSH in: ssh -i $KEY_FILE ${SSH_USER}@$PUBLIC_IP"
 echo "    2. Choose option [2] for container bash"
-echo "    3. Run: bash ~/dev-env/setup-auth.sh"
+echo "    3. Run: bash ~/dev-env/scripts/deploy/setup-auth.sh"
 echo ""
 echo "  To tear down:"
-echo "    bash <(curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/destroy.sh)"
+echo "    bash <(curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/scripts/deploy/destroy.sh)"
 echo ""

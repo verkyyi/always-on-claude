@@ -2,7 +2,7 @@
 # destroy.sh — Tear down always-on-claude EC2 resources.
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/destroy.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/scripts/deploy/destroy.sh | bash
 #
 # Finds resources by Project=always-on-claude tag and deletes them.
 # Prompts for confirmation before each destructive action.
@@ -140,5 +140,5 @@ echo "  Teardown complete."
 echo "============================================"
 echo ""
 echo "  To re-provision:"
-echo "    curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/provision.sh | bash"
+echo "    curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/scripts/deploy/provision.sh | bash"
 echo ""
