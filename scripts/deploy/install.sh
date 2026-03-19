@@ -234,6 +234,20 @@ if [[ -f "$DEV_ENV/scripts/runtime/statusline-command.sh" ]]; then
     fi
 fi
 
+# --- SSH server config --------------------------------------------------------
+
+info "SSH server config"
+step="sshd config"
+
+# Allow NO_CLAUDE env var through SSH so users can skip the login menu
+if ! grep -q 'NO_CLAUDE' /etc/ssh/sshd_config.d/custom.conf 2>/dev/null; then
+    echo 'AcceptEnv NO_CLAUDE' | sudo tee /etc/ssh/sshd_config.d/custom.conf > /dev/null
+    sudo systemctl reload ssh
+    ok "Added AcceptEnv NO_CLAUDE to sshd"
+else
+    skip "AcceptEnv NO_CLAUDE already configured"
+fi
+
 # --- Shell integration (ssh-login.sh) ---------------------------------------
 
 info "Shell integration"
