@@ -2,7 +2,7 @@
 
 Your own persistent Claude Code workspace in the cloud. SSH in from any device, reconnect where you left off.
 
-**~$30/mo on AWS. One command to set up. ~40 seconds to launch.**
+**~$30/mo on AWS. One slash command. ~40 seconds to launch.**
 
 ---
 
@@ -13,7 +13,7 @@ Your own persistent Claude Code workspace in the cloud. SSH in from any device, 
 | Dies when your laptop closes | Runs 24/7 in the cloud |
 | Tied to one machine | SSH from laptop, phone, tablet |
 | Session lost on disconnect | Reconnect and pick up where you left off |
-| 15+ manual setup steps | One command |
+| No background tasks | Claude keeps working while you sleep |
 
 ---
 
@@ -21,29 +21,37 @@ Your own persistent Claude Code workspace in the cloud. SSH in from any device, 
 
 ### Prerequisites
 
-- **Mac** with Terminal
+- **Mac** with Claude Code CLI installed (`npm install -g @anthropic-ai/claude-code`)
+- **Claude subscription** active (Pro or Max)
 - **AWS account** with CLI configured (`brew install awscli && aws configure`)
-- **Claude subscription** (Pro or Max) — you bring your own auth
 
-### Launch (~40 seconds)
+### 1. Clone and provision
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/scripts/deploy/provision.sh)
+git clone https://github.com/verkyyi/always-on-claude.git
+cd always-on-claude
+claude
 ```
 
-This creates an EC2 instance with Claude Code ready to go. You'll see a summary with your SSH command when it's done.
+Inside the Claude Code session:
 
-### Connect
+```
+/provision
+```
+
+Claude walks you through the entire AWS setup — SSH keys, security groups, instance launch — and connects you in ~40 seconds.
+
+### 2. Connect
 
 ```bash
-ssh -i ~/.ssh/claude-dev-key.pem ubuntu@<YOUR_IP>
+ssh claude-dev
 ```
 
 You'll see a login menu — press Enter for Claude Code.
 
-### First-time auth (inside the container)
+### 3. First-time auth
 
-Choose option `[2]` for container bash, then:
+From the login menu, choose `[2]` for container bash, then:
 
 ```bash
 bash ~/dev-env/scripts/deploy/setup-auth.sh
@@ -51,13 +59,29 @@ bash ~/dev-env/scripts/deploy/setup-auth.sh
 
 This walks you through git config, GitHub CLI, and Claude login (each needs a browser).
 
-### Tear down
+### 4. Tear down when done
 
-```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/scripts/deploy/destroy.sh)
+Back in your local Claude Code session:
+
+```
+/destroy
 ```
 
-Finds all resources by tag, confirms with you, deletes everything.
+Claude finds all resources by tag, confirms with you, and deletes everything.
+
+---
+
+## Slash Commands
+
+All lifecycle operations run from inside a Claude Code session in this repo:
+
+| Command | What it does |
+|---|---|
+| `/provision` | Launch a new workspace on AWS (~40s) |
+| `/destroy` | Tear down all AWS resources |
+| `/update` | Apply updates to a running workspace |
+| `/tailscale` | Set up Tailscale for private SSH (no public IP needed) |
+| `/workspace` | Manage repos and git worktrees on the remote |
 
 ---
 
@@ -67,7 +91,7 @@ Finds all resources by tag, confirms with you, deletes everything.
 Your Mac / Phone / Tablet
     │
     └── SSH
-         └── Ubuntu 24.04 (EC2 t3.medium, 30GB)
+         └── Ubuntu 24.04 (EC2 t4g.small, 20GB)
               ├── Docker container (claude-dev)
               │    ├── Claude Code
               │    ├── Node.js 22, Bun, npm
@@ -79,25 +103,16 @@ Your Mac / Phone / Tablet
 
 **Everything persists** — auth, settings, repos, tmux sessions, Claude history — all survive container restarts and reconnects.
 
-**Built-in slash commands:**
-- `/workspace` — manage git worktrees from inside Claude (create, delete, list)
-
 ---
 
 ## How It Works
 
 | Component | Purpose |
 |---|---|
-| **Pre-built AMI** | Docker + Claude Code pre-installed, published to AWS (~40s boot) |
+| **Pre-built AMI** | Docker + Claude Code pre-installed (~40s boot) |
 | **Docker container** | Isolated workspace with dev tools, bind-mounted for persistence |
 | **tmux** | Sessions survive SSH disconnects |
 | **Login menu** | SSH in → choose Claude Code, bash, or host shell |
-
-For detailed implementation docs, see:
-
-- [Docker architecture](docs/docker-architecture.md) — container config, volumes, networking
-- [CI/CD pipelines](docs/ci-cd.md) — Docker image + AMI build workflows
-- [Deployment scripts](docs/deployment-scripts.md) — install.sh, provision.sh, build-ami.sh internals
 
 ---
 
@@ -105,28 +120,35 @@ For detailed implementation docs, see:
 
 | What | Cost |
 |---|---|
-| EC2 t3.medium (on-demand) | ~$30/mo |
-| 30GB gp3 EBS | ~$2.40/mo |
-| **Total** | **~$32/mo** |
+| EC2 t4g.small (on-demand) | ~$12/mo |
+| 20GB gp3 EBS | ~$1.60/mo |
+| **Total** | **~$14/mo** |
 
 Stop the instance when not in use to save money. No additional fees — you bring your own Claude subscription.
 
 ---
 
-## BYO Auth
+## Script Fallbacks
 
-We provide the runtime. You bring your own Claude authentication:
+If you prefer running scripts directly instead of slash commands:
 
-- **API key** — set `ANTHROPIC_API_KEY`, pay-per-token, no caps
-- **Subscription** — run `claude login` with your Pro/Max account
+```bash
+# Provision
+bash <(curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/scripts/deploy/provision.sh)
 
-We never provide, share, or manage Claude credentials.
+# Destroy
+bash <(curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/scripts/deploy/destroy.sh)
+```
+
+For script details, see [deployment scripts](docs/deployment-scripts.md).
 
 ---
 
-## Coming Soon
+## Further Reading
 
-- **Claude-guided lifecycle** — `/provision` and `/destroy` slash commands that let Claude orchestrate AWS operations, handle errors, and walk you through setup interactively. See [roadmap details](docs/claude-guided-lifecycle.md).
+- [Docker architecture](docs/docker-architecture.md) — container config, volumes, networking
+- [CI/CD pipelines](docs/ci-cd.md) — Docker image + AMI build workflows
+- [Deployment scripts](docs/deployment-scripts.md) — install.sh, provision.sh, build-ami.sh internals
 
 ---
 
