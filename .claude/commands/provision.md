@@ -134,7 +134,26 @@ Tell the user what to expect before running it (git config, GitHub CLI, Claude l
 
 ---
 
-## Step 9 — Summary
+## Step 9 — Save workspace info
+
+Write provisioning details to `.env.workspace` (already gitignored via `.env.*` pattern):
+
+```bash
+cat > .env.workspace << EOF
+# Provisioned $(date +%Y-%m-%d)
+INSTANCE_ID=$INSTANCE_ID
+PUBLIC_IP=$IP
+REGION=$REGION
+INSTANCE_TYPE=$INSTANCE_TYPE
+INSTANCE_NAME=$INSTANCE_NAME
+SSH_KEY=~/.ssh/$KEY_NAME.pem
+SG_ID=$SG_ID
+EOF
+```
+
+---
+
+## Step 10 — Summary
 
 ```
 Provisioning complete!

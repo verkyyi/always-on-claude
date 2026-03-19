@@ -68,7 +68,17 @@ rm -f ~/.ssh/$KEY_NAME.pem
 
 ---
 
-## Step 5 — Summary
+## Step 5 — Clean up workspace file
+
+If `.env.workspace` exists, delete it:
+
+```bash
+rm -f .env.workspace
+```
+
+---
+
+## Step 6 — Summary
 
 ```
 Teardown complete.
@@ -77,6 +87,7 @@ Teardown complete.
     - Instance: i-xxx
     - Security group: sg-xxx
     [- Key pair: claude-dev-key]
+    - .env.workspace
 
   To re-provision:
     /provision
