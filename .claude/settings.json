@@ -1,8 +1,4 @@
 {
-  "statusLine": {
-    "type": "command",
-    "command": "bash scripts/runtime/statusline-command.sh"
-  },
   "permissions": {
     "allow": [
       "Bash(aws:*)",

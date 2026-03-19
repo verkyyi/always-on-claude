@@ -1,12 +1,10 @@
 #!/usr/bin/env bash
-# statusline-command.sh — Claude Code status line
+# statusline-command.sh — Claude Code status line: model + context % + effort
 #
-# Shows: Opus  72% 720k  high  local  1 host
+# Shows: Opus  72% 720k  high
 #   - Model name (shortened)
 #   - Context remaining (green >30%, yellow 10-30%, red <10%)
 #   - Effort level from settings
-#   - Environment: local (Mac) or remote (EC2 container)
-#   - Instance count: running EC2 hosts (local only, cached 5 min)
 
 input=$(cat)
 
@@ -52,44 +50,4 @@ else
     ctx="${CYAN}–${RESET}"
 fi
 
-# Detect environment
-if [[ "$(uname -s)" == "Darwin" ]]; then
-    env_label="local"
-elif [[ "$(hostname)" == "claude-dev" || -d /home/dev ]]; then
-    env_label="remote"
-else
-    env_label=""
-fi
-
-# Instance count (local Mac only, cached 5 min)
-instance_count=""
-if [[ "$env_label" == "local" ]] && command -v aws &>/dev/null; then
-    cache_file="/tmp/.aoc-instance-count"
-    cache_max=300
-    now=$(date +%s)
-    if [[ -f "$cache_file" ]]; then
-        cache_age=$(( now - $(stat -f %m "$cache_file" 2>/dev/null || echo 0) ))
-    else
-        cache_age=$((cache_max + 1))
-    fi
-    if [[ $cache_age -gt $cache_max ]]; then
-        count=$(aws ec2 describe-instances \
-            --filters "Name=tag:Project,Values=always-on-claude" \
-                      "Name=instance-state-name,Values=running" \
-            --query 'Reservations[].Instances[] | length(@)' \
-            --output text 2>/dev/null || echo "?")
-        echo "$count" > "$cache_file" 2>/dev/null
-    else
-        count=$(cat "$cache_file" 2>/dev/null || echo "?")
-    fi
-    if [[ "$count" =~ ^[0-9]+$ ]]; then
-        instance_count="${GREEN}${count} host$( [[ "$count" != "1" ]] && echo "s" || true)${RESET}"
-    fi
-fi
-
-# Build output
-suffix=""
-[[ -n "$env_label" ]] && suffix="  ${CYAN}${env_label}${RESET}"
-[[ -n "$instance_count" ]] && suffix="${suffix}  ${instance_count}"
-
-printf "${CYAN}%s${RESET}  %s  ${CYAN}%s${RESET}%s\n" "$model" "$ctx" "$effort" "$suffix"
+printf "${CYAN}%s${RESET}  %s  ${CYAN}%s${RESET}\n" "$model" "$ctx" "$effort"
