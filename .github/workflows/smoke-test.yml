@@ -1,0 +1,76 @@
+name: Smoke test
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - Dockerfile
+      - docker-compose.yml
+      - docker-compose.build.yml
+      - docker-compose.mac.yml
+      - .github/workflows/smoke-test.yml
+  push:
+    branches: [main]
+    paths:
+      - Dockerfile
+      - docker-compose.yml
+      - docker-compose.build.yml
+      - docker-compose.mac.yml
+      - .github/workflows/smoke-test.yml
+
+jobs:
+  smoke-test:
+    name: Docker image smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image (amd64 only)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: always-on-claude:smoke-test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Start container
+        run: |
+          docker run -d --name smoke-test always-on-claude:smoke-test sleep infinity
+
+      - name: Verify critical tools
+        run: |
+          for tool in claude node git gh rg fzf zsh tmux vim jq aws python3 bun curl; do
+            docker exec smoke-test which "$tool" \
+              && echo "OK: $tool" \
+              || { echo "FAIL: $tool not found"; exit 1; }
+          done
+
+      - name: Verify user
+        run: |
+          USER_INFO=$(docker exec smoke-test id)
+          echo "$USER_INFO"
+          echo "$USER_INFO" | grep -q "uid=1000(dev)" || { echo "FAIL: expected uid=1000(dev)"; exit 1; }
+          echo "$USER_INFO" | grep -q "gid=1000(dev)" || { echo "FAIL: expected gid=1000(dev)"; exit 1; }
+
+      - name: Verify directories
+        run: |
+          docker exec smoke-test test -d /home/dev/.claude || { echo "FAIL: ~/.claude/ missing"; exit 1; }
+          docker exec smoke-test test -d /home/dev/.claude/debug || { echo "FAIL: ~/.claude/debug/ missing"; exit 1; }
+          docker exec smoke-test test -f /home/dev/.claude/remote-settings.json || { echo "FAIL: ~/.claude/remote-settings.json missing"; exit 1; }
+          echo "OK: all required directories exist"
+
+      - name: Verify Node.js version
+        run: |
+          NODE_VERSION=$(docker exec smoke-test node --version)
+          echo "Node.js: $NODE_VERSION"
+          MAJOR=$(echo "$NODE_VERSION" | sed 's/v\([0-9]*\).*/\1/')
+          [ "$MAJOR" -ge 22 ] || { echo "FAIL: Node.js >= 22 required, got $NODE_VERSION"; exit 1; }
+
+      - name: Cleanup
+        if: always()
+        run: docker rm -f smoke-test 2>/dev/null || true

@@ -191,6 +191,7 @@ elif [[ ! -s ~/.claude.json ]]; then
     echo '{}' > ~/.claude.json
     ok "Fixed empty ~/.claude.json"
 else
+    # shellcheck disable=SC2088
     skip "~/.claude.json"
 fi
 
@@ -200,6 +201,7 @@ if [[ ! -f ~/.ssh/known_hosts ]]; then
     touch ~/.ssh/known_hosts
     ok "Created ~/.ssh/known_hosts"
 else
+    # shellcheck disable=SC2088
     skip "~/.ssh/known_hosts"
 fi
 
@@ -300,6 +302,7 @@ if ! grep -q '\.local/bin' "$ZPROFILE" 2>/dev/null; then
     } >> "$ZPROFILE"
     ok "Added ~/.local/bin to PATH in .zprofile"
 else
+    # shellcheck disable=SC2088
     skip "~/.local/bin already in .zprofile"
 fi
 
@@ -332,8 +335,6 @@ chmod +x "$DEV_ENV"/scripts/deploy/*.sh "$DEV_ENV"/scripts/runtime/*.sh 2>/dev/n
 
 info "Docker container"
 step="docker pull and up"
-
-COMPOSE_CMD="docker compose -f $DEV_ENV/docker-compose.yml -f $DEV_ENV/docker-compose.mac.yml"
 
 if [[ "$LOCAL_BUILD" == "1" ]]; then
     echo "  LOCAL_BUILD=1 — building image locally..."

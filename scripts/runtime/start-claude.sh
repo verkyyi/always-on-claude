@@ -102,7 +102,7 @@ show_branches() {
 
     local i=2
     for wt in "${worktrees[@]+"${worktrees[@]}"}"; do
-        IFS='|' read -r wt_path wt_branch <<< "$wt"
+        IFS='|' read -r _wt_path wt_branch <<< "$wt"
         echo "  [$i] ${wt_branch} (worktree)"
         ((i++))
     done

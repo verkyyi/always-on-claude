@@ -1,0 +1,5 @@
+ignored:
+  # Don't pin apt package versions — this is a dev container, not a production image
+  - DL3008
+  # Don't pin pip package versions
+  - DL3013

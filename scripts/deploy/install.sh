@@ -209,6 +209,7 @@ elif [[ ! -s ~/.claude.json ]]; then
     echo '{}' > ~/.claude.json
     ok "Fixed empty ~/.claude.json"
 else
+    # shellcheck disable=SC2088
     skip "~/.claude.json"
 fi
 
@@ -218,6 +219,7 @@ if [[ ! -f ~/.ssh/known_hosts ]]; then
     touch ~/.ssh/known_hosts
     ok "Created ~/.ssh/known_hosts"
 else
+    # shellcheck disable=SC2088
     skip "~/.ssh/known_hosts"
 fi
 
@@ -294,6 +296,7 @@ if ! grep -q '\.local/bin' ~/.bash_profile 2>/dev/null; then
     } >> ~/.bash_profile
     ok "Added ~/.local/bin to PATH in .bash_profile"
 else
+    # shellcheck disable=SC2088
     skip "~/.local/bin already in .bash_profile PATH"
 fi
 

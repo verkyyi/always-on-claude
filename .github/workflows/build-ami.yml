@@ -25,8 +25,11 @@ env:
 jobs:
   build-ami:
     runs-on: ubuntu-latest
-    # Only run if Docker build succeeded (or manual trigger)
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    # Only run if Docker build succeeded (or manual/push trigger)
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
 
     steps:
       - name: Checkout

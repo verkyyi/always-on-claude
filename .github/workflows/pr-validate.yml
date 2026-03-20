@@ -1,0 +1,58 @@
+name: PR validation
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  shellcheck:
+    name: ShellCheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run ShellCheck
+        uses: ludeeus/action-shellcheck@2.0.0
+        with:
+          scandir: scripts
+          severity: warning
+
+  hadolint:
+    name: Hadolint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Lint Dockerfile
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile
+
+  compose-validate:
+    name: Compose validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate base compose
+        run: docker compose -f docker-compose.yml config --quiet
+
+      - name: Validate local build override
+        run: docker compose -f docker-compose.yml -f docker-compose.build.yml config --quiet
+
+      - name: Validate Mac override
+        run: docker compose -f docker-compose.yml -f docker-compose.mac.yml config --quiet
+
+  markdownlint:
+    name: Markdown lint
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Lint Markdown
+        uses: DavidAnson/markdownlint-cli2-action@v19
