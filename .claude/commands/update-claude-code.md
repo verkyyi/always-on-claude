@@ -35,7 +35,7 @@ You are updating the Claude Code binary inside the container.
 
 5. If the user confirms, update Claude Code inside the container:
    ```bash
-   docker exec claude-dev npm install -g @anthropic-ai/claude-code@latest
+   docker exec -u dev claude-dev bash -c 'curl -fsSL https://claude.ai/install.sh | bash'
    ```
 
 6. Verify the update:

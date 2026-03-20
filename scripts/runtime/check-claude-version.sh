@@ -36,6 +36,14 @@ if [[ -z "$installed" ]]; then
     exit 0
 fi
 
+# Extract bare semver — `claude --version` outputs "2.1.80 (Claude Code)"
+installed=$(echo "$installed" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+
+if [[ -z "$installed" ]]; then
+    log "WARN: Could not parse semver from Claude Code version output"
+    exit 0
+fi
+
 # --- Get latest version from npm ---
 
 latest=$(curl -sS --max-time 10 "https://registry.npmjs.org/@anthropic-ai/claude-code/latest" 2>/dev/null \
@@ -77,7 +85,7 @@ if [[ "${CLAUDE_AUTO_UPDATE:-0}" == "1" ]]; then
     log "Auto-update enabled, updating Claude Code $installed -> $latest"
 
     if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${CONTAINER_NAME}$"; then
-        if docker exec "$CONTAINER_NAME" npm install -g @anthropic-ai/claude-code@latest 2>>"$LOG_FILE"; then
+        if docker exec -u dev "$CONTAINER_NAME" bash -c 'curl -fsSL https://claude.ai/install.sh | bash' 2>>"$LOG_FILE"; then
             log "Auto-update successful: now at $latest"
             {
                 echo "status=current"
