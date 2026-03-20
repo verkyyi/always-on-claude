@@ -10,3 +10,9 @@
 services:
   dev:
     network_mode: bridge
+
+  caddy:
+    network_mode: bridge
+    ports:
+      - "80:80"
+      - "443:443"

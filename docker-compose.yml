@@ -38,3 +38,42 @@ services:
     network_mode: host
 
     restart: unless-stopped
+
+  # Caddy reverse proxy — routes *.{workspace-id}.{domain} to deployed apps
+  # Only needed when app deployment is configured (WORKSPACE_ID + WORKSPACE_DOMAIN set)
+  caddy:
+    build:
+      context: ./caddy
+      dockerfile: Dockerfile
+    container_name: caddy
+    profiles:
+      - deploy
+    volumes:
+      # Caddyfile template
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+
+      # Per-app route configs (written by deploy.sh)
+      - caddy-apps:/etc/caddy/apps
+
+      # Cert persistence across restarts
+      - caddy-data:/data
+      - caddy-config:/config
+
+      # Deployed apps registry (shared with dev container)
+      - ~/.deployed-apps.json:/etc/caddy/deployed-apps.json:ro
+
+    environment:
+      - WORKSPACE_ID=${WORKSPACE_ID:-}
+      - WORKSPACE_DOMAIN=${WORKSPACE_DOMAIN:-}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+
+    # Host networking so Caddy can reach apps on localhost ports
+    network_mode: host
+
+    restart: unless-stopped
+
+volumes:
+  caddy-apps:
+  caddy-data:
+  caddy-config:

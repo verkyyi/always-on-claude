@@ -1,0 +1,23 @@
+# Caddyfile — Reverse proxy for deployed apps
+#
+# Wildcard cert via DNS-01 challenge with Route53.
+# Environment variables (injected by provisioning):
+#   WORKSPACE_ID     — unique workspace identifier (e.g., abc123)
+#   WORKSPACE_DOMAIN — base domain (e.g., alwayson.dev)
+#   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY — scoped IAM credentials for Route53
+
+# Wildcard TLS for all subdomains
+*.{$WORKSPACE_ID}.{$WORKSPACE_DOMAIN} {
+	tls {
+		dns route53 {
+			access_key_id {$AWS_ACCESS_KEY_ID}
+			secret_access_key {$AWS_SECRET_ACCESS_KEY}
+		}
+	}
+
+	# Dynamic routing — Caddy imports per-app config snippets
+	# Each deployed app writes a file to /etc/caddy/apps/<name>.caddy
+	import /etc/caddy/apps/*
+}
+
+# Health check endpoint on port 2019 (Caddy admin API, localhost only)
