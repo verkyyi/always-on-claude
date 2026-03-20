@@ -9,6 +9,7 @@ set -euo pipefail
 info()  { echo ""; echo "=== $* ==="; }
 ok()    { echo "  OK: $*"; }
 skip()  { echo "  SKIP: $* (already done)"; }
+die()   { echo "ERROR: $*" >&2; exit 1; }
 
 # Wrap sudo
 if [[ $EUID -eq 0 ]]; then
@@ -22,7 +23,7 @@ else
     RUN_USER="$USER"
 fi
 
-RUN_HOME=$(eval echo "~$RUN_USER")
+RUN_HOME=$(getent passwd "$RUN_USER" | cut -d: -f6)
 SERVICE_NAME="disk-monitor"
 
 info "Disk monitor (systemd timer)"

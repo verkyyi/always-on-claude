@@ -111,7 +111,7 @@ cmd_add() {
 
     # --- Copy SSH authorized_keys from the user's Linux home ---
     local linux_home
-    linux_home=$(eval echo "~$username")
+    linux_home=$(getent passwd "$username" | cut -d: -f6)
     if [[ -f "$linux_home/.ssh/authorized_keys" ]]; then
         cp "$linux_home/.ssh/authorized_keys" "$user_home/.ssh/authorized_keys"
         sudo chown "$username:$username" "$user_home/.ssh/authorized_keys"
@@ -246,7 +246,7 @@ services:
       - ${user_home}/.gitconfig.d:/home/dev/.gitconfig.d
       - ${user_home}/projects:/home/dev/projects
       - ${user_home}/.config/gh:/home/dev/.config/gh
-      - ${user_home}/.ssh:/home/dev/.ssh:ro
+      - ${user_home}/.ssh:/home/dev/.ssh
       - ${user_home}/.ssh/known_hosts:/home/dev/.ssh/known_hosts
     environment:
       - NODE_ENV=development
