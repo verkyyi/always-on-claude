@@ -28,10 +28,25 @@ for dir in \
     mkdir -p "$dir"
 done
 
-# .claude.json must be a file with valid JSON (not a directory)
-if [[ ! -f /home/dev/.claude.json ]]; then
-    echo '{}' > /home/dev/.claude.json
-    ok "Created .claude.json"
+# .claude.json must be a file (not a directory) — store the real file inside
+# the claude-data volume and symlink to it, avoiding the Docker named-volume
+# gotcha where mounting a volume to a file path creates a directory instead
+CLAUDE_JSON_REAL="/home/dev/.claude/claude.json"
+CLAUDE_JSON_LINK="/home/dev/.claude.json"
+
+if [[ ! -f "$CLAUDE_JSON_REAL" ]]; then
+    echo '{}' > "$CLAUDE_JSON_REAL"
+    ok "Created .claude/claude.json"
+fi
+
+# Remove stale symlink, directory, or regular file and replace with symlink
+if [[ -d "$CLAUDE_JSON_LINK" ]]; then
+    rmdir "$CLAUDE_JSON_LINK" 2>/dev/null || rm -rf "$CLAUDE_JSON_LINK"
+fi
+if [[ ! -L "$CLAUDE_JSON_LINK" ]]; then
+    rm -f "$CLAUDE_JSON_LINK"
+    ln -s "$CLAUDE_JSON_REAL" "$CLAUDE_JSON_LINK"
+    ok "Symlinked .claude.json -> .claude/claude.json"
 fi
 
 # remote-settings.json must exist or Claude crashes
@@ -63,9 +78,10 @@ if [[ -f /home/dev/dev-env/scripts/runtime/tmux-status.sh ]]; then
 fi
 
 # Fix ownership on everything
-chown -R dev:dev /home/dev/.claude /home/dev/.claude.json \
+chown -R dev:dev /home/dev/.claude \
     /home/dev/.config /home/dev/projects /home/dev/overnight \
     /home/dev/.tmux.conf /home/dev/.tmux-status.sh 2>/dev/null || true
+chown -h dev:dev /home/dev/.claude.json 2>/dev/null || true
 
 ok "Directories and config ready"
 

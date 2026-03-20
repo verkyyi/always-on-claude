@@ -22,10 +22,8 @@ services:
 
     volumes:
       # Claude Code config/auth/history
+      # Also stores .claude.json (onboarding state) — symlinked by entrypoint
       - claude-data:/home/dev/.claude
-
-      # Claude Code onboarding state (lives outside ~/.claude/)
-      - claude-json:/home/dev/.claude.json
 
       # Git config
       - gitconfig:/home/dev/.gitconfig.d
@@ -59,7 +57,6 @@ services:
 
 volumes:
   claude-data:
-  claude-json:
   gitconfig:
   projects:
   overnight:

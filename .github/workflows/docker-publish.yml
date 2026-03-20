@@ -61,6 +61,7 @@ jobs:
           cache-to: type=gha,mode=max
 
   build-and-push-portable:
+    needs: build-and-push
     runs-on: ubuntu-latest
     permissions:
       contents: read
