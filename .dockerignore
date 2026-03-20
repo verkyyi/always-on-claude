@@ -1,0 +1,3 @@
+# Exclude git history from portable image build (saves ~50MB+)
+.git
+.github
