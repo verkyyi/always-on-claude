@@ -191,7 +191,7 @@ cmd_cleanup() {
                 fi
 
                 # Check if branch is merged into the default branch
-                if git -C "$repo_path" merge-base --is-ancestor "$wt_branch" "$default_branch" 2>/dev/null; then
+                if git -C "$repo_path" merge-base --is-ancestor "$wt_branch" "origin/$default_branch" 2>/dev/null; then
                     # Merged — clean it up
                     if [[ "$dry_run" == true ]]; then
                         cleaned+=("${wt_path} (merged into ${default_branch}) [dry-run]")
