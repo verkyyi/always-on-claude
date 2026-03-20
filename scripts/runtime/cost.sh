@@ -32,11 +32,16 @@ meta() {
 INSTANCE_TYPE=$(meta "instance-type" || echo "unknown")
 INSTANCE_ID=$(meta "instance-id" || echo "unknown")
 AZ=$(meta "placement/availability-zone" || echo "unknown")
-REGION="${AZ%?}"  # strip trailing letter
 
 if [[ "$INSTANCE_TYPE" == "unknown" ]]; then
     die "Could not reach EC2 metadata. Are you running on an EC2 instance?"
 fi
+
+if [[ "$AZ" == "unknown" || "${#AZ}" -lt 2 ]]; then
+    die "Could not determine availability zone from EC2 metadata."
+fi
+
+REGION="${AZ%?}"  # strip trailing letter
 
 # --- Pricing table (us-east-1 on-demand, USD/hr) ---------------------------
 # Source: https://aws.amazon.com/ec2/pricing/on-demand/
@@ -204,7 +209,7 @@ if [[ "$TOTAL_MONTHLY" != "unknown" ]]; then
     STOPPED_MONTHLY=$(awk "BEGIN {printf \"%.2f\", $TOTAL_EBS * 0.08 + 3.65}")
     echo "  If stopped:   ~\$$STOPPED_MONTHLY/mo (storage + IPv4)"
     if [[ "$HOURLY" != "unknown" ]]; then
-        HALF_MONTHLY=$(awk "BEGIN {printf \"%.2f\", ($HOURLY + $IPV4_HOURLY) * 365 + $TOTAL_EBS * 0.08}")
+        HALF_MONTHLY=$(awk "BEGIN {printf \"%.2f\", $HOURLY * 365 + 3.65 + $TOTAL_EBS * 0.08}")
         echo "  With auto-stop (12h/day): ~\$$HALF_MONTHLY/mo"
     fi
 else
