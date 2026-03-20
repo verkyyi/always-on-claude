@@ -160,7 +160,7 @@ For pre-built AMI:
 ```bash
 #!/bin/bash
 exec > /var/log/install.log 2>&1
-su - dev -c 'cd ~/dev-env && git pull --ff-only 2>/dev/null; sudo --preserve-env=HOME docker compose up -d'
+su - dev -c 'cd ~/dev-env && git pull --ff-only 2>/dev/null && sudo --preserve-env=HOME docker compose up -d'
 ```
 
 For stock Ubuntu:
