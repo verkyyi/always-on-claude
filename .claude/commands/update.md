@@ -11,7 +11,7 @@ Then stop — do not proceed with any further steps.
 
 ---
 
-You are applying updates to an always-on Claude Code workspace. The repo at `~/dev-env` has already been pulled to the latest version (by the systemd timer or manually). Your job is to inspect what changed and apply the necessary updates.
+You are applying updates to an always-on Claude Code workspace.
 
 **Important:** The docker compose command is:
 ```bash
@@ -20,7 +20,25 @@ sudo --preserve-env=HOME docker compose
 
 Use this form throughout this command.
 
-## Steps
+## Quick path: self-update script
+
+For most updates, run the self-update script which handles everything automatically:
+```bash
+bash ~/dev-env/scripts/runtime/self-update.sh
+```
+
+This single command:
+1. Pulls the latest repo changes
+2. Updates Claude Code binary inside the container
+3. Pulls a new Docker image (only if Dockerfile/compose changed or registry has a newer image)
+4. Updates host-side scripts (statusline, tmux config)
+5. Reports what was updated
+
+If the script completes successfully with no issues, summarize the output for the user and stop here.
+
+## Detailed path: manual inspection
+
+If the self-update script fails, or if the user wants to inspect changes manually, fall back to this detailed workflow:
 
 1. Check if there's a pending update file:
    ```bash
