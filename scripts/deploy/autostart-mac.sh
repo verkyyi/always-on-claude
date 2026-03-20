@@ -8,7 +8,6 @@ set -euo pipefail
 
 info()  { echo ""; echo "=== $* ==="; }
 ok()    { echo "  OK: $*"; }
-skip()  { echo "  SKIP: $* (already done)"; }
 
 LABEL="com.always-on-claude.container"
 PLIST="$HOME/Library/LaunchAgents/${LABEL}.plist"

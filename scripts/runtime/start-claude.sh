@@ -16,13 +16,27 @@ WORKTREE_HELPER="$COMPOSE_DIR/scripts/runtime/worktree-helper.sh"
 MANAGER_PROMPT="$COMPOSE_DIR/scripts/runtime/manager-prompt.txt"
 CONTAINER_PROJECTS="/home/dev/projects"
 
+# Detect workspace type for correct compose command
+WORKSPACE_TYPE="ec2"
+if [[ -f "$COMPOSE_DIR/.env.workspace" ]]; then
+    WORKSPACE_TYPE=$(grep -oP 'WORKSPACE_TYPE=\K.*' "$COMPOSE_DIR/.env.workspace" 2>/dev/null || echo "ec2")
+fi
+
+compose_up() {
+    if [[ "$WORKSPACE_TYPE" == "local-mac" ]]; then
+        (cd "$COMPOSE_DIR" && docker compose -f docker-compose.yml -f docker-compose.mac.yml up -d)
+    else
+        (cd "$COMPOSE_DIR" && sudo --preserve-env=HOME docker compose up -d)
+    fi
+}
+
 # Start container if not running
 if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
     echo "Container not running. Starting..."
-    cd "$COMPOSE_DIR" && docker compose up -d
+    compose_up
     sleep 2
     docker compose exec -u root dev bash -c \
-        "chown -R dev:dev /home/dev/projects" 2>/dev/null || true
+        "chown dev:dev /home/dev/projects /home/dev/.claude" 2>/dev/null || true
 fi
 
 # --- Discover repos and worktrees ---
@@ -141,11 +155,14 @@ launch_host() {
 # --- Main ---
 discover
 
+selected_path=""
+selected_branch=""
+
 # Layer 1 loop
 while true; do
     show_repos
 
-    read -n 1 -p "  > " choice || true
+    read -rp "  > " choice || true
     echo ""
 
     if [[ "$choice" == "m" ]]; then
@@ -176,7 +193,7 @@ while true; do
     while true; do
         show_branches "$selected_path" "$selected_branch"
 
-        read -n 1 -p "  > " choice2 || true
+        read -rp "  > " choice2 || true
         echo ""
 
         if [[ "$choice2" == "b" ]]; then

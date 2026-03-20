@@ -357,7 +357,7 @@ ok "Container running"
 # Fix container permissions (volumes mount as root)
 step="fix container permissions"
 (cd "$DEV_ENV" && docker compose -f docker-compose.yml -f docker-compose.mac.yml exec -T -u root dev bash -c \
-    "chown -R dev:dev /home/dev/projects /home/dev/.claude") 2>/dev/null || true
+    "chown dev:dev /home/dev/projects /home/dev/.claude") 2>/dev/null || true
 ok "Fixed container permissions"
 
 echo ""

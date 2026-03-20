@@ -6,11 +6,19 @@
 #   - Context remaining (green >30%, yellow 10-30%, red <10%)
 #   - Effort level from settings
 
+set -euo pipefail
+
 input=$(cat)
 
-remaining=$(echo "$input" | jq -r '.context_window.remaining_percentage // empty')
-ctx_size=$(echo "$input" | jq -r '.context_window.context_window_size // empty')
-model_id=$(echo "$input" | jq -r '.model.id // ""')
+# Extract all values in a single jq call to avoid multiple process forks
+# (this script runs on every status update)
+read -r remaining ctx_size model_id display_name <<< "$(echo "$input" | jq -r '[
+    (.context_window.remaining_percentage // ""),
+    (.context_window.context_window_size // ""),
+    (.model.id // ""),
+    (.model.display_name // "Claude")
+] | @tsv')"
+
 effort=$(jq -r '.effortLevel // "normal"' ~/.claude/settings.json 2>/dev/null || echo "normal")
 
 # ANSI color codes
@@ -25,29 +33,31 @@ case "$model_id" in
   *opus*)   model="Opus" ;;
   *sonnet*) model="Sonnet" ;;
   *haiku*)  model="Haiku" ;;
-  *)        model=$(echo "$input" | jq -r '.model.display_name // "Claude"') ;;
+  *)        model="$display_name" ;;
 esac
 
 # Context percentage + absolute tokens with color
-if [ -n "$remaining" ] && [ "$remaining" != "null" ]; then
+if [[ -n "$remaining" && "$remaining" != "null" ]]; then
     pct=$(printf "%.0f" "$remaining")
-    # Calculate remaining tokens in k
-    if [ -n "$ctx_size" ] && [ "$ctx_size" != "null" ]; then
-        remaining_tokens=$(awk "BEGIN {printf \"%.0f\", $ctx_size * $remaining / 100 / 1000}")
+    # Calculate remaining tokens in k using bash arithmetic (avoids awk fork)
+    if [[ -n "$ctx_size" && "$ctx_size" != "null" ]]; then
+        # Integer approximation: multiply first to preserve precision, then divide
+        remaining_int=${remaining%.*}
+        remaining_tokens=$(( ctx_size * ${remaining_int:-0} / 100 / 1000 ))
         tokens="${remaining_tokens}k"
     else
         tokens=""
     fi
-    if [ "$pct" -le 10 ]; then
+    if [[ "$pct" -le 10 ]]; then
         color="$RED"
-    elif [ "$pct" -le 30 ]; then
+    elif [[ "$pct" -le 30 ]]; then
         color="$YELLOW"
     else
         color="$GREEN"
     fi
     ctx="${color}${pct}% ${tokens}${RESET}"
 else
-    ctx="${CYAN}–${RESET}"
+    ctx="${CYAN}-${RESET}"
 fi
 
 printf "${CYAN}%s${RESET}  %s  ${CYAN}%s${RESET}\n" "$model" "$ctx" "$effort"

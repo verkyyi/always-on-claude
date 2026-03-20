@@ -15,7 +15,8 @@ RUN apt-get update && apt-get install -y \
 
 # Node.js 22.x LTS
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
-    && apt-get install -y nodejs
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
 
 # AWS CLI v2
 RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o "awscliv2.zip" \
@@ -27,20 +28,14 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
     | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
     && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
     | tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
-    && apt-get update && apt-get install -y gh
+    && apt-get update && apt-get install -y gh \
+    && rm -rf /var/lib/apt/lists/*
 
 # Non-root user (Claude Code refuses to run as root)
+# Pre-create .claude dirs to prevent ENOENT crashes when Docker volumes mount as root
 RUN userdel -r ubuntu 2>/dev/null || true \
-    && groupadd -g 1000 dev && useradd -m -s /bin/bash -u 1000 -g 1000 dev
-
-# Claude Code — native installer, must run as non-root
-USER dev
-RUN curl -fsSL https://claude.ai/install.sh | bash
-USER root
-
-# Pre-create .claude dirs — Docker volumes mount as root and can
-# overwrite ownership, causing ENOENT crashes without these
-RUN mkdir -p /home/dev/.claude/debug \
+    && groupadd -g 1000 dev && useradd -m -s /bin/bash -u 1000 -g 1000 dev \
+    && mkdir -p /home/dev/.claude/debug \
     && touch /home/dev/.claude/remote-settings.json \
     && chown -R dev:dev /home/dev/.claude
 
@@ -52,10 +47,16 @@ RUN curl -fsSL https://bun.sh/install | bash
 ENV PATH="/home/dev/.bun/bin:${PATH}"
 
 # Shell aliases
-RUN echo '\n\
-alias cc="claude --dangerously-skip-permissions"\n\
-alias gs="git status"\n\
-alias gl="git log --oneline -20"\n\
-' >> /home/dev/.bashrc
+RUN cat >> /home/dev/.bashrc <<'EOF'
+
+alias cc="claude --dangerously-skip-permissions"
+alias gs="git status"
+alias gl="git log --oneline -20"
+EOF
+
+# Claude Code — native installer, must run as non-root
+# Placed last because the remote install script is unpinned and changes frequently,
+# which would bust the Docker build cache for all subsequent layers
+RUN curl -fsSL https://claude.ai/install.sh | bash
 
 CMD ["bash"]
