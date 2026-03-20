@@ -323,12 +323,32 @@ else
     skip "ssh-login.sh already in .bash_profile"
 fi
 
+# --- Multi-user base directory ------------------------------------------------
+
+info "Multi-user base directory"
+step="multi-user base dir"
+
+USERS_DIR="$HOME/users"
+if [[ ! -d "$USERS_DIR" ]]; then
+    mkdir -p "$USERS_DIR"
+    ok "Created $USERS_DIR"
+else
+    skip "Users directory exists"
+fi
+
 # --- Auto-updater (systemd timer) -------------------------------------------
 
 info "Auto-updater"
 step="auto-updater setup"
 
 bash "$DEV_ENV/scripts/deploy/install-updater.sh"
+
+# --- Disk monitor (systemd timer) -------------------------------------------
+
+info "Disk monitor"
+step="disk monitor setup"
+
+bash "$DEV_ENV/scripts/deploy/install-disk-monitor.sh"
 
 # --- Make scripts executable ------------------------------------------------
 

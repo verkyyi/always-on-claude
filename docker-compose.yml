@@ -38,3 +38,14 @@ services:
     network_mode: host
 
     restart: unless-stopped
+
+    # Resource limits — configurable per container.
+    # Override with CLAUDE_CPU_LIMIT and CLAUDE_MEM_LIMIT env vars.
+    deploy:
+      resources:
+        limits:
+          cpus: '${CLAUDE_CPU_LIMIT:-2.0}'
+          memory: ${CLAUDE_MEM_LIMIT:-4g}
+        reservations:
+          cpus: '0.25'
+          memory: 512m

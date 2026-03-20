@@ -6,15 +6,27 @@
 # Layer 1: Pick a repo (or manage workspaces)
 # Layer 2: Pick a branch/worktree within that repo (skipped if no worktrees)
 #
+# Multi-user aware: uses CLAUDE_USER, CLAUDE_CONTAINER, and
+# CLAUDE_USER_HOME env vars when set by ssh-login.sh. Falls back
+# to single-user defaults.
+#
 # Called automatically from ssh-login.sh on SSH login.
 
 set -euo pipefail
 
-COMPOSE_DIR="$HOME/dev-env"
-CONTAINER_NAME="claude-dev"
+COMPOSE_DIR="${COMPOSE_DIR:-/home/dev/dev-env}"
 WORKTREE_HELPER="$COMPOSE_DIR/scripts/runtime/worktree-helper.sh"
 MANAGER_PROMPT="$COMPOSE_DIR/scripts/runtime/manager-prompt.txt"
 CONTAINER_PROJECTS="/home/dev/projects"
+
+# --- Multi-user detection ---
+# CLAUDE_USER is set by ssh-login.sh for multi-user setups
+CLAUDE_USER="${CLAUDE_USER:-}"
+CONTAINER_NAME="${CLAUDE_CONTAINER:-claude-dev}"
+USER_HOME="${CLAUDE_USER_HOME:-$HOME}"
+
+# The host-side projects directory (where repos live on the host filesystem)
+HOST_PROJECTS="$USER_HOME/projects"
 
 # Detect workspace type (default to ec2 for backward compatibility)
 WORKSPACE_TYPE="ec2"
@@ -22,16 +34,43 @@ if [[ -f "$COMPOSE_DIR/.env.workspace" ]]; then
     source "$COMPOSE_DIR/.env.workspace" 2>/dev/null || true
 fi
 
-# Build compose command based on workspace type
-COMPOSE_CMD=(docker compose)
-if [[ "$WORKSPACE_TYPE" == "local-mac" ]]; then
-    COMPOSE_CMD=(docker compose -f docker-compose.yml -f docker-compose.mac.yml)
+# Build compose command based on workspace type and user
+build_compose_cmd() {
+    local cmd=(docker compose)
+
+    if [[ -n "$CLAUDE_USER" ]]; then
+        # Multi-user: use per-user compose file
+        local user_compose="$COMPOSE_DIR/docker-compose.user-${CLAUDE_USER}.yml"
+        if [[ -f "$user_compose" ]]; then
+            cmd=(docker compose -f "$user_compose")
+        fi
+    fi
+
+    if [[ "$WORKSPACE_TYPE" == "local-mac" && -z "$CLAUDE_USER" ]]; then
+        cmd=(docker compose -f docker-compose.yml -f docker-compose.mac.yml)
+    fi
+
+    echo "${cmd[@]}"
+}
+
+COMPOSE_CMD_STR=$(build_compose_cmd)
+read -ra COMPOSE_CMD <<< "$COMPOSE_CMD_STR"
+
+# Service name inside the compose file
+if [[ -n "$CLAUDE_USER" ]]; then
+    COMPOSE_SERVICE="dev-${CLAUDE_USER}"
+else
+    COMPOSE_SERVICE="dev"
 fi
 
 # --- Session limit helpers ---
 count_sessions() {
+    local prefix="claude-"
+    if [[ -n "$CLAUDE_USER" ]]; then
+        prefix="claude-${CLAUDE_USER}-"
+    fi
     tmux list-sessions -F '#{session_name}' 2>/dev/null \
-        | grep -c '^claude-' || echo 0
+        | grep -c "^${prefix}" || echo 0
 }
 
 get_max_sessions() {
@@ -89,16 +128,17 @@ if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
     echo "Container not running. Starting..."
     cd "$COMPOSE_DIR" && "${COMPOSE_CMD[@]}" up -d
     sleep 2
-    "${COMPOSE_CMD[@]}" exec -u root dev bash -c \
+    "${COMPOSE_CMD[@]}" exec -T -u root "$COMPOSE_SERVICE" bash -c \
         "chown -R dev:dev /home/dev/projects" 2>/dev/null || true
 fi
 
 # --- Discover repos and worktrees ---
 discover() {
     entries=()
+    # Use the host-side projects directory for discovery
     while IFS= read -r line; do
         [[ -n "$line" ]] && entries+=("$line")
-    done < <(bash "$WORKTREE_HELPER" list-repos 2>/dev/null | sort)
+    done < <(PROJECTS_DIR="$HOST_PROJECTS" bash "$WORKTREE_HELPER" list-repos 2>/dev/null | sort)
 
     repos=()
     repo_paths=()
@@ -122,15 +162,26 @@ get_worktrees() {
 
 # --- Translate host path to container path ---
 to_container_path() {
-    echo "${1/$HOME\/projects/$CONTAINER_PROJECTS}"
+    echo "${1/$HOST_PROJECTS/$CONTAINER_PROJECTS}"
 }
 
 # --- Layer 1: Pick a repo ---
 show_repos() {
-    # Show active claude-* tmux sessions
-    local sessions
+    # Show user context in multi-user mode
+    if [[ -n "$CLAUDE_USER" ]]; then
+        echo ""
+        echo "  User: $CLAUDE_USER | Container: $CONTAINER_NAME"
+    fi
+
+    # Show active claude-* tmux sessions (scoped to this user)
+    local sessions session_prefix
+    if [[ -n "$CLAUDE_USER" ]]; then
+        session_prefix="claude-${CLAUDE_USER}-"
+    else
+        session_prefix="claude-"
+    fi
     sessions=$(tmux list-sessions -F '#{session_name} #{?session_attached,(attached),(idle)}' 2>/dev/null \
-        | grep '^claude-' || true)
+        | grep "^${session_prefix}" || true)
 
     if [[ -n "$sessions" ]]; then
         echo ""
@@ -145,7 +196,7 @@ show_repos() {
     local i=1
     for item in "${repos[@]+"${repos[@]}"}"; do
         IFS='|' read -r path branch <<< "$item"
-        local short_path="${path#$HOME/}"
+        local short_path="${path#$HOST_PROJECTS/}"
         echo "  [$i] ${short_path} (${branch})"
         ((i++))
     done
@@ -162,7 +213,7 @@ show_repos() {
 # --- Layer 2: Pick a branch/worktree within a repo ---
 show_branches() {
     local repo_path="$1" repo_branch="$2"
-    local short_path="${repo_path#$HOME/}"
+    local short_path="${repo_path#$HOST_PROJECTS/}"
 
     echo ""
     echo "  === ${short_path} ==="
@@ -175,7 +226,7 @@ show_branches() {
         ((i++))
     done
 
-    echo "  [b] ← Back"
+    echo "  [b] <- Back"
     echo ""
 }
 
@@ -185,8 +236,14 @@ launch() {
     local container_path
     container_path=$(to_container_path "$selected")
 
-    # Create unique tmux session name
-    session_name="claude-$(basename "$selected" | tr './:' '-')"
+    # Create unique tmux session name (scoped to user in multi-user mode)
+    local base_name
+    base_name="$(basename "$selected" | tr './:' '-')"
+    if [[ -n "$CLAUDE_USER" ]]; then
+        session_name="claude-${CLAUDE_USER}-${base_name}"
+    else
+        session_name="claude-${base_name}"
+    fi
 
     # Check session limit (allows re-attach, blocks new if at limit)
     if ! check_session_limit "$session_name"; then
@@ -203,16 +260,20 @@ launch() {
 # --- Launch Claude Code on the host (for workspace management / updates) ---
 launch_host() {
     local dir="$1"
+    local manager_session="claude-manager"
+    if [[ -n "$CLAUDE_USER" ]]; then
+        manager_session="claude-${CLAUDE_USER}-manager"
+    fi
 
     # Check session limit (allows re-attach, blocks new if at limit)
-    if ! check_session_limit "claude-manager"; then
+    if ! check_session_limit "$manager_session"; then
         return 1
     fi
 
     echo "  -> $dir (host)"
     echo ""
 
-    exec tmux new-session -A -s "claude-manager" \
+    exec tmux new-session -A -s "$manager_session" \
         "bash -lc 'cd \"$dir\" && exec claude --append-system-prompt-file \"$MANAGER_PROMPT\" \"Greet me and show what you can help with.\"'"
 }
 
@@ -236,7 +297,7 @@ while true; do
         if [[ ${#repos[@]} -gt 0 ]]; then
             IFS='|' read -r selected_path selected_branch <<< "${repos[0]}"
         else
-            launch "$HOME/projects" || continue
+            launch "$HOST_PROJECTS" || continue
         fi
     else
         continue

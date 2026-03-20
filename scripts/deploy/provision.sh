@@ -23,7 +23,25 @@ AWS_REGION="${AWS_REGION:-$(aws configure get region 2>/dev/null || echo "us-eas
 INSTANCE_TYPE="${INSTANCE_TYPE:-t4g.small}"
 SG_NAME="${SG_NAME:-claude-dev-sg}"
 SSH_USER="${SSH_USER:-dev}"
+NUM_USERS="${NUM_USERS:-1}"
 TAG="always-on-claude"
+
+# Auto-size instance for multi-user (if not explicitly overridden)
+if [[ "$NUM_USERS" -gt 1 && "$INSTANCE_TYPE" == "t4g.small" ]]; then
+    if [[ "$NUM_USERS" -le 3 ]]; then
+        INSTANCE_TYPE="t4g.medium"
+    elif [[ "$NUM_USERS" -le 6 ]]; then
+        INSTANCE_TYPE="t4g.large"
+    else
+        INSTANCE_TYPE="t4g.xlarge"
+    fi
+fi
+
+# Auto-size disk for multi-user
+DISK_SIZE="${DISK_SIZE:-20}"
+if [[ "$NUM_USERS" -gt 1 && "$DISK_SIZE" -eq 20 ]]; then
+    DISK_SIZE=$(( 20 + (NUM_USERS - 1) * 10 ))
+fi
 
 # --- Helpers ----------------------------------------------------------------
 
@@ -42,7 +60,7 @@ echo ""
 echo "  What this will do:"
 echo "    1. Create an SSH key pair in AWS (if not exists)"
 echo "    2. Create a security group allowing SSH from anywhere"
-echo "    3. Launch an EC2 instance ($INSTANCE_TYPE, 20GB)"
+echo "    3. Launch an EC2 instance ($INSTANCE_TYPE, ${DISK_SIZE}GB, ${NUM_USERS} user(s))"
 echo "    4. Set up Claude Code workspace (~40s with pre-built AMI)"
 echo ""
 echo "  Prerequisites:"
@@ -51,7 +69,7 @@ echo "    - An AWS account (this will create billable resources)"
 echo ""
 echo "  Cost:"
 echo "    - $INSTANCE_TYPE in $AWS_REGION: ~\$0.017/hr (~\$12/mo if left running)"
-echo "    - 20GB gp3 EBS: ~\$1.60/mo"
+echo "    - ${DISK_SIZE}GB gp3 EBS: ~\$$(echo "scale=2; $DISK_SIZE * 0.08" | bc 2>/dev/null || echo "?.??")/mo"
 echo "    - Public IPv4: ~\$3.65/mo"
 echo ""
 echo "  Resources created (tagged Project=$TAG):"
@@ -242,7 +260,7 @@ INSTANCE_ID=$(aws ec2 run-instances \
     --key-name "$KEY_NAME" \
     --security-group-ids "$SG_ID" \
     --user-data "$USER_DATA" \
-    --block-device-mappings 'DeviceName=/dev/sda1,Ebs={VolumeSize=20,VolumeType=gp3,DeleteOnTermination=true}' \
+    --block-device-mappings "DeviceName=/dev/sda1,Ebs={VolumeSize=${DISK_SIZE},VolumeType=gp3,DeleteOnTermination=true}" \
     --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$INSTANCE_NAME},{Key=Project,Value=$TAG}]" \
     --query 'Instances[0].InstanceId' \
     --output text)
@@ -319,6 +337,8 @@ INSTANCE_TYPE=$INSTANCE_TYPE
 INSTANCE_NAME=$INSTANCE_NAME
 SSH_KEY=$KEY_FILE
 SG_ID=$SG_ID
+NUM_USERS=$NUM_USERS
+DISK_SIZE=$DISK_SIZE
 EOF
 
 echo ""
