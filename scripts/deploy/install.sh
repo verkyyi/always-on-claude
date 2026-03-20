@@ -27,7 +27,20 @@ die()   { echo "ERROR: $*" >&2; exit 1; }
 
 LOCAL_BUILD="${LOCAL_BUILD:-0}"
 NON_INTERACTIVE="${NON_INTERACTIVE:-0}"
-IMAGE="ghcr.io/verkyyi/always-on-claude:latest"
+
+# Load config if available (repo may not be cloned yet on first run)
+_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "$_SCRIPT_DIR/load-config.sh" ]]; then
+    # shellcheck disable=SC1091
+    source "$_SCRIPT_DIR/load-config.sh"
+else
+    # Fallback defaults when running via curl pipe before repo exists
+    : "${DOCKER_IMAGE:=ghcr.io/verkyyi/always-on-claude:latest}"
+    : "${DEV_ENV:=$HOME/dev-env}"
+    : "${PROJECTS_DIR:=$HOME/projects}"
+    : "${CONTAINER_NAME:=claude-dev}"
+    IMAGE="$DOCKER_IMAGE"
+fi
 
 # Wrap sudo: no-op when already root, real sudo otherwise
 if [[ $EUID -eq 0 ]]; then
@@ -258,7 +271,7 @@ sudo systemctl daemon-reload
 info "Repository"
 step="git clone/pull"
 
-DEV_ENV="$HOME/dev-env"
+# DEV_ENV is set by load-config.sh (or fallback defaults above)
 
 if [[ -d "$DEV_ENV/.git" ]]; then
     # Already a git clone — pull latest
@@ -276,6 +289,12 @@ else
     ok "Cloned to $DEV_ENV"
 fi
 
+# Re-source config now that repo exists (picks up .env if present)
+if [[ -f "$DEV_ENV/scripts/deploy/load-config.sh" ]]; then
+    # shellcheck disable=SC1091
+    source "$DEV_ENV/scripts/deploy/load-config.sh"
+fi
+
 # --- Host directories and files --------------------------------------------
 
 info "Host directories and files"
@@ -284,7 +303,7 @@ step="host directories"
 mkdir -p ~/.claude/commands
 mkdir -p ~/.claude/debug
 mkdir -p ~/.config/gh
-mkdir -p ~/projects
+mkdir -p "$PROJECTS_DIR"
 mkdir -p ~/.gitconfig.d
 
 # Critical: must exist as a FILE with valid JSON before compose up
@@ -554,8 +573,8 @@ step="verification"
 echo ""
 
 # Check container
-if run_docker docker ps --format '{{.Names}}' | grep -q "claude-dev"; then
-    ok "Container 'claude-dev' is running"
+if run_docker docker ps --format '{{.Names}}' | grep -qx "$CONTAINER_NAME"; then
+    ok "Container '$CONTAINER_NAME' is running"
 else
     echo "  WARN: Container not running"
 fi

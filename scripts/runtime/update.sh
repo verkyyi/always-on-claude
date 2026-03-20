@@ -8,7 +8,14 @@
 
 set -euo pipefail
 
-DEV_ENV="$HOME/dev-env"
+DEV_ENV="${DEV_ENV:-$HOME/dev-env}"
+
+# Load config if available
+if [[ -f "$DEV_ENV/scripts/deploy/load-config.sh" ]]; then
+    # shellcheck disable=SC1091
+    source "$DEV_ENV/scripts/deploy/load-config.sh"
+fi
+
 PENDING_FILE="$HOME/.update-pending"
 LOG_FILE="$DEV_ENV/update.log"
 

@@ -12,6 +12,14 @@
 
 set -euo pipefail
 
+# Load config if available
+_DEV_ENV="${DEV_ENV:-$HOME/dev-env}"
+if [[ -f "$_DEV_ENV/scripts/deploy/load-config.sh" ]]; then
+    # shellcheck disable=SC1091
+    source "$_DEV_ENV/scripts/deploy/load-config.sh"
+fi
+: "${PROJECTS_DIR:=$HOME/projects}"
+
 sanitize_branch() {
     echo "$1" | tr '/' '-'
 }
@@ -72,7 +80,7 @@ cmd_list_repos() {
             branch=$(git -C "$dir" branch --show-current 2>/dev/null || echo "unknown")
             echo "WORKTREE|${dir}|${branch}"
         fi
-    done < <(find "$HOME/projects" -maxdepth 3 -name ".git" \( -type d -o -type f \) 2>/dev/null | sort)
+    done < <(find "$PROJECTS_DIR" -maxdepth 3 -name ".git" \( -type d -o -type f \) 2>/dev/null | sort)
 }
 
 cmd_list_worktrees() {

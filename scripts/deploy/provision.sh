@@ -15,15 +15,25 @@
 
 set -euo pipefail
 
-# --- Config (override with env vars) ----------------------------------------
+# --- Config (from .env file, override with env vars) -------------------------
 
-INSTANCE_NAME="${INSTANCE_NAME:-claude-dev}"
-KEY_NAME="${KEY_NAME:-claude-dev-key}"
-AWS_REGION="${AWS_REGION:-$(aws configure get region 2>/dev/null || echo "us-east-1")}"
-INSTANCE_TYPE="${INSTANCE_TYPE:-t4g.small}"
-SG_NAME="${SG_NAME:-claude-dev-sg}"
-SSH_USER="${SSH_USER:-dev}"
-TAG="${TAG:-always-on-claude}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd 2>/dev/null)" || SCRIPT_DIR=""
+if [[ -n "$SCRIPT_DIR" && -f "$SCRIPT_DIR/load-config.sh" ]]; then
+    # shellcheck disable=SC1091
+    source "$SCRIPT_DIR/load-config.sh"
+else
+    # Running via curl pipe or without repo — use defaults with env var overrides
+    : "${INSTANCE_TYPE:=t4g.small}"
+    : "${AWS_REGION:=$(aws configure get region 2>/dev/null || echo "us-east-1")}"
+    : "${VOLUME_SIZE:=20}"
+    : "${INSTANCE_NAME:=claude-dev}"
+    : "${KEY_NAME:=claude-dev-key}"
+    : "${SG_NAME:=claude-dev-sg}"
+    : "${SSH_USER:=dev}"
+    : "${PROJECT_TAG:=always-on-claude}"
+    : "${CONTAINER_NAME:=claude-dev}"
+    TAG="$PROJECT_TAG"
+fi
 
 # --- Helpers ----------------------------------------------------------------
 
@@ -42,7 +52,7 @@ echo ""
 echo "  What this will do:"
 echo "    1. Create an SSH key pair in AWS (if not exists)"
 echo "    2. Create a security group allowing SSH from anywhere"
-echo "    3. Launch an EC2 instance ($INSTANCE_TYPE, 20GB)"
+echo "    3. Launch an EC2 instance ($INSTANCE_TYPE, ${VOLUME_SIZE}GB)"
 echo "    4. Set up Claude Code workspace (~40s with pre-built AMI)"
 echo ""
 echo "  Prerequisites:"
@@ -51,7 +61,7 @@ echo "    - An AWS account (this will create billable resources)"
 echo ""
 echo "  Cost:"
 echo "    - $INSTANCE_TYPE in $AWS_REGION: ~\$0.017/hr (~\$12/mo if left running)"
-echo "    - 20GB gp3 EBS: ~\$1.60/mo"
+echo "    - ${VOLUME_SIZE}GB gp3 EBS: ~\$1.60/mo"
 echo "    - Public IPv4: ~\$3.65/mo"
 echo ""
 echo "  Resources created (tagged Project=$TAG):"
@@ -239,7 +249,7 @@ INSTANCE_ID=$(aws ec2 run-instances \
     --key-name "$KEY_NAME" \
     --security-group-ids "$SG_ID" \
     --user-data "$USER_DATA" \
-    --block-device-mappings 'DeviceName=/dev/sda1,Ebs={VolumeSize=20,VolumeType=gp3,DeleteOnTermination=true}' \
+    --block-device-mappings "DeviceName=/dev/sda1,Ebs={VolumeSize=$VOLUME_SIZE,VolumeType=gp3,DeleteOnTermination=true}" \
     --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$INSTANCE_NAME},{Key=Project,Value=$TAG}]" \
     --query 'Instances[0].InstanceId' \
     --output text)
@@ -307,8 +317,8 @@ ssh -o StrictHostKeyChecking=no -o BatchMode=yes -i "$KEY_FILE" "${SSH_USER}@${P
 echo "  Waiting for container..."
 for i in $(seq 1 60); do
     if ssh -o StrictHostKeyChecking=no -o BatchMode=yes -i "$KEY_FILE" "${SSH_USER}@${PUBLIC_IP}" \
-        "sudo docker ps --format '{{.Names}}' 2>/dev/null | grep -q claude-dev" 2>/dev/null; then
-        ok "Container 'claude-dev' is running"
+        "sudo docker ps --format '{{.Names}}' 2>/dev/null | grep -qx '$CONTAINER_NAME'" 2>/dev/null; then
+        ok "Container '$CONTAINER_NAME' is running"
         break
     fi
     if [[ $i -eq 60 ]]; then
@@ -319,10 +329,11 @@ for i in $(seq 1 60); do
 done
 
 # Write .env.workspace for slash commands that detect workspace type
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+# Skip when running via curl pipe (no local repo to write into)
+if [[ -n "$SCRIPT_DIR" ]]; then
+    REPO_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-cat > "$REPO_DIR/.env.workspace" <<EOF
+    cat > "$REPO_DIR/.env.workspace" <<EOF
 # Provisioned $(date +%Y-%m-%d)
 INSTANCE_ID=$INSTANCE_ID
 PUBLIC_IP=$PUBLIC_IP
@@ -332,6 +343,7 @@ INSTANCE_NAME=$INSTANCE_NAME
 SSH_KEY=$KEY_FILE
 SG_ID=$SG_ID
 EOF
+fi
 
 echo ""
 echo "============================================"
