@@ -22,6 +22,8 @@ fi
 if [[ ! -f ~/.workspace-initialized ]]; then
     if [[ -x ~/dev-env/scripts/runtime/onboarding.sh ]]; then
         exec bash ~/dev-env/scripts/runtime/onboarding.sh
+    else
+        echo "  ⚠ onboarding.sh not found or not executable — skipping first-run setup"
     fi
 fi
 

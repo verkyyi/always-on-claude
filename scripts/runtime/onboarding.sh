@@ -9,9 +9,13 @@
 
 set -euo pipefail
 
+die() { echo "ERROR: $*" >&2; exit 1; }
+
 COMPOSE_DIR="$HOME/dev-env"
 CONTAINER_NAME="claude-dev"
 ONBOARDING_PROMPT="$COMPOSE_DIR/scripts/runtime/onboarding-prompt.txt"
+
+[[ -f "$ONBOARDING_PROMPT" ]] || die "Onboarding prompt not found: $ONBOARDING_PROMPT"
 
 # Start container if not running
 if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
