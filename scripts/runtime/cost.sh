@@ -12,7 +12,7 @@ set -euo pipefail
 # --- Helpers ----------------------------------------------------------------
 
 info()  { echo ""; echo "=== $* ==="; }
-ok()    { echo "  $*"; }
+ok()    { echo "  OK: $*"; }
 die()   { echo "ERROR: $*" >&2; exit 1; }
 
 # --- EC2 metadata -----------------------------------------------------------
@@ -201,8 +201,8 @@ echo ""
 echo "  --- Total Estimate ---"
 if [[ "$TOTAL_MONTHLY" != "unknown" ]]; then
     echo "  Monthly:      ~\$$TOTAL_MONTHLY/mo (always-on)"
-    STOPPED_MONTHLY=$(awk "BEGIN {printf \"%.2f\", $TOTAL_EBS * 0.08}")
-    echo "  If stopped:   ~\$$STOPPED_MONTHLY/mo (storage only)"
+    STOPPED_MONTHLY=$(awk "BEGIN {printf \"%.2f\", $TOTAL_EBS * 0.08 + 3.65}")
+    echo "  If stopped:   ~\$$STOPPED_MONTHLY/mo (storage + IPv4)"
     if [[ "$HOURLY" != "unknown" ]]; then
         HALF_MONTHLY=$(awk "BEGIN {printf \"%.2f\", ($HOURLY + $IPV4_HOURLY) * 365 + $TOTAL_EBS * 0.08}")
         echo "  With auto-stop (12h/day): ~\$$HALF_MONTHLY/mo"

@@ -42,6 +42,10 @@ if [[ -z "$INSTANCE_ID" ]]; then
     die "Could not reach EC2 metadata. Are you running on an EC2 instance?"
 fi
 
+if [[ -z "$REGION" ]]; then
+    die "Could not determine AWS region from instance metadata"
+fi
+
 CRON_TAG="# auto-stop-claude"
 RULE_NAME="auto-start-claude-${INSTANCE_ID}"
 
@@ -152,17 +156,19 @@ do_remove() {
     # Remove EventBridge rule
     if aws events describe-rule --region "$REGION" --name "$RULE_NAME" &>/dev/null; then
         # Remove targets first
-        local targets
-        targets=$(aws events list-targets-by-rule \
+        local targets_text
+        targets_text=$(aws events list-targets-by-rule \
             --region "$REGION" \
             --rule "$RULE_NAME" \
             --query 'Targets[].Id' \
             --output text 2>/dev/null || true)
-        if [[ -n "$targets" ]]; then
+        if [[ -n "$targets_text" ]]; then
+            local target_arr
+            mapfile -t target_arr < <(printf '%s\n' $targets_text)
             aws events remove-targets \
                 --region "$REGION" \
                 --rule "$RULE_NAME" \
-                --ids $targets >/dev/null
+                --ids "${target_arr[@]}" >/dev/null
         fi
         aws events delete-rule \
             --region "$REGION" \
@@ -293,7 +299,6 @@ POLICY
         role_arn=$(aws iam get-role --role-name "$role_name" --query 'Role.Arn' --output text 2>/dev/null)
 
         # Add the EC2 start target
-        local target_input="{\"Instances\":[\"$INSTANCE_ID\"]}"
         aws events put-targets \
             --region "$REGION" \
             --rule "$RULE_NAME" \
