@@ -38,7 +38,7 @@ Wants=network-online.target
 Type=oneshot
 User=$RUN_USER
 Environment=HOME=$RUN_HOME
-ExecStart=/bin/bash $RUN_DEV_ENV/scripts/runtime/update.sh
+ExecStart=/bin/bash "$RUN_DEV_ENV/scripts/runtime/update.sh"
 EOF
 
 # Create timer unit
