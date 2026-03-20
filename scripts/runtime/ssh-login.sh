@@ -15,7 +15,12 @@
 
 if [[ -f ~/.update-pending ]]; then
     echo ""
-    echo "  Updates available — run /update in Claude to apply."
+    if grep -q "restart_pending=" ~/.update-pending 2>/dev/null; then
+        echo "  Restart pending — a new image is ready. Container will restart when sessions end."
+        echo "  Or run: bash ~/dev-env/scripts/runtime/rolling-update.sh --force"
+    else
+        echo "  Updates available — run /update in Claude to apply."
+    fi
 fi
 
 if [[ -x ~/dev-env/scripts/runtime/start-claude.sh ]]; then

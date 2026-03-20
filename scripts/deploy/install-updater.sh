@@ -1,7 +1,9 @@
 #!/bin/bash
-# install-updater.sh — Install systemd timer for periodic repo updates.
+# install-updater.sh — Install systemd timer for periodic rolling updates.
 #
-# Creates a system-level timer that runs update.sh every 6 hours.
+# Creates a system-level timer that runs rolling-update.sh every 6 hours.
+# The rolling updater pulls changes, classifies them, and applies updates
+# without interrupting active Claude Code sessions.
 # Idempotent — safe to re-run.
 
 set -euo pipefail
@@ -30,7 +32,7 @@ info "Auto-updater (systemd timer)"
 # Create service unit
 cat <<EOF | sudo tee /etc/systemd/system/${SERVICE_NAME}.service >/dev/null
 [Unit]
-Description=Pull latest always-on-claude updates
+Description=Rolling update for always-on-claude (zero-downtime)
 After=network-online.target
 Wants=network-online.target
 
@@ -38,7 +40,7 @@ Wants=network-online.target
 Type=oneshot
 User=$RUN_USER
 Environment=HOME=$RUN_HOME
-ExecStart=/bin/bash $RUN_HOME/dev-env/scripts/runtime/update.sh
+ExecStart=/bin/bash $RUN_HOME/dev-env/scripts/runtime/rolling-update.sh
 EOF
 
 # Create timer unit
