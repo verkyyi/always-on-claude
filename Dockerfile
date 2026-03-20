@@ -51,6 +51,9 @@ WORKDIR /home/dev
 RUN curl -fsSL https://bun.sh/install | bash
 ENV PATH="/home/dev/.bun/bin:${PATH}"
 
+# uv — Python package manager, provides uvx for running MCP servers
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+
 # Shell aliases
 RUN echo '\n\
 alias cc="claude --dangerously-skip-permissions"\n\
