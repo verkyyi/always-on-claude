@@ -193,17 +193,25 @@ configure_caddy() {
     local domain="${name}.${WORKSPACE_ID}.${WORKSPACE_DOMAIN}"
     local caddy_config
 
+    # Determine proxy upstream: bridge mode (Mac) must use host.docker.internal
+    # because 127.0.0.1 resolves to Caddy's own container loopback, not the host
+    local proxy_host="127.0.0.1"
+    if [[ "${WORKSPACE_TYPE:-ec2}" == "local-mac" ]]; then
+        proxy_host="host.docker.internal"
+    fi
+
     # Write per-app Caddy config snippet
     # These are imported by the main Caddyfile via `import /etc/caddy/apps/*`
     caddy_config="@${name} host ${domain}
 handle @${name} {
-	reverse_proxy 127.0.0.1:${port}
+	reverse_proxy ${proxy_host}:${port}
 }
 "
 
     # Write to the caddy-apps volume via docker cp
     local tmpfile
     tmpfile=$(mktemp)
+    trap 'rm -f "$tmpfile"' EXIT
     echo "$caddy_config" > "$tmpfile"
 
     docker cp "$tmpfile" "caddy:/etc/caddy/apps/${name}.caddy" 2>/dev/null || {
@@ -219,6 +227,7 @@ handle @${name} {
         docker cp "$tmpfile" "caddy:/etc/caddy/apps/${name}.caddy"
     }
     rm -f "$tmpfile"
+    trap - EXIT
 
     # Reload Caddy config
     docker exec caddy caddy reload --config /etc/caddy/Caddyfile 2>/dev/null || \
@@ -278,7 +287,7 @@ cmd_deploy() {
 
     # Default app name from directory
     if [[ -z "$name" ]]; then
-        name=$(basename "$dir" | tr '[:upper:]' '[:lower:]' | tr ' ._' '---' | sed 's/[^a-z0-9-]//g')
+        name=$(basename "$dir" | tr '[:upper:]' '[:lower:]' | tr ' ._' '---' | sed 's/[^a-z0-9-]//g' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')
     fi
 
     [[ -z "$name" ]] && die "Could not determine app name"
