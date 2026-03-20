@@ -60,16 +60,14 @@ if [[ -n "${TOKEN:-}" ]]; then
     INSTANCE_ID=$(curl -s --connect-timeout 2 \
         -H "X-aws-ec2-metadata-token: $TOKEN" \
         "http://169.254.169.254/latest/meta-data/instance-id" 2>/dev/null) || true
-    AZ=$(curl -s --connect-timeout 2 \
-        -H "X-aws-ec2-metadata-token: $TOKEN" \
-        "http://169.254.169.254/latest/meta-data/placement/availability-zone" 2>/dev/null) || true
 fi
 
 # Fall back to .env.workspace
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ -z "${INSTANCE_ID:-}" ]]; then
-    if [[ -f "$HOME/dev-env/.env.workspace" ]]; then
+    if [[ -f "$SCRIPT_DIR/../../.env.workspace" ]]; then
         # shellcheck source=/dev/null
-        source "$HOME/dev-env/.env.workspace"
+        source "$SCRIPT_DIR/../../.env.workspace"
     elif [[ -f ".env.workspace" ]]; then
         # shellcheck source=/dev/null
         source ".env.workspace"
