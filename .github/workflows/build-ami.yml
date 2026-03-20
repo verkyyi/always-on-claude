@@ -17,6 +17,10 @@ on:
   # Manual trigger
   workflow_dispatch:
 
+concurrency:
+  group: build-ami
+  cancel-in-progress: true
+
 env:
   AWS_REGION: us-east-1
   INSTANCE_TYPE: t3.medium
