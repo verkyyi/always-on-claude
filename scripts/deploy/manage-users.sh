@@ -247,7 +247,6 @@ services:
       - ${user_home}/projects:/home/dev/projects
       - ${user_home}/.config/gh:/home/dev/.config/gh
       - ${user_home}/.ssh:/home/dev/.ssh
-      - ${user_home}/.ssh/known_hosts:/home/dev/.ssh/known_hosts
     environment:
       - NODE_ENV=development
     network_mode: host
