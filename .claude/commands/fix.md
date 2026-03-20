@@ -33,11 +33,7 @@ Find failing tests, fix them, and commit. Minimize back-and-forth — act autono
    - Fix the issues
    - Re-run the tests to confirm the fix
 
-5. Once tests pass, commit the fix:
-   ```bash
-   git add -A
-   git commit -m "Fix failing tests"
-   ```
+5. Once tests pass, stage only the files you changed and commit with a descriptive message explaining what was actually fixed.
 
 6. Report what was fixed in 1-2 sentences.
 
