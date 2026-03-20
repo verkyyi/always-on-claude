@@ -16,12 +16,24 @@ WORKTREE_HELPER="$COMPOSE_DIR/scripts/runtime/worktree-helper.sh"
 MANAGER_PROMPT="$COMPOSE_DIR/scripts/runtime/manager-prompt.txt"
 CONTAINER_PROJECTS="/home/dev/projects"
 
+# Detect workspace type (default to ec2 for backward compatibility)
+WORKSPACE_TYPE="ec2"
+if [[ -f "$COMPOSE_DIR/.env.workspace" ]]; then
+    source "$COMPOSE_DIR/.env.workspace" 2>/dev/null || true
+fi
+
+# Build compose command based on workspace type
+COMPOSE_CMD=(docker compose)
+if [[ "$WORKSPACE_TYPE" == "local-mac" ]]; then
+    COMPOSE_CMD=(docker compose -f docker-compose.yml -f docker-compose.mac.yml)
+fi
+
 # Start container if not running
 if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
     echo "Container not running. Starting..."
-    cd "$COMPOSE_DIR" && docker compose up -d
+    cd "$COMPOSE_DIR" && "${COMPOSE_CMD[@]}" up -d
     sleep 2
-    docker compose exec -u root dev bash -c \
+    "${COMPOSE_CMD[@]}" exec -u root dev bash -c \
         "chown -R dev:dev /home/dev/projects" 2>/dev/null || true
 fi
 
