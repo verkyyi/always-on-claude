@@ -73,6 +73,16 @@ CI/CD:
 
 Add-ons (slash commands — live in .claude/commands/, auto-discovered):
   .claude/commands/provision.md        — Slash command: orchestrates full AWS provisioning via Claude
+  .claude/commands/provision-local.md  — Slash command: orchestrates local Mac setup via Claude
+  .claude/commands/destroy-local.md    — Slash command: tears down local Mac workspace
+
+Mobile-friendly slash commands (short aliases for phone use):
+  .claude/commands/s.md                — Quick status: git, PRs, instance health
+  .claude/commands/d.md                — Deploy current project
+  .claude/commands/l.md                — Show recent logs
+  .claude/commands/fix.md              — Fix failing tests and commit
+  .claude/commands/ship.md             — Merge PR, deploy, verify health
+  .claude/commands/review.md           — Summarize open PRs, approve/merge
 ```
 
 ## Bash conventions
@@ -131,6 +141,30 @@ if [[ $EUID -eq 0 ]]; then sudo() { "$@"; }; fi
 4. **Auth is the user's responsibility** — either `ANTHROPIC_API_KEY` env var (API key) or `claude login` (their own subscription). We support both, never provide either. If using API key, it must be stored securely and injected into the container. If using subscription, OAuth state persists in the `~/.claude/` bind mount.
 5. **Container hostname is fixed** (`hostname: claude-dev`) — prevents random hostnames across restarts
 6. **Git repo discovery uses `find $HOME -maxdepth 3`** — repos nested deeper won't appear in workspace picker
+
+## Mobile-friendly output
+
+When the terminal is narrow (CLAUDE_MOBILE=1 is set, or terminal width < 60 columns), optimize output for small screens:
+
+- Keep responses concise. Lead with the answer, not the reasoning.
+- For long output (logs, diffs, file contents), summarize first, ask before dumping full content.
+- Use compact single-line-per-item format for status.
+- Prefer short confirmations over multi-paragraph explanations.
+- Avoid tables wider than 50 columns.
+- Use short slash commands (`/s`, `/d`, `/l`, `/fix`, `/ship`, `/review`) — designed for mobile typing.
+
+**Mobile slash commands:**
+
+| Command | Does |
+|---------|------|
+| `/s` | Status: git state, PRs, instance health |
+| `/d` | Deploy current project |
+| `/l` | Show recent logs |
+| `/fix` | Fix failing tests and commit |
+| `/ship` | Merge PR, deploy, verify health |
+| `/review` | Summarize open PRs, approve/merge |
+
+**Permission auto-approve**: In our isolated container, broad auto-approve is pre-configured at the user settings level. This eliminates most approve/deny prompts, which is critical on mobile where every tap costs effort. This is safe in our sandboxed environment but would be risky on a personal workstation.
 
 ## Commit style
 
