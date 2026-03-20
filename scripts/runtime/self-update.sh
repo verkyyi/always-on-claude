@@ -128,6 +128,7 @@ fi
 info "Step 3/5: Docker image"
 
 IMAGE_NEEDS_UPDATE=false
+IMAGE="ghcr.io/verkyyi/always-on-claude:latest"
 
 if [[ -n "$CHANGED_FILES" ]]; then
     if echo "$CHANGED_FILES" | grep -qE '^(Dockerfile|docker-compose\.yml|docker-compose\.mac\.yml|docker-compose\.build\.yml)$'; then
@@ -136,12 +137,16 @@ if [[ -n "$CHANGED_FILES" ]]; then
     fi
 fi
 
-# Also check if the remote image is newer than what we have locally
-if [[ "$IMAGE_NEEDS_UPDATE" == "false" ]]; then
-    IMAGE="ghcr.io/verkyyi/always-on-claude:latest"
+# Always pull the latest image to check for updates
+# Compare image digests before and after pull to detect genuine updates
+local_digest_before=$(docker_cmd inspect --format='{{.Id}}' "$IMAGE" 2>/dev/null || echo "none")
+echo "  Pulling latest image..."
+docker_cmd pull "$IMAGE" 2>&1
+local_digest_after=$(docker_cmd inspect --format='{{.Id}}' "$IMAGE" 2>/dev/null || echo "none")
 
-    # Pull to check for updates (docker pull is a no-op if already latest)
-    if docker_cmd pull "$IMAGE" 2>&1 | grep -q "Downloaded newer image\|Pull complete"; then
+if [[ "$IMAGE_NEEDS_UPDATE" == "false" ]]; then
+    # No Dockerfile/compose changes — check if the remote image is newer
+    if [[ "$local_digest_before" != "$local_digest_after" ]]; then
         IMAGE_NEEDS_UPDATE=true
         echo "  Newer image available from registry"
     else
