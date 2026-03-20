@@ -89,14 +89,17 @@ cmd_list_worktrees() {
     while IFS= read -r line; do
         if [[ "$line" == "worktree "* ]]; then
             wt_path="${line#worktree }"
+            wt_branch=""  # Reset; will be set by "branch" line or left empty for detached HEAD
         elif [[ "$line" == "branch "* ]]; then
             wt_branch="${line#branch refs/heads/}"
-            # Skip the main repo itself
-            if [[ "$wt_path" != "$repo_path" ]]; then
+        elif [[ -z "$line" ]]; then
+            # Blank line = end of a worktree block
+            # Skip the main repo itself and detached HEAD worktrees
+            if [[ "$wt_path" != "$repo_path" && -n "$wt_branch" ]]; then
                 echo "${wt_path}|${wt_branch}"
             fi
         fi
-    done < <(git -C "$repo_path" worktree list --porcelain 2>/dev/null)
+    done < <(git -C "$repo_path" worktree list --porcelain 2>/dev/null; echo)
 }
 
 STALE_DAYS=7
@@ -117,7 +120,12 @@ detect_default_branch() {
 days_since_last_commit() {
     local repo_path="$1" branch="$2"
     local last_epoch
-    last_epoch=$(git -C "$repo_path" log -1 --format='%ct' "$branch" 2>/dev/null || echo "0")
+    last_epoch=$(git -C "$repo_path" log -1 --format='%ct' "$branch" 2>/dev/null || true)
+    # Empty output means no commits found — treat as active (0 days), not ancient
+    if [[ -z "$last_epoch" || "$last_epoch" -le 0 ]] 2>/dev/null; then
+        echo "0"
+        return
+    fi
     local now_epoch
     now_epoch=$(date +%s)
     echo $(( (now_epoch - last_epoch) / 86400 ))
@@ -165,11 +173,20 @@ cmd_cleanup() {
         while IFS= read -r line; do
             if [[ "$line" == "worktree "* ]]; then
                 wt_path="${line#worktree }"
+                wt_branch=""  # Reset; will be set by "branch" line or left empty for detached HEAD
             elif [[ "$line" == "branch "* ]]; then
                 wt_branch="${line#branch refs/heads/}"
+            elif [[ -z "$line" ]]; then
+                # Blank line = end of a worktree block
 
                 # Skip the main repo itself
                 if [[ "$wt_path" == "$repo_path" ]]; then
+                    continue
+                fi
+
+                # Skip detached HEAD worktrees (no branch to check)
+                if [[ -z "$wt_branch" ]]; then
+                    active+=("${wt_path} (detached HEAD)")
                     continue
                 fi
 
@@ -179,8 +196,8 @@ cmd_cleanup() {
                     if [[ "$dry_run" == true ]]; then
                         cleaned+=("${wt_path} (merged into ${default_branch}) [dry-run]")
                     else
-                        git -C "$repo_path" worktree remove "$wt_path" 2>/dev/null && \
-                            git -C "$repo_path" worktree prune 2>/dev/null
+                        git -C "$repo_path" worktree remove "$wt_path" 2>/dev/null || true
+                        git -C "$repo_path" worktree prune 2>/dev/null || true
                         cleaned+=("${wt_path} (merged into ${default_branch})")
                     fi
                 else
@@ -195,8 +212,8 @@ cmd_cleanup() {
                             if [[ "$dry_run" == true ]]; then
                                 stale+=("${wt_path} (last commit: ${age}) [would force-remove]")
                             else
-                                git -C "$repo_path" worktree remove --force "$wt_path" 2>/dev/null && \
-                                    git -C "$repo_path" worktree prune 2>/dev/null
+                                git -C "$repo_path" worktree remove --force "$wt_path" 2>/dev/null || true
+                                git -C "$repo_path" worktree prune 2>/dev/null || true
                                 cleaned+=("${wt_path} (stale, force-removed, last commit: ${age})")
                             fi
                         else
@@ -207,7 +224,7 @@ cmd_cleanup() {
                     fi
                 fi
             fi
-        done < <(git -C "$repo_path" worktree list --porcelain 2>/dev/null)
+        done < <(git -C "$repo_path" worktree list --porcelain 2>/dev/null; echo)
     done < <(find "$HOME/projects" -maxdepth 3 -name ".git" -type d 2>/dev/null | sort)
 
     # Report results
