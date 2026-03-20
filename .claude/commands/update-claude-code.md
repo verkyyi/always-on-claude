@@ -50,7 +50,7 @@ You are updating the Claude Code binary inside the container.
 
 8. Update the state file:
    ```bash
-   NEW_VERSION=$(docker exec claude-dev claude --version)
+   NEW_VERSION=$(docker exec claude-dev claude --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
    cat > ~/.claude-version-check <<EOF
    status=current
    installed=$NEW_VERSION
