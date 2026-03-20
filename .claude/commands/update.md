@@ -88,7 +88,21 @@ Use the correct form throughout this command.
 
    - **Slash commands changed** (`.claude/commands/`): Already live via bind mount — no action needed.
 
-   - **install.sh changed**: Review what was added. If new system packages or config steps were added, run those specific steps manually. Do NOT re-run the entire install script.
+   - **install.sh or install-mac.sh changed** (settings/config sections): If the diff shows changes to `~/.claude/settings.json` setup (e.g., new MCP servers), apply the same merge to the current workspace:
+     ```bash
+     # Example: merge new MCP server config into existing settings
+     SETTINGS="$HOME/.claude/settings.json"
+     DESIRED='{"mcpServers":{"context7":{"command":"npx","args":["-y","@upstash/context7-mcp"]},"fetch":{"command":"uvx","args":["mcp-server-fetch"]}}}'
+     if [[ -f "$SETTINGS" ]]; then
+       MERGED=$(jq -s '.[0] * .[1]' "$SETTINGS" <(echo "$DESIRED"))
+       echo "$MERGED" > "$SETTINGS"
+     else
+       echo "$DESIRED" | jq . > "$SETTINGS"
+     fi
+     ```
+     Adapt `DESIRED` to match whatever the install script now writes. User customizations are preserved via `jq` recursive merge.
+
+   - **install.sh changed** (other sections): Review what was added. If new system packages or config steps were added, run those specific steps manually. Do NOT re-run the entire install script.
 
    - **System user rename** (install.sh contains user rename and current user is `ubuntu`): Apply the rename directly:
      ```bash
