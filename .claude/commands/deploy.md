@@ -142,6 +142,10 @@ SG_ID=$(aws ec2 describe-security-groups --region "$REGION" --filters "Name=grou
 
 Determine architecture from instance type (t4g/m7g/c7g/etc. = arm64, otherwise x86_64).
 
+Set two architecture variables — `ARCH` for EC2 API filters and `AMI_ARCH` for Ubuntu AMI name lookups:
+- ARM instance types: `ARCH=arm64`, `AMI_ARCH=arm64`
+- x86 instance types: `ARCH=x86_64`, `AMI_ARCH=amd64`
+
 Try pre-built AMI first (tagged `Project=always-on-claude`, public, matching architecture), then fall back to stock Ubuntu 24.04:
 
 ```bash
@@ -149,7 +153,7 @@ Try pre-built AMI first (tagged `Project=always-on-claude`, public, matching arc
 aws ec2 describe-images --region "$REGION" --filters "Name=tag:Project,Values=always-on-claude" "Name=state,Values=available" "Name=is-public,Values=true" "Name=architecture,Values=${ARCH}" --query 'Images | sort_by(@, &CreationDate) | [-1].ImageId' --output text
 
 # Stock Ubuntu fallback (full install, ~90s)
-aws ec2 describe-images --owners 099720109477 --region "$REGION" --filters "Name=name,Values=ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-${ARCH}-server-*" "Name=state,Values=available" --query 'Images | sort_by(@, &CreationDate) | [-1].ImageId' --output text
+aws ec2 describe-images --owners 099720109477 --region "$REGION" --filters "Name=name,Values=ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-${AMI_ARCH}-server-*" "Name=state,Values=available" --query 'Images | sort_by(@, &CreationDate) | [-1].ImageId' --output text
 ```
 
 ### Step 6E — Launch instance
