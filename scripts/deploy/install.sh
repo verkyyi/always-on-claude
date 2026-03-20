@@ -233,7 +233,7 @@ if [[ -f "$DEV_ENV/scripts/runtime/statusline-command.sh" ]]; then
     ok "Installed statusline-command.sh"
 
     # Build desired user-scope settings
-    desired='{"permissions":{"defaultMode":"bypassPermissions"},"statusLine":{"type":"command","command":"bash /home/dev/.claude/statusline-command.sh"}}'
+    desired='{"permissions":{"defaultMode":"bypassPermissions"},"statusLine":{"type":"command","command":"bash /home/dev/.claude/statusline-command.sh"},"mcpServers":{"context7":{"command":"npx","args":["-y","@upstash/context7-mcp"]},"fetch":{"command":"uvx","args":["mcp-server-fetch"]}}}'
 
     if [[ -f ~/.claude/settings.json ]]; then
         # Merge desired keys into existing settings (existing keys win only if already correct)
