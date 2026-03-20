@@ -46,7 +46,7 @@ discover() {
 
     repos=()
     repo_paths=()
-    for entry in "${entries[@]}"; do
+    for entry in ${entries[@]+"${entries[@]}"}; do
         IFS='|' read -r kind path branch <<< "$entry"
         if [[ "$kind" == "REPO" ]]; then
             repos+=("$path|$branch")
