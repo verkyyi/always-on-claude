@@ -59,7 +59,7 @@ If the self-update script fails, or if the user wants to inspect changes manuall
 3. If there are updates, inspect what changed:
 
    ```bash
-   # The pending file contains before/after commit hashes
+   # The pending file contains before/after commit hashes and rebuild flag
    # Use them to see exactly what files changed
    cat ~/.update-pending
    ```
@@ -71,7 +71,22 @@ If the self-update script fails, or if the user wants to inspect changes manuall
    git -C ~/dev-env diff <before>..<after>
    ```
 
-4. Based on what changed, apply the appropriate updates. Common scenarios:
+4. **Pre-update backup** — Before applying any changes that require a container restart (Dockerfile, docker-compose changes), run a backup if one hasn't been taken already:
+
+   ```bash
+   # Check if update.sh already took a backup (it does this automatically for rebuilds)
+   if [[ -d ~/backups/latest ]]; then
+     echo "Backup exists:"
+     cat ~/backups/latest/manifest.txt
+   else
+     echo "No backup found — running backup now"
+     bash ~/dev-env/scripts/runtime/backup-state.sh
+   fi
+   ```
+
+   If the backup reports repos with uncommitted changes, warn the user and ask for confirmation before proceeding.
+
+5. Based on what changed, apply the appropriate updates. Common scenarios:
 
    - **Scripts changed** (`scripts/runtime/`, `scripts/deploy/`): Already live via bind mount — no action needed, just confirm.
 
@@ -91,6 +106,14 @@ If the self-update script fails, or if the user wants to inspect changes manuall
      ```
 
      If active sessions exist, warn the user and ask for confirmation before restarting.
+
+     **After container restart, restore user state:**
+
+     ```bash
+     bash ~/dev-env/scripts/runtime/restore-state.sh
+     ```
+
+     This re-installs user-added packages, verifies bind mounts, and fixes permissions.
 
    - **Statusline script changed** (`scripts/runtime/statusline-command.sh`): Re-copy to `~/.claude/`:
 
@@ -140,7 +163,7 @@ If the self-update script fails, or if the user wants to inspect changes manuall
 
    - **CLAUDE.md or docs changed**: No action needed.
 
-5. Check for Claude Code binary updates:
+6. Check for Claude Code binary updates:
 
    ```bash
    cat ~/.claude-version-check 2>/dev/null || echo "No version check data"
@@ -152,17 +175,19 @@ If the self-update script fails, or if the user wants to inspect changes manuall
    - They can run `/update-claude-code` to update the binary
    - Or set `CLAUDE_AUTO_UPDATE=1` in their environment to auto-update
 
-6. Clean up:
+7. Clean up:
 
    ```bash
    rm -f ~/.update-pending
    ```
 
-7. Summarize what was updated and any actions taken.
+8. Summarize what was updated and any actions taken. Include backup/restore status if applicable.
 
 ## Important
 
 - Never restart the container without checking for active Claude sessions first
 - If the user has active sessions and a restart is needed, explain what needs to happen and let them decide when
+- Always back up state before container restarts — update.sh does this automatically for rebuilds, but verify a backup exists
+- After a container restart, always run restore-state.sh to re-install user packages
 - For changes you're unsure about, describe what changed and ask the user what to do
 - This runs on the **host**, not inside the container
