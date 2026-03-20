@@ -28,6 +28,62 @@ if [[ "$WORKSPACE_TYPE" == "local-mac" ]]; then
     COMPOSE_CMD=(docker compose -f docker-compose.yml -f docker-compose.mac.yml)
 fi
 
+# --- Session limit helpers ---
+count_sessions() {
+    tmux list-sessions -F '#{session_name}' 2>/dev/null \
+        | grep -c '^claude-' || echo 0
+}
+
+get_max_sessions() {
+    # Env var override
+    if [[ -n "${MAX_SESSIONS:-}" ]]; then
+        echo "$MAX_SESSIONS"
+        return
+    fi
+
+    # Auto-calculate: min(memory_based, cpu_count), minimum 1
+    local total_mem_mb cpus mem_based max
+    if [[ -f /proc/meminfo ]]; then
+        total_mem_mb=$(awk '/MemTotal/ {printf "%.0f", $2/1024}' /proc/meminfo)
+    elif command -v sysctl &>/dev/null; then
+        total_mem_mb=$(sysctl -n hw.memsize 2>/dev/null | awk '{printf "%.0f", $1/1024/1024}')
+    else
+        total_mem_mb=4096
+    fi
+
+    cpus=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 2)
+    mem_based=$(( (total_mem_mb - 1024) / 650 ))
+    [[ $mem_based -lt 1 ]] && mem_based=1
+
+    max=$(( mem_based < cpus ? mem_based : cpus ))
+    [[ $max -lt 1 ]] && max=1
+    echo "$max"
+}
+
+check_session_limit() {
+    local session_name="$1"
+    # Always allow re-attaching to an existing session
+    if tmux has-session -t "$session_name" 2>/dev/null; then
+        return 0
+    fi
+    # Check limit for new sessions
+    local current max
+    current=$(count_sessions)
+    max=$(get_max_sessions)
+    if [[ $current -ge $max ]]; then
+        echo ""
+        echo "  Session limit reached ($current/$max)."
+        echo "  Each Claude session uses ~650 MB — more sessions risk OOM."
+        echo ""
+        echo "  Options:"
+        echo "    - Re-attach to an existing session (select it from the menu)"
+        echo "    - Exit a running session (Ctrl-b d to detach, then /exit inside it)"
+        echo ""
+        return 1
+    fi
+    return 0
+}
+
 # Start container if not running
 if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
     echo "Container not running. Starting..."
@@ -78,7 +134,7 @@ show_repos() {
 
     if [[ -n "$sessions" ]]; then
         echo ""
-        echo "  === Active sessions ==="
+        echo "  === Active sessions ($(count_sessions)/$(get_max_sessions)) ==="
         while IFS= read -r line; do
             echo "  $line"
         done <<< "$sessions"
@@ -129,11 +185,16 @@ launch() {
     local container_path
     container_path=$(to_container_path "$selected")
 
-    echo "  -> $selected"
-    echo ""
-
     # Create unique tmux session name
     session_name="claude-$(basename "$selected" | tr './:' '-')"
+
+    # Check session limit (allows re-attach, blocks new if at limit)
+    if ! check_session_limit "$session_name"; then
+        return 1
+    fi
+
+    echo "  -> $selected"
+    echo ""
 
     exec tmux new-session -A -s "$session_name" \
         "docker exec -it -w '$container_path' ${CONTAINER_NAME} bash -lc 'exec claude'"
@@ -142,6 +203,11 @@ launch() {
 # --- Launch Claude Code on the host (for workspace management / updates) ---
 launch_host() {
     local dir="$1"
+
+    # Check session limit (allows re-attach, blocks new if at limit)
+    if ! check_session_limit "claude-manager"; then
+        return 1
+    fi
 
     echo "  -> $dir (host)"
     echo ""
@@ -162,7 +228,7 @@ while true; do
 
     if [[ "$choice" == "m" ]]; then
         # Launch Claude on the host for workspace management and updates
-        launch_host "$COMPOSE_DIR"
+        launch_host "$COMPOSE_DIR" || continue
     elif [[ "$choice" =~ ^[0-9]+$ && "$choice" -ge 1 && "$choice" -le "${#repos[@]}" ]]; then
         IFS='|' read -r selected_path selected_branch <<< "${repos[$((choice - 1))]}"
     elif [[ -z "$choice" || "$choice" == $'\n' ]]; then
@@ -170,7 +236,7 @@ while true; do
         if [[ ${#repos[@]} -gt 0 ]]; then
             IFS='|' read -r selected_path selected_branch <<< "${repos[0]}"
         else
-            launch "$HOME/projects"
+            launch "$HOME/projects" || continue
         fi
     else
         continue
@@ -181,7 +247,7 @@ while true; do
 
     # If no worktrees, skip Layer 2 and launch directly
     if [[ ${#worktrees[@]} -eq 0 ]]; then
-        launch "$selected_path"
+        launch "$selected_path" || continue
     fi
 
     # Layer 2 loop
@@ -195,10 +261,10 @@ while true; do
             break  # Back to Layer 1
         elif [[ "$choice2" == "1" || -z "$choice2" || "$choice2" == $'\n' ]]; then
             # Main repo
-            launch "$selected_path"
+            launch "$selected_path" || continue
         elif [[ "$choice2" =~ ^[0-9]+$ && "$choice2" -ge 2 && "$choice2" -le $(( ${#worktrees[@]} + 1 )) ]]; then
             IFS='|' read -r wt_selected _ <<< "${worktrees[$((choice2 - 2))]}"
-            launch "$wt_selected"
+            launch "$wt_selected" || continue
         fi
     done
 done
