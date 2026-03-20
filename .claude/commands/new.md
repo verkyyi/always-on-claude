@@ -431,7 +431,7 @@ If repo creation fails because the name is taken, ask the user for an alternativ
 
 Check if the `/deploy` command exists:
 ```bash
-ls ~/.claude/commands/deploy.md 2>/dev/null || ls ~/dev-env/.claude/commands/deploy.md 2>/dev/null || echo "not available"
+ls ~/dev-env/.claude/commands/deploy.md 2>/dev/null || echo "not available"
 ```
 
 - If `/deploy` is available, tell the user: "Ready to deploy! Run `/deploy` to go live."
