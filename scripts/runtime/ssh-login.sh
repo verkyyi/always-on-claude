@@ -22,9 +22,9 @@ if [[ -f ~/.update-pending ]]; then
     echo "  Updates available — run /update in Claude to apply."
 fi
 
-if [[ -f /tmp/disk-warning ]]; then
+if [[ -f /run/disk-monitor.warning ]]; then
     echo ""
-    echo "  $(cat /tmp/disk-warning)"
+    echo "  $(cat /run/disk-monitor.warning)"
 fi
 
 # Resolve the dev-env path (symlink for multi-user, direct for single-user)

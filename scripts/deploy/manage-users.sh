@@ -252,14 +252,9 @@ services:
       - NODE_ENV=development
     network_mode: host
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '${cpu_limit}'
-          memory: ${mem_limit}
-        reservations:
-          cpus: '0.25'
-          memory: 512m
+    cpus: ${cpu_limit}
+    mem_limit: ${mem_limit}
+    mem_reservation: 512m
 EOF
 
     ok "Generated $compose_file"

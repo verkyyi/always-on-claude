@@ -63,9 +63,14 @@ report_per_user() {
 
 docker_cleanup() {
     log_msg "INFO" "Running Docker cleanup..."
-    local freed
-    freed=$(docker system prune -f 2>/dev/null | tail -1 || echo "unknown")
-    log_msg "INFO" "Docker cleanup: $freed"
+    # Only prune images and build cache — never touch containers.
+    # docker system prune -f would remove other users' stopped containers.
+    docker image prune -f 2>/dev/null | tail -1 | while read -r line; do
+        log_msg "INFO" "Image cleanup: $line"
+    done
+    docker builder prune -f 2>/dev/null | tail -1 | while read -r line; do
+        log_msg "INFO" "Builder cleanup: $line"
+    done
 }
 
 # --- Evaluate thresholds ----------------------------------------------------
@@ -82,11 +87,12 @@ if [[ "$usage_pct" -ge "$CRITICAL_THRESHOLD" ]]; then
     if [[ "$usage_pct_after" -ge "$CRITICAL_THRESHOLD" ]]; then
         log_msg "CRITICAL" "Still at ${usage_pct_after}% after cleanup — manual intervention needed"
 
-        # Write warning file for SSH login display
-        echo "CRITICAL: Disk usage at ${usage_pct_after}% — free space immediately" > /tmp/disk-warning
+        # Write warning file for SSH login display (root-owned, not world-writable)
+        echo "CRITICAL: Disk usage at ${usage_pct_after}% — free space immediately" > /run/disk-monitor.warning
+        chmod 644 /run/disk-monitor.warning
     else
         log_msg "INFO" "Cleaned up to ${usage_pct_after}%"
-        rm -f /tmp/disk-warning
+        rm -f /run/disk-monitor.warning
     fi
     exit 2
 
@@ -94,11 +100,12 @@ elif [[ "$usage_pct" -ge "$WARN_THRESHOLD" ]]; then
     log_msg "WARN" "Disk usage at ${usage_pct}% ($usage_human) on $MOUNT_POINT — threshold: ${WARN_THRESHOLD}%"
     report_per_user
 
-    echo "WARNING: Disk usage at ${usage_pct}% — consider freeing space" > /tmp/disk-warning
+    echo "WARNING: Disk usage at ${usage_pct}% — consider freeing space" > /run/disk-monitor.warning
+    chmod 644 /run/disk-monitor.warning
     exit 1
 
 else
     log_msg "INFO" "Disk usage OK: ${usage_pct}% ($usage_human) on $MOUNT_POINT"
-    rm -f /tmp/disk-warning
+    rm -f /run/disk-monitor.warning
     exit 0
 fi

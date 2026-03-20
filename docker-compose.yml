@@ -41,11 +41,8 @@ services:
 
     # Resource limits — configurable per container.
     # Override with CLAUDE_CPU_LIMIT and CLAUDE_MEM_LIMIT env vars.
-    deploy:
-      resources:
-        limits:
-          cpus: '${CLAUDE_CPU_LIMIT:-2.0}'
-          memory: ${CLAUDE_MEM_LIMIT:-4g}
-        reservations:
-          cpus: '0.25'
-          memory: 512m
+    # Uses Compose v2 keys (deploy.resources.limits is silently ignored
+    # without Swarm mode / --compatibility flag).
+    cpus: ${CLAUDE_CPU_LIMIT:-2.0}
+    mem_limit: ${CLAUDE_MEM_LIMIT:-4g}
+    mem_reservation: 512m
