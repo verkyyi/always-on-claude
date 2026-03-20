@@ -50,7 +50,7 @@ cat > "$PLIST" <<EOF
         <key>HOME</key>
         <string>${HOME}</string>
         <key>PATH</key>
-        <string>/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
+        <string>${HOME}/.docker/bin:/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
     </dict>
     <key>WorkingDirectory</key>
     <string>${DEV_ENV}</string>

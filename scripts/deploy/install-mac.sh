@@ -96,6 +96,12 @@ fi
 info "Docker"
 step="docker"
 
+# Docker Desktop may install CLI tools in ~/.docker/bin (newer versions)
+# or /usr/local/bin (via symlinks). Ensure both are on PATH.
+if [[ -d "$HOME/.docker/bin" ]] && [[ ":$PATH:" != *":$HOME/.docker/bin:"* ]]; then
+    export PATH="$HOME/.docker/bin:$PATH"
+fi
+
 if command -v docker &>/dev/null && docker info &>/dev/null 2>&1; then
     skip "Docker ($(docker --version))"
 elif command -v docker &>/dev/null; then
@@ -122,10 +128,35 @@ else
             ;;
         *)
             brew install --cask docker
+
+            # Remove quarantine attribute to prevent App Translocation.
+            # Without this, macOS runs Docker.app from a randomized temp path
+            # and the CLI symlinks at /usr/local/bin/docker point to a stale
+            # translocation path, causing "command not found: docker".
+            if xattr -l /Applications/Docker.app 2>/dev/null | grep -q com.apple.quarantine; then
+                echo "  Removing macOS quarantine attribute from Docker.app..."
+                xattr -d com.apple.quarantine /Applications/Docker.app
+                ok "Quarantine attribute removed"
+            fi
+
             echo ""
-            echo "  Docker Desktop installed. Please open it from Applications and complete setup."
-            echo "  Once Docker Desktop is running, re-run this script."
-            exit 0
+            echo "  Docker Desktop installed. Starting it now..."
+            open -a Docker
+
+            # Wait for Docker daemon to become ready (up to 120 seconds)
+            echo "  Waiting for Docker daemon to start (this may take a minute)..."
+            retries=0
+            while ! docker info &>/dev/null 2>&1; do
+                retries=$((retries + 1))
+                if [[ $retries -ge 60 ]]; then
+                    echo ""
+                    echo "  Docker daemon did not start within 120 seconds."
+                    echo "  Please ensure Docker Desktop is fully started, then re-run this script."
+                    exit 1
+                fi
+                sleep 2
+            done
+            ok "Docker Desktop is running"
             ;;
     esac
 fi
@@ -304,6 +335,19 @@ if ! grep -q '\.local/bin' "$ZPROFILE" 2>/dev/null; then
 else
     # shellcheck disable=SC2088
     skip "~/.local/bin already in .zprofile"
+fi
+
+# Docker Desktop CLI PATH (newer versions install here instead of /usr/local/bin)
+if ! grep -q '\.docker/bin' "$ZPROFILE" 2>/dev/null; then
+    {
+        echo ""
+        echo '# Docker Desktop CLI'
+        echo 'export PATH="$HOME/.docker/bin:$PATH"'
+    } >> "$ZPROFILE"
+    ok "Added ~/.docker/bin to PATH in .zprofile"
+else
+    # shellcheck disable=SC2088
+    skip "~/.docker/bin already in .zprofile"
 fi
 
 # ssh-login.sh integration
