@@ -158,7 +158,7 @@ cd ~/dev-env && docker compose -f docker-compose.yml -f docker-compose.mac.yml u
 
 Fix permissions:
 ```bash
-cd ~/dev-env && docker compose -f docker-compose.yml -f docker-compose.mac.yml exec -T -u root dev bash -c "chown -R dev:dev /home/dev/projects /home/dev/.claude" 2>/dev/null || true
+cd ~/dev-env && docker compose -f docker-compose.yml -f docker-compose.mac.yml exec -T -u root dev bash -c "chown dev:dev /home/dev/projects /home/dev/.claude" 2>/dev/null || true
 ```
 
 Verify:

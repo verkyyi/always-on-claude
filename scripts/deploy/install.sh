@@ -129,7 +129,7 @@ fi
 # Ensure current user is in docker group (root doesn't need this)
 if [[ $EUID -ne 0 ]] && ! id -nG "$USER" | grep -qw docker; then
     sudo usermod -aG docker "$USER"
-    ok "Added $USER to docker group (using sg for this session)"
+    ok "Added $USER to docker group (active after re-login)"
 else
     skip "Docker group membership"
 fi

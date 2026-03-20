@@ -69,13 +69,13 @@ Use the correct form throughout this command.
      For `local-mac`:
      ```bash
      cd ~/dev-env && docker compose -f docker-compose.yml -f docker-compose.mac.yml up -d
-     docker compose -f docker-compose.yml -f docker-compose.mac.yml exec -T -u root dev bash -c "chown -R dev:dev /home/dev/projects /home/dev/.claude" 2>/dev/null || true
+     docker compose -f docker-compose.yml -f docker-compose.mac.yml exec -T -u root dev bash -c "chown dev:dev /home/dev/projects /home/dev/.claude" 2>/dev/null || true
      docker image prune -f
      ```
      For `ec2` (or unset):
      ```bash
      cd ~/dev-env && sudo --preserve-env=HOME docker compose up -d
-     sudo --preserve-env=HOME docker compose exec -T -u root dev bash -c "chown -R dev:dev /home/dev/projects /home/dev/.claude" 2>/dev/null || true
+     sudo --preserve-env=HOME docker compose exec -T -u root dev bash -c "chown dev:dev /home/dev/projects /home/dev/.claude" 2>/dev/null || true
      sudo docker image prune -f
      ```
      If active sessions exist, warn the user and ask for confirmation before restarting.
