@@ -40,7 +40,7 @@ while IFS=: read -r username _ _ _ _ homedir _; do
         expiry_epoch=$(date -d "$expiry_ts" +%s 2>/dev/null || echo 0)
 
         if [[ $expiry_epoch -gt $NOW_EPOCH ]]; then
-            ((active_count++))
+            active_count=$((active_count + 1))
             continue
         fi
     fi
@@ -48,7 +48,7 @@ while IFS=: read -r username _ _ _ _ homedir _; do
     # --- User is expired — remove them ---
 
     info "Removing expired demo user: $username"
-    ((expired_count++))
+    expired_count=$((expired_count + 1))
 
     # Kill all host processes for this user
     pkill -u "$username" 2>/dev/null || true

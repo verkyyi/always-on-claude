@@ -82,7 +82,7 @@ Match Group demo
     X11Forwarding no
     AllowTcpForwarding no
     PermitTunnel no
-    ForceCommand docker exec -it -u $USER claude-dev bash -l
+    ForceCommand docker exec -it -u %u claude-dev bash -l
 SSHD
     # Create demo group if it doesn't exist
     groupadd -f demo
