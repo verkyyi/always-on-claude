@@ -19,12 +19,14 @@ set -euo pipefail
 
 REGISTRY="${HOME}/.deployed-apps.json"
 CADDY_APPS_VOLUME="caddy-apps"
-COMPOSE_DIR="${HOME}/dev-env"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+COMPOSE_DIR="$SCRIPT_DIR/../.."
 MIN_PORT=3000
 MAX_PORT=9000
 
 info()  { echo ""; echo "=== $* ==="; }
 ok()    { echo "  OK: $*"; }
+skip()  { echo "  SKIP: $* (already done)"; }
 warn()  { echo "  WARN: $*"; }
 die()   { echo "ERROR: $*" >&2; exit 1; }
 
