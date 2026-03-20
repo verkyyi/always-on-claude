@@ -20,9 +20,20 @@ ONBOARDING_PROMPT="$COMPOSE_DIR/scripts/runtime/onboarding-prompt.txt"
 # Start container if not running
 if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
     echo "  Starting container..."
-    cd "$COMPOSE_DIR" && docker compose up -d
-    sleep 2
-    docker compose exec -u root dev bash -c \
+    (cd "$COMPOSE_DIR" && docker compose up -d)
+
+    # Wait for container to be ready (up to 30s)
+    for i in $(seq 1 30); do
+        if docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
+            break
+        fi
+        if [[ $i -eq 30 ]]; then
+            die "Container failed to start within 30s"
+        fi
+        sleep 1
+    done
+
+    docker exec -u root "$CONTAINER_NAME" bash -c \
         "chown -R dev:dev /home/dev/projects" 2>/dev/null || true
 fi
 
