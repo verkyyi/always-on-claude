@@ -12,9 +12,12 @@ input=$(cat)
 
 # Extract all values in a single jq call to avoid multiple process forks
 # (this script runs on every status update)
-read -r remaining ctx_size model_id display_name <<< "$(echo "$input" | jq -r '[
+# Also compute remaining_tokens in jq to avoid bash integer truncation at small percentages
+read -r remaining remaining_tokens model_id display_name <<< "$(echo "$input" | jq -r '[
     (.context_window.remaining_percentage // ""),
-    (.context_window.context_window_size // ""),
+    (if .context_window.context_window_size and .context_window.remaining_percentage
+     then ((.context_window.context_window_size * .context_window.remaining_percentage / 100 / 1000) | floor | tostring)
+     else "" end),
     (.model.id // ""),
     (.model.display_name // "Claude")
 ] | @tsv')"
@@ -39,11 +42,7 @@ esac
 # Context percentage + absolute tokens with color
 if [[ -n "$remaining" && "$remaining" != "null" ]]; then
     pct=$(printf "%.0f" "$remaining")
-    # Calculate remaining tokens in k using bash arithmetic (avoids awk fork)
-    if [[ -n "$ctx_size" && "$ctx_size" != "null" ]]; then
-        # Integer approximation: multiply first to preserve precision, then divide
-        remaining_int=${remaining%.*}
-        remaining_tokens=$(( ctx_size * ${remaining_int:-0} / 100 / 1000 ))
+    if [[ -n "$remaining_tokens" ]]; then
         tokens="${remaining_tokens}k"
     else
         tokens=""

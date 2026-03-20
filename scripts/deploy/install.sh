@@ -20,6 +20,7 @@ trap 'if [ $? -ne 0 ]; then echo ""; echo "ERROR: Failed during: $step"; echo "F
 info()  { echo ""; echo "=== $* ==="; }
 ok()    { echo "  OK: $*"; }
 skip()  { echo "  SKIP: $* (already done)"; }
+die()   { echo "ERROR: $*" >&2; exit 1; }
 
 LOCAL_BUILD="${LOCAL_BUILD:-0}"
 NON_INTERACTIVE="${NON_INTERACTIVE:-0}"

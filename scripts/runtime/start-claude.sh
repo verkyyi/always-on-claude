@@ -35,7 +35,7 @@ if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
     echo "Container not running. Starting..."
     compose_up
     sleep 2
-    docker compose exec -u root dev bash -c \
+    docker exec -u root "$CONTAINER_NAME" bash -c \
         "chown dev:dev /home/dev/projects /home/dev/.claude" 2>/dev/null || true
 fi
 

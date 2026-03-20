@@ -25,7 +25,8 @@ AWS_REGION="${AWS_REGION:-$(aws configure get region 2>/dev/null || echo "us-eas
 KEY_NAME="${KEY_NAME:-claude-dev-key}"
 INSTANCE_TYPE="${INSTANCE_TYPE:-t3.medium}"
 TAG="always-on-claude"
-AMI_NAME="always-on-claude-$(date +%Y%m%d)"
+GIT_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "manual")
+AMI_NAME="always-on-claude-$(date +%Y%m%d)-${GIT_SHA}"
 
 # --- Helpers ----------------------------------------------------------------
 
