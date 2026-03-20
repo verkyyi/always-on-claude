@@ -88,12 +88,21 @@ pull_latest() {
         return
     fi
 
+    # Preserve any existing restart_pending marker before overwriting
+    local existing_restart=""
+    if [[ -f "$PENDING_FILE" ]] && grep -q "restart_pending=" "$PENDING_FILE" 2>/dev/null; then
+        existing_restart=$(grep "restart_pending=" "$PENDING_FILE")
+    fi
+
     # Write pending file
     {
         echo "updated=$(date -Iseconds)"
         echo "before=$before"
         echo "after=$after"
         git -C "$DEV_ENV" log --oneline "${before}..${after}"
+        if [[ -n "$existing_restart" ]]; then
+            echo "$existing_restart"
+        fi
     } > "$PENDING_FILE"
 
     echo "${before}..${after}"
@@ -305,7 +314,9 @@ git -C "$DEV_ENV" log --oneline "$range"
 echo ""
 
 # Classify changes
-eval "$(classify_changes "$range")"
+while IFS='=' read -r key val; do
+    declare "$key=$val"
+done < <(classify_changes "$range")
 
 if [[ "$CHECK_ONLY" == "true" ]]; then
     info "Dry run — changes detected"

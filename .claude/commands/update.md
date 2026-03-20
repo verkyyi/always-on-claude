@@ -46,7 +46,7 @@ Use this form throughout this command.
 
 4. If no pending file exists, pull manually and check:
    ```bash
-   bash ~/dev-env/scripts/runtime/update.sh
+   bash ~/dev-env/scripts/runtime/rolling-update.sh
    cat ~/.update-pending 2>/dev/null || echo "Already up to date"
    ```
 
