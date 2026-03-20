@@ -12,7 +12,7 @@ Always-on Claude Code workspaces where we handle the runtime — container, pers
 
 ## Lifecycle philosophy
 
-The full workspace lifecycle — **provision, setup, update, destroy** — should be **Claude Code-guided first, scripts as fallback**. Users run slash commands (`/provision`, `/destroy`) and Claude orchestrates the AWS calls, handles errors intelligently, and walks them through interactive steps. Shell scripts (`scripts/deploy/provision.sh`, `scripts/deploy/destroy.sh`, `scripts/deploy/install.sh`) exist as fallbacks for automation, CI/CD, and environments without Claude Code.
+The full workspace lifecycle — **deploy, update, destroy** — should be **Claude Code-guided first, scripts as fallback**. Users run `/deploy` (unified entry point for EC2 or local Mac) and Claude orchestrates the calls, handles errors intelligently, and walks them through interactive steps. Target-specific commands (`/provision`, `/provision-local`, `/destroy`, `/destroy-local`) are also available. Shell scripts (`scripts/deploy/provision.sh`, `scripts/deploy/destroy.sh`, `scripts/deploy/install.sh`) exist as fallbacks for automation, CI/CD, and environments without Claude Code.
 
 ## Business model: BYO Auth
 
@@ -70,6 +70,7 @@ CI/CD:
   .github/workflows/build-ami.yml      — Build and publish pre-baked AMI on image update
 
 Add-ons (slash commands — live in .claude/commands/, auto-discovered):
+  .claude/commands/deploy.md           — Slash command: unified interactive deployment (EC2 or Mac)
   .claude/commands/provision.md        — Slash command: orchestrates full AWS provisioning via Claude
 ```
 
