@@ -53,9 +53,23 @@ info "Verifying bind mounts"
 restore_ok=true
 
 check_mount() {
-    local host_path="$1" desc="$2"
+    local host_path="$1" desc="$2" critical="${3:-false}"
     if [[ -e "$host_path" ]]; then
         ok "$desc"
+    elif [[ "$critical" == "true" ]]; then
+        echo ""
+        echo "  *** CRITICAL: $desc missing: $host_path ***"
+        echo "  This is a critical bind mount path. An empty directory here will"
+        echo "  wipe existing state when the container starts."
+        echo ""
+        read -r -p "  Create empty directory and continue? [y/N] " answer
+        if [[ "${answer,,}" == "y" ]]; then
+            mkdir -p "$host_path"
+            warn "Created empty $host_path — verify contents before starting container"
+        else
+            die "Aborting: critical path $host_path is missing"
+        fi
+        restore_ok=false
     else
         warn "$desc missing: $host_path — creating it"
         mkdir -p "$host_path"
@@ -63,9 +77,9 @@ check_mount() {
     fi
 }
 
-check_mount "$HOME/.claude" "Claude config dir"
+check_mount "$HOME/.claude" "Claude config dir" true
 check_mount "$HOME/.config/gh" "GitHub CLI config"
-check_mount "$HOME/projects" "Projects directory"
+check_mount "$HOME/projects" "Projects directory" true
 check_mount "$HOME/.gitconfig.d" "Git config dir"
 
 # claude.json needs to be a file, not a directory
@@ -123,8 +137,9 @@ if [[ -s "$BACKUP_DIR/user-pip-packages.txt" ]]; then
     pip_count=$(wc -l < "$BACKUP_DIR/user-pip-packages.txt" | tr -d ' ')
     echo "  Found $pip_count pip package(s) to restore"
 
-    docker exec "$CONTAINER_NAME" bash -c \
-        "pip3 install --user --quiet $(cat "$BACKUP_DIR/user-pip-packages.txt" | tr '\n' ' ')" \
+    docker exec -i "$CONTAINER_NAME" bash -c \
+        'pip3 install --user --quiet -r /dev/stdin' \
+        < "$BACKUP_DIR/user-pip-packages.txt" \
         2>&1 | tail -5 || warn "Some pip packages failed to install"
     ok "Restored pip packages"
 else
