@@ -24,9 +24,9 @@ LABEL org.opencontainers.image.description="Always-on Claude Code workspace (por
 
 USER root
 
-# Portable-specific packages: cron/at for overnight scheduling, sudo for entrypoint
+# Portable-specific packages: cron/at for overnight scheduling, sudo/gosu for entrypoint
 RUN apt-get update && apt-get install -y \
-    cron at sudo \
+    cron at sudo gosu \
     && rm -rf /var/lib/apt/lists/*
 
 # Passwordless sudo for dev user (entrypoint runs as root, user logs in as dev)
@@ -51,5 +51,5 @@ RUN chmod +x /home/dev/dev-env/scripts/portable/*.sh \
     /home/dev/dev-env/scripts/deploy/*.sh 2>/dev/null || true
 
 # Entrypoint runs as root (needs to start system services),
-# then the user logs in as dev
+# then drops privileges to dev via gosu before sleeping
 ENTRYPOINT ["/home/dev/dev-env/scripts/portable/entrypoint.sh"]

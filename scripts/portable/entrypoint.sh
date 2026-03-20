@@ -5,7 +5,7 @@
 # starts cron/at daemons, and keeps the container alive.
 #
 # Runs as root initially to start system services,
-# then drops to dev user for user-level setup.
+# then drops privileges to dev user via gosu.
 
 set -euo pipefail
 
@@ -117,7 +117,9 @@ if command -v tailscaled &>/dev/null; then
     # Start tailscaled in the background
     tailscaled --state=/var/lib/tailscale/tailscaled.state --tun=userspace-networking &
     TAILSCALED_PID=$!
-    sleep 2
+
+    # Wait for tailscaled to be ready (up to 10s)
+    for i in $(seq 10); do tailscale status &>/dev/null && break; sleep 1; done
 
     TS_HOSTNAME="${TS_HOSTNAME:-claude-dev}"
 
@@ -166,4 +168,9 @@ if command -v tailscale &>/dev/null && tailscale status &>/dev/null 2>&1; then
     echo ""
 fi
 
-exec sleep infinity
+# Drop privileges — the container should not idle as root
+if command -v gosu &>/dev/null; then
+    exec gosu dev sleep infinity
+else
+    exec su - dev -c 'sleep infinity'
+fi
