@@ -32,9 +32,10 @@ If `$ARGUMENTS` is provided, parse it for a subcommand:
 
 ### Step 1 — Get instance and volume info
 
-Get the instance ID from EC2 metadata (works inside the container with host networking):
+Get the instance ID from EC2 metadata using IMDSv2 (works inside the container with host networking):
 ```bash
-INSTANCE_ID=$(curl -s --connect-timeout 2 http://169.254.169.254/latest/meta-data/instance-id 2>/dev/null) || true
+TOKEN=$(curl -s --connect-timeout 2 -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 60" 2>/dev/null) || true
+INSTANCE_ID=$(curl -s --connect-timeout 2 -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-id 2>/dev/null) || true
 ```
 
 If metadata is unavailable, fall back to `.env.workspace`:

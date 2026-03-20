@@ -122,7 +122,7 @@ if [[ "$NO_PRUNE" == "false" ]]; then
         --region "$REGION" \
         --filters "Name=tag:Project,Values=$TAG" \
         --query 'Snapshots | sort_by(@, &StartTime) | reverse(@).[].SnapshotId' \
-        --output text | tr '\t' '\n')
+        --output text | tr '\t' '\n' | grep -v '^$')
 
     TOTAL=${#ALL_SNAPSHOTS[@]}
 
@@ -139,7 +139,7 @@ if [[ "$NO_PRUNE" == "false" ]]; then
             snap="${ALL_SNAPSHOTS[$i]}"
             if aws ec2 delete-snapshot --region "$REGION" --snapshot-id "$snap" 2>/dev/null; then
                 ok "Deleted $snap"
-                ((DELETED++))
+                DELETED=$((DELETED + 1))
             else
                 echo "  WARN: Could not delete $snap"
             fi
