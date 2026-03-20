@@ -125,10 +125,7 @@ cmd_create() {
     echo "    ssh -i /tmp/temp_key ${user}@${host}"
     echo ""
     echo "  One-liner (guest copies and runs):"
-    echo "    bash -c 'cat > /tmp/aoc_${id} << \"KEYEOF\""
-    cat "$key_file"
-    echo "KEYEOF"
-    echo "chmod 600 /tmp/aoc_${id} && ssh -i /tmp/aoc_${id} '${user}@${host}''"
+    echo "    echo '$(base64 -w0 < "$key_file")' | base64 -d > /tmp/aoc_${id} && chmod 600 /tmp/aoc_${id} && ssh -i /tmp/aoc_${id} ${user}@${host}"
     echo ""
     echo "  To revoke: bash ~/dev-env/scripts/runtime/share.sh revoke ${id}"
     echo "  To revoke all: bash ~/dev-env/scripts/runtime/share.sh revoke all"
@@ -206,30 +203,51 @@ cmd_revoke() {
     local temp_file
     temp_file=$(mktemp)
     local revoked=0
-    local skip_next=0
 
+    # First pass: collect IDs to revoke
+    local -a revoke_ids=()
     while IFS= read -r line; do
         if [[ "$line" == "${MARKER_PREFIX}"* ]]; then
             local id=""
             if [[ "$line" =~ id=([a-f0-9]+) ]]; then id="${BASH_REMATCH[1]}"; fi
 
             if [[ "$target" == "all" ]] || [[ "$id" == "$target" ]]; then
-                # Skip this marker and the next line (the key itself)
-                skip_next=1
+                revoke_ids+=("$id")
                 revoked=$((revoked + 1))
 
                 # Clean up the key file
                 rm -f "$TEMP_KEY_DIR/temp_${id}" "$TEMP_KEY_DIR/temp_${id}.pub"
-                continue
             fi
         fi
+    done < "$AUTHORIZED_KEYS"
 
-        if [[ "$skip_next" -eq 1 ]]; then
-            skip_next=0
-            continue
+    # Second pass: filter out marker lines and key lines matching revoked IDs
+    while IFS= read -r line; do
+        local should_skip=0
+
+        # Check if this is a marker line for a revoked ID
+        if [[ "$line" == "${MARKER_PREFIX}"* ]]; then
+            local id=""
+            if [[ "$line" =~ id=([a-f0-9]+) ]]; then id="${BASH_REMATCH[1]}"; fi
+            for rid in "${revoke_ids[@]}"; do
+                if [[ "$id" == "$rid" ]]; then
+                    should_skip=1
+                    break
+                fi
+            done
         fi
 
-        echo "$line" >> "$temp_file"
+        # Check if this is a key line with a temp-access-<id> comment
+        for rid in "${revoke_ids[@]}"; do
+            if [[ "$line" == *"temp-access-${rid}"* ]]; then
+                should_skip=1
+                break
+            fi
+        done
+
+        if [[ "$should_skip" -eq 0 ]]; then
+            echo "$line" >> "$temp_file"
+        fi
     done < "$AUTHORIZED_KEYS"
 
     mv "$temp_file" "$AUTHORIZED_KEYS"
@@ -258,8 +276,9 @@ cmd_cleanup() {
     local temp_file
     temp_file=$(mktemp)
     local cleaned=0
-    local skip_next=0
 
+    # First pass: collect expired IDs
+    local -a expired_ids=()
     while IFS= read -r line; do
         if [[ "$line" == "${MARKER_PREFIX}"* ]]; then
             local expires="" id=""
@@ -267,21 +286,42 @@ cmd_cleanup() {
             if [[ "$line" =~ id=([a-f0-9]+) ]]; then id="${BASH_REMATCH[1]}"; fi
 
             if [[ -n "$expires" ]] && [[ "$expires" -le "$now" ]]; then
-                skip_next=1
+                expired_ids+=("$id")
                 cleaned=$((cleaned + 1))
 
                 # Clean up the key file
                 rm -f "$TEMP_KEY_DIR/temp_${id}" "$TEMP_KEY_DIR/temp_${id}.pub"
-                continue
             fi
         fi
+    done < "$AUTHORIZED_KEYS"
 
-        if [[ "$skip_next" -eq 1 ]]; then
-            skip_next=0
-            continue
+    # Second pass: filter out marker lines and key lines matching expired IDs
+    while IFS= read -r line; do
+        local should_skip=0
+
+        # Check if this is a marker line for an expired ID
+        if [[ "$line" == "${MARKER_PREFIX}"* ]]; then
+            local id=""
+            if [[ "$line" =~ id=([a-f0-9]+) ]]; then id="${BASH_REMATCH[1]}"; fi
+            for eid in "${expired_ids[@]}"; do
+                if [[ "$id" == "$eid" ]]; then
+                    should_skip=1
+                    break
+                fi
+            done
         fi
 
-        echo "$line" >> "$temp_file"
+        # Check if this is a key line with a temp-access-<id> comment
+        for eid in "${expired_ids[@]}"; do
+            if [[ "$line" == *"temp-access-${eid}"* ]]; then
+                should_skip=1
+                break
+            fi
+        done
+
+        if [[ "$should_skip" -eq 0 ]]; then
+            echo "$line" >> "$temp_file"
+        fi
     done < "$AUTHORIZED_KEYS"
 
     mv "$temp_file" "$AUTHORIZED_KEYS"
