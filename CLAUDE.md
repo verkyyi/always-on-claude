@@ -69,6 +69,11 @@ scripts/runtime/ (day-to-day server use — run on SSH login or inside the conta
   start-claude.sh          — Workspace picker, auto-starts container, launches Claude in tmux
   worktree-helper.sh       — Create/remove/list git worktrees for parallel sessions
 
+scripts/demo/ (shared demo server — temporary accounts for try-before-you-buy):
+  create-demo.sh           — Create a temporary demo user (host + container + SSH key)
+  cleanup-demo.sh          — Remove expired demo users (cron job, every 15 min)
+  install-demo.sh          — One-time setup: cron, process isolation, SSH hardening
+
 CI/CD:
   .github/workflows/docker-publish.yml — Multi-arch build + push to GHCR on main
   .github/workflows/build-ami.yml      — Build and publish pre-baked AMI on image update
@@ -77,6 +82,7 @@ Add-ons (slash commands — live in .claude/commands/, auto-discovered):
   .claude/commands/provision.md        — Slash command: orchestrates full AWS provisioning via Claude
   .claude/commands/provision-local.md  — Slash command: orchestrates local Mac setup via Claude
   .claude/commands/destroy-local.md    — Slash command: tears down local Mac workspace
+  .claude/commands/demo.md             — Slash command: create/manage demo accounts on demo server
 ```
 
 ## Bash conventions

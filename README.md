@@ -145,6 +145,48 @@ Same login menu as the cloud version — press Enter for Claude Code.
 
 ---
 
+## Try It: Demo Mode
+
+Want to experience the workflow before setting up your own server? A demo server lets you try SSH login, the workspace picker, tmux persistence, and Claude Code — all without provisioning anything.
+
+### How it works
+
+A maintainer runs a shared demo instance. You get a temporary SSH account (2 hours by default) with your own isolated home directory. You bring your own Claude subscription (`claude login`) to use Claude Code.
+
+### As a demo user
+
+1. Get an SSH key and connection command from the maintainer
+2. Save the key to a file and connect:
+   ```bash
+   chmod 600 demo.pem
+   ssh -i demo.pem demo-xxxx@demo-server-ip
+   ```
+3. You'll land inside the container — run `claude login` to authenticate with your own subscription
+4. Explore: try Claude Code, tmux sessions, the dev environment
+5. Your account auto-expires after 2 hours (all files are deleted)
+
+### For maintainers: setting up a demo server
+
+On an existing always-on-claude instance:
+
+```bash
+# One-time setup (installs cleanup cron, hardens SSH)
+sudo bash scripts/demo/install-demo.sh
+
+# Create a demo account (prints SSH key + connection info)
+sudo bash scripts/demo/create-demo.sh
+
+# Custom TTL (1 hour instead of default 2)
+sudo DEMO_TTL=3600 bash scripts/demo/create-demo.sh
+
+# Or use the slash command inside Claude Code
+/demo create
+```
+
+Expired accounts are automatically cleaned up every 15 minutes via cron.
+
+---
+
 ## Slash Commands
 
 All lifecycle operations run from inside a Claude Code session in this repo:
@@ -158,6 +200,7 @@ All lifecycle operations run from inside a Claude Code session in this repo:
 | `/update` | Apply updates to a running workspace (either type) |
 | `/tailscale` | Set up Tailscale for private SSH (either type) |
 | `/workspace` | Manage repos and git worktrees |
+| `/demo` | Create/manage temporary demo accounts (demo server only) |
 
 ---
 
