@@ -302,7 +302,9 @@ result=$(pull_latest)
 if [[ "$result" == "NO_CHANGES" ]]; then
     ok "Already up to date"
     log "No updates available"
-    rm -f "$PENDING_FILE"
+    if ! grep -q "restart_pending=" "$PENDING_FILE" 2>/dev/null; then
+        rm -f "$PENDING_FILE"
+    fi
     exit 0
 fi
 
