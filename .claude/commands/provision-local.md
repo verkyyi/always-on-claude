@@ -96,6 +96,15 @@ If Docker is not installed, ask the user:
 
 If installed but not running, tell the user to start Docker Desktop / `colima start`.
 
+Fix App Translocation quarantine (Docker CLI symlinks break when macOS runs Docker from a randomized temp path):
+```bash
+if [[ -d /Applications/Docker.app ]] && xattr -p com.apple.quarantine /Applications/Docker.app 2>/dev/null; then
+    xattr -d com.apple.quarantine /Applications/Docker.app
+    echo "Removed quarantine attribute — quit and reopen Docker Desktop"
+fi
+```
+If the attribute was removed, tell the user to quit and reopen Docker Desktop before continuing.
+
 Verify docker compose works:
 ```bash
 docker compose version

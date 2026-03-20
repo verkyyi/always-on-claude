@@ -130,6 +130,17 @@ else
     esac
 fi
 
+# Fix App Translocation quarantine (breaks Docker CLI symlinks)
+if [[ -d /Applications/Docker.app ]] && xattr -p com.apple.quarantine /Applications/Docker.app &>/dev/null; then
+    echo "  Removing quarantine attribute from Docker Desktop..."
+    xattr -d com.apple.quarantine /Applications/Docker.app
+    ok "Removed quarantine attribute"
+    echo ""
+    echo "  Docker Desktop was quarantined (App Translocation)."
+    echo "  Please quit and reopen Docker Desktop, then re-run this script."
+    exit 0
+fi
+
 # Ensure docker compose plugin works
 if ! docker compose version &>/dev/null 2>&1; then
     step="docker compose"
