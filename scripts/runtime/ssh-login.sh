@@ -18,6 +18,13 @@ if [[ -f ~/.update-pending ]]; then
     echo "  Updates available — run /update in Claude to apply."
 fi
 
+# First-run onboarding: guide new users through setup before workspace picker
+if [[ ! -f ~/.workspace-initialized ]]; then
+    if [[ -x ~/dev-env/scripts/runtime/onboarding.sh ]]; then
+        exec bash ~/dev-env/scripts/runtime/onboarding.sh
+    fi
+fi
+
 if [[ -x ~/dev-env/scripts/runtime/start-claude.sh ]]; then
     exec bash ~/dev-env/scripts/runtime/start-claude.sh
 else
