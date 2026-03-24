@@ -168,7 +168,7 @@ jobs:
           echo "Running install.sh..."
           ssh -o StrictHostKeyChecking=no -o BatchMode=yes -i /tmp/build-key.pem \
             "ubuntu@${PUBLIC_IP}" \
-            "NON_INTERACTIVE=1 bash /tmp/install.sh"
+            "sudo NON_INTERACTIVE=1 bash /tmp/install.sh"
 
       - name: Clean instance for snapshot
         run: |
