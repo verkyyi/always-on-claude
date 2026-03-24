@@ -57,11 +57,10 @@ cmd_remove() {
 }
 
 cmd_list_repos() {
+    local dir branch
     # Find all .git entries (directories = repos, files = worktrees)
     while IFS= read -r git_entry; do
-        local dir
         dir=$(dirname "$git_entry")
-        local branch
 
         if [[ -d "$git_entry" ]]; then
             # Regular repo — .git is a directory

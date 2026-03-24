@@ -112,7 +112,7 @@ if [[ "$EXISTING_ID" != "None" && -n "$EXISTING_ID" ]]; then
     exit 0
 fi
 
-skip "No existing instance found — creating new one"
+ok "No existing instance found — creating new one"
 
 # --- SSH Key Pair -----------------------------------------------------------
 

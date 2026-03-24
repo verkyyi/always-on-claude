@@ -20,6 +20,7 @@ trap 'if [ $? -ne 0 ]; then echo ""; echo "ERROR: Failed during: $step"; echo "F
 info()  { echo ""; echo "=== $* ==="; }
 ok()    { echo "  OK: $*"; }
 skip()  { echo "  SKIP: $* (already done)"; }
+die()   { echo "ERROR: $*" >&2; exit 1; }
 
 LOCAL_BUILD="${LOCAL_BUILD:-0}"
 NON_INTERACTIVE="${NON_INTERACTIVE:-0}"
@@ -132,7 +133,7 @@ fi
 # Ensure current user is in docker group (root doesn't need this)
 if [[ $EUID -ne 0 ]] && ! id -nG "$USER" | grep -qw docker; then
     sudo usermod -aG docker "$USER"
-    ok "Added $USER to docker group (using sg for this session)"
+    ok "Added $USER to docker group (active after re-login)"
 else
     skip "Docker group membership"
 fi
@@ -455,7 +456,7 @@ ok "Container running"
 # Fix container permissions (volumes mount as root)
 step="fix container permissions"
 run_docker docker compose exec -T -u root dev bash -c \
-    "chown -R dev:dev /home/dev/projects /home/dev/.claude" 2>/dev/null || true
+    "chown dev:dev /home/dev/projects /home/dev/.claude" 2>/dev/null || true
 ok "Fixed container permissions"
 
 echo ""
