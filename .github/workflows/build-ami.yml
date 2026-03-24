@@ -80,11 +80,19 @@ jobs:
               --group-name "claude-dev-sg" \
               --description "SSH access for always-on Claude Code" \
               --query 'GroupId' --output text)
-            aws ec2 authorize-security-group-ingress \
-              --group-id "$SG_ID" --protocol tcp --port 22 --cidr 0.0.0.0/0 >/dev/null
             aws ec2 create-tags --resources "$SG_ID" \
               --tags Key=Project,Value=${{ env.TAG }}
           fi
+
+          # Ensure SSH rule exists (idempotent — fails silently if already present)
+          aws ec2 authorize-security-group-ingress \
+            --group-id "$SG_ID" --protocol tcp --port 22 --cidr 0.0.0.0/0 2>/dev/null || true
+
+          # Log SG rules for debugging
+          echo "Security group $SG_ID rules:"
+          aws ec2 describe-security-groups --group-ids "$SG_ID" \
+            --query 'SecurityGroups[0].IpPermissions' --output json
+
           echo "SG_ID=$SG_ID" >> "$GITHUB_ENV"
 
       - name: Launch build instance
@@ -103,20 +111,52 @@ jobs:
       - name: Wait for instance + SSH
         run: |
           aws ec2 wait instance-running --instance-ids "$INSTANCE_ID"
+
+          # Log instance networking details for debugging
+          aws ec2 describe-instances --instance-ids "$INSTANCE_ID" \
+            --query 'Reservations[0].Instances[0].{PublicIp:PublicIpAddress,SubnetId:SubnetId,VpcId:VpcId,SecurityGroups:SecurityGroups,State:State.Name}' \
+            --output json
+
           PUBLIC_IP=$(aws ec2 describe-instances \
             --instance-ids "$INSTANCE_ID" \
             --query 'Reservations[0].Instances[0].PublicIpAddress' --output text)
           echo "PUBLIC_IP=$PUBLIC_IP" >> "$GITHUB_ENV"
           echo "IP: $PUBLIC_IP"
 
+          # Check subnet internet gateway (non-fatal if IAM lacks DescribeRouteTables)
+          SUBNET_ID=$(aws ec2 describe-instances --instance-ids "$INSTANCE_ID" \
+            --query 'Reservations[0].Instances[0].SubnetId' --output text)
+          echo "Subnet: $SUBNET_ID"
+          if RT_JSON=$(aws ec2 describe-route-tables \
+            --filters "Name=association.subnet-id,Values=$SUBNET_ID" \
+            --output json 2>&1); then
+            echo "Route table: $RT_JSON"
+          else
+            echo "WARNING: Cannot query route tables (IAM permission missing): $RT_JSON"
+          fi
+
+          # Check network ACLs (non-fatal)
+          if NACL_JSON=$(aws ec2 describe-network-acls \
+            --filters "Name=association.subnet-id,Values=$SUBNET_ID" \
+            --query 'NetworkAcls[0].Entries' --output json 2>&1); then
+            echo "Network ACLs: $NACL_JSON"
+          else
+            echo "WARNING: Cannot query NACLs (IAM permission missing): $NACL_JSON"
+          fi
+
+          # Quick connectivity check
+          echo "Checking port 22 reachability..."
+          nc -z -w 5 "$PUBLIC_IP" 22 && echo "Port 22 is OPEN" || echo "Port 22 is CLOSED/FILTERED"
+
           echo "Waiting for SSH..."
           for i in $(seq 1 30); do
+            # Show SSH errors for debugging (stderr visible in logs)
             if ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -o BatchMode=yes \
-              -i /tmp/build-key.pem "ubuntu@${PUBLIC_IP}" "echo ok" 2>/dev/null; then
+              -i /tmp/build-key.pem "ubuntu@${PUBLIC_IP}" "echo ok" 2>&1; then
               echo "SSH ready"
               break
             fi
-            [ $i -eq 30 ] && { echo "SSH timeout"; exit 1; }
+            [ $i -eq 30 ] && { echo "SSH timeout after 30 attempts"; exit 1; }
             sleep 5
           done
 
@@ -128,7 +168,7 @@ jobs:
           echo "Running install.sh..."
           ssh -o StrictHostKeyChecking=no -o BatchMode=yes -i /tmp/build-key.pem \
             "ubuntu@${PUBLIC_IP}" \
-            "NON_INTERACTIVE=1 bash /tmp/install.sh"
+            "sudo NON_INTERACTIVE=1 bash /tmp/install.sh"
 
       - name: Clean instance for snapshot
         run: |
