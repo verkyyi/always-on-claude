@@ -311,7 +311,6 @@ REPO_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 cat > "$REPO_DIR/.env.workspace" <<EOF
 # Provisioned $(date +%Y-%m-%d)
-WORKSPACE_TYPE=ec2
 INSTANCE_ID=$INSTANCE_ID
 PUBLIC_IP=$PUBLIC_IP
 REGION=$AWS_REGION

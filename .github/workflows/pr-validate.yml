@@ -43,9 +43,6 @@ jobs:
       - name: Validate local build override
         run: docker compose -f docker-compose.yml -f docker-compose.build.yml config --quiet
 
-      - name: Validate Mac override
-        run: docker compose -f docker-compose.yml -f docker-compose.mac.yml config --quiet
-
   markdownlint:
     name: Markdown lint
     runs-on: ubuntu-latest

@@ -16,17 +16,7 @@ WORKTREE_HELPER="$COMPOSE_DIR/scripts/runtime/worktree-helper.sh"
 MANAGER_PROMPT="$COMPOSE_DIR/scripts/runtime/manager-prompt.txt"
 CONTAINER_PROJECTS="/home/dev/projects"
 
-# Detect workspace type (default to ec2 for backward compatibility)
-WORKSPACE_TYPE="ec2"
-if [[ -f "$COMPOSE_DIR/.env.workspace" ]]; then
-    source "$COMPOSE_DIR/.env.workspace" 2>/dev/null || true
-fi
-
-# Build compose command based on workspace type
-COMPOSE_CMD=(docker compose)
-if [[ "$WORKSPACE_TYPE" == "local-mac" ]]; then
-    COMPOSE_CMD=(docker compose -f docker-compose.yml -f docker-compose.mac.yml)
-fi
+COMPOSE_CMD=(sudo --preserve-env=HOME docker compose)
 
 # --- Session limit helpers ---
 count_sessions() {
