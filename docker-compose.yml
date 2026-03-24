@@ -34,6 +34,11 @@ services:
     environment:
       - NODE_ENV=development
 
+    # Memory limits — prevent container from consuming all host RAM
+    # Budget: 3GB container + 1GB swap burst, leaves ~600MB for host services
+    mem_limit: 3g
+    memswap_limit: 4g
+
     # Host networking for full network access (EC2 metadata, local services, etc.)
     network_mode: host
 

@@ -166,6 +166,78 @@ else
     skip "Claude Code (host)"
 fi
 
+# --- Swap -------------------------------------------------------------------
+
+info "Swap"
+step="swap setup"
+
+if swapon --show | grep -q '/swapfile'; then
+    skip "Swap already active"
+else
+    sudo fallocate -l 2G /swapfile
+    sudo chmod 600 /swapfile
+    sudo mkswap /swapfile
+    sudo swapon /swapfile
+    # Persist across reboots
+    if ! grep -q '/swapfile' /etc/fstab; then
+        echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab > /dev/null
+    fi
+    # Only swap under real pressure
+    sudo sysctl -w vm.swappiness=10 > /dev/null
+    if ! grep -q 'vm.swappiness' /etc/sysctl.d/99-swappiness.conf 2>/dev/null; then
+        echo 'vm.swappiness=10' | sudo tee /etc/sysctl.d/99-swappiness.conf > /dev/null
+    fi
+    ok "2GB swap enabled (swappiness=10)"
+fi
+
+# --- earlyoom ---------------------------------------------------------------
+
+info "earlyoom (OOM prevention)"
+step="earlyoom setup"
+
+if systemctl is-active --quiet earlyoom 2>/dev/null; then
+    skip "earlyoom already running"
+else
+    sudo apt-get install -y -qq earlyoom
+
+    # Configure: kill at 5% free RAM / 10% free swap
+    # Protect SSH/remote-access daemons, prefer killing Claude/Node
+    sudo mkdir -p /etc/default
+    cat <<'EOCONF' | sudo tee /etc/default/earlyoom > /dev/null
+EARLYOOM_ARGS="-m 5 -s 10 --avoid '(sshd|tailscaled|ssm-agent|systemd)' --prefer '(node|claude)' -r 60 --notify-send"
+EOCONF
+
+    sudo systemctl enable --now earlyoom
+    ok "earlyoom installed and running"
+fi
+
+# --- OOM score protection for critical services -----------------------------
+
+info "OOM score protection"
+step="oom score protection"
+
+for svc in ssh tailscaled amazon-ssm-agent; do
+    unit_file="/etc/systemd/system/${svc}.service.d/oom.conf"
+    if [[ -f "$unit_file" ]]; then
+        skip "OOM protection for $svc"
+        continue
+    fi
+    # Only apply if the service actually exists
+    if ! systemctl list-unit-files "${svc}.service" &>/dev/null; then
+        skip "$svc not installed"
+        continue
+    fi
+    sudo mkdir -p "/etc/systemd/system/${svc}.service.d"
+    cat <<'EOCONF' | sudo tee "$unit_file" > /dev/null
+[Service]
+OOMScoreAdjust=-900
+EOCONF
+    ok "OOM protection for $svc (score -900)"
+done
+
+# Reload systemd to pick up drop-ins
+sudo systemctl daemon-reload
+
 # --- Clone / update repo ----------------------------------------------------
 
 info "Repository"
@@ -329,6 +401,13 @@ info "Auto-updater"
 step="auto-updater setup"
 
 bash "$DEV_ENV/scripts/deploy/install-updater.sh"
+
+# --- CloudWatch memory alarms -----------------------------------------------
+
+info "CloudWatch alarms"
+step="cloudwatch alarms"
+
+bash "$DEV_ENV/scripts/deploy/install-cloudwatch-alarms.sh" || true
 
 # --- Make scripts executable ------------------------------------------------
 
