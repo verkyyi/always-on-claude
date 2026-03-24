@@ -23,7 +23,7 @@ concurrency:
 
 env:
   AWS_REGION: us-east-1
-  INSTANCE_TYPE: t3.medium
+  INSTANCE_TYPE: t4g.small
   TAG: always-on-claude
 
 jobs:
@@ -61,7 +61,7 @@ jobs:
           AMI_ID=$(aws ec2 describe-images \
             --owners 099720109477 \
             --filters \
-              "Name=name,Values=ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*" \
+              "Name=name,Values=ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-arm64-server-*" \
               "Name=state,Values=available" \
             --query 'Images | sort_by(@, &CreationDate) | [-1].ImageId' \
             --output text)
