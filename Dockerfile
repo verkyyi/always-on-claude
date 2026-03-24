@@ -59,10 +59,6 @@ ENV PATH="/home/dev/.bun/bin:${PATH}"
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Shell aliases
-RUN echo '\n\
-alias cc="claude --dangerously-skip-permissions"\n\
-alias gs="git status"\n\
-alias gl="git log --oneline -20"\n\
-' >> /home/dev/.bashrc
+RUN printf '\nalias cc="claude --dangerously-skip-permissions"\nalias gs="git status"\nalias gl="git log --oneline -20"\n' >> /home/dev/.bashrc
 
 CMD ["bash"]
