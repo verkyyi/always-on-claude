@@ -4,7 +4,7 @@ Affordable, isolated Claude Code runtime workspaces. Bring your own auth, SSH in
 
 ## Target user
 
-Solo developers on Mac. All tooling, docs, and setup flows assume a single user running macOS with AWS CLI and SSH available locally.
+Solo developers. All tooling, docs, and setup flows assume a single user with AWS CLI and SSH available locally.
 
 ## Vision
 
@@ -51,16 +51,12 @@ Root (Docker config — stays here by convention):
   Dockerfile               — Ubuntu 24.04 + Node 22 + Claude Code + dev tools (multi-arch: amd64 + arm64)
   docker-compose.yml       — Single service, pre-built image from GHCR, host networking, bind mounts
   docker-compose.build.yml — Override for local builds (docker compose -f ... -f ... build)
-  docker-compose.mac.yml   — Override for local Mac: bridge networking (replaces host mode)
 
-scripts/deploy/ (provisioning & server setup — run from Mac or during first boot):
+scripts/deploy/ (provisioning & server setup — run locally or during first boot):
   provision.sh             — AWS provisioning: direct EC2 launch, ~40s with pre-built AMI
   destroy.sh               — Tear down EC2 resources by Project tag
   install.sh               — One-line server setup for EC2/Linux (pulls pre-built image)
-  install-mac.sh           — One-line bootstrap for local Mac (Homebrew, Docker, launchd)
   install-updater.sh       — systemd timer for auto-updates (Linux/EC2)
-  install-updater-mac.sh   — launchd agent for auto-updates (macOS)
-  autostart-mac.sh         — launchd agent for container auto-start on login (macOS)
   build-ami.sh             — Build and publish pre-baked AMI (Docker + Claude Code pre-installed)
   setup-auth.sh            — Interactive auth: git config, gh auth login, claude login
 
@@ -75,8 +71,6 @@ CI/CD:
 
 Add-ons (slash commands — live in .claude/commands/, auto-discovered):
   .claude/commands/provision.md        — Slash command: orchestrates full AWS provisioning via Claude
-  .claude/commands/provision-local.md  — Slash command: orchestrates local Mac setup via Claude
-  .claude/commands/destroy-local.md    — Slash command: tears down local Mac workspace
 ```
 
 ## Bash conventions
@@ -113,33 +107,11 @@ fi
 if [[ $EUID -eq 0 ]]; then sudo() { "$@"; }; fi
 ```
 
-## Workspace types
-
-The project supports two deployment targets, tracked by `WORKSPACE_TYPE` in `.env.workspace`:
-
-| Type | Where | Networking | Init system | Slash commands |
-|------|-------|-----------|-------------|----------------|
-| `ec2` | AWS EC2 instance | `network_mode: host` | systemd | `/provision`, `/destroy` |
-| `local-mac` | Local Mac (mini/Studio) | `network_mode: bridge` | launchd | `/provision-local`, `/destroy-local` |
-
-Shared commands (`/update`, `/tailscale`, `/workspace`) branch on `WORKSPACE_TYPE` where behavior differs. Missing type defaults to `ec2` for backward compatibility.
-
-**Local Mac compose command:**
-```bash
-docker compose -f docker-compose.yml -f docker-compose.mac.yml up -d
-```
-
-**EC2 compose command:**
-```bash
-sudo --preserve-env=HOME docker compose up -d
-```
-
 ## Docker architecture
 
 - **Pre-built image** from `ghcr.io/verkyyi/always-on-claude:latest` (multi-arch: amd64 + arm64)
 - **Local build override**: `docker compose -f docker-compose.yml -f docker-compose.build.yml build`
 - **Host networking** (`network_mode: host`) — required for EC2 instance metadata / IAM roles
-- **Bridge networking** (`docker-compose.mac.yml`) — required for Docker Desktop on macOS (host mode not supported)
 - **Bind mounts** persist auth and projects across container rebuilds
 - `~/.claude.json` is mounted **separately** from `~/.claude/` (onboarding state lives in home dir root, not inside .claude/)
 - `~/.ssh` is mounted **read-only** — use HTTPS clones + `gh auth login`, not SSH git
