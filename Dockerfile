@@ -6,16 +6,19 @@ LABEL org.opencontainers.image.description="Always-on Claude Code workspace — 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PATH="/home/dev/.local/bin:${PATH}"
 
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
 # System packages — ripgrep, fzf, and zsh are required by Claude Code
-RUN apt-get update && apt-get install -y \
-    curl git tmux vim jq unzip \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl git tmux vim jq unzip ca-certificates gnupg \
     build-essential python3 python3-pip \
     ripgrep fzf zsh \
     && rm -rf /var/lib/apt/lists/*
 
 # Node.js 22.x LTS
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
-    && apt-get install -y nodejs
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
 
 # AWS CLI v2
 RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o "awscliv2.zip" \
@@ -27,7 +30,8 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
     | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
     && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
     | tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
-    && apt-get update && apt-get install -y gh
+    && apt-get update && apt-get install -y --no-install-recommends gh \
+    && rm -rf /var/lib/apt/lists/*
 
 # Non-root user (Claude Code refuses to run as root)
 RUN userdel -r ubuntu 2>/dev/null || true \
@@ -55,10 +59,6 @@ ENV PATH="/home/dev/.bun/bin:${PATH}"
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Shell aliases
-RUN echo '\n\
-alias cc="claude --dangerously-skip-permissions"\n\
-alias gs="git status"\n\
-alias gl="git log --oneline -20"\n\
-' >> /home/dev/.bashrc
+RUN printf '\nalias cc="claude --dangerously-skip-permissions"\nalias gs="git status"\nalias gl="git log --oneline -20"\n' >> /home/dev/.bashrc
 
 CMD ["bash"]
