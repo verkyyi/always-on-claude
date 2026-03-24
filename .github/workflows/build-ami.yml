@@ -123,23 +123,30 @@ jobs:
           echo "PUBLIC_IP=$PUBLIC_IP" >> "$GITHUB_ENV"
           echo "IP: $PUBLIC_IP"
 
-          # Verify subnet has route to internet gateway
+          # Check subnet internet gateway (non-fatal if IAM lacks DescribeRouteTables)
           SUBNET_ID=$(aws ec2 describe-instances --instance-ids "$INSTANCE_ID" \
             --query 'Reservations[0].Instances[0].SubnetId' --output text)
-          RT_ID=$(aws ec2 describe-route-tables \
+          echo "Subnet: $SUBNET_ID"
+          if RT_JSON=$(aws ec2 describe-route-tables \
             --filters "Name=association.subnet-id,Values=$SUBNET_ID" \
-            --query 'RouteTables[0].RouteTableId' --output text 2>/dev/null || echo "None")
-          if [[ "$RT_ID" == "None" || -z "$RT_ID" ]]; then
-            # No explicit association — check the main route table for the VPC
-            VPC_ID=$(aws ec2 describe-instances --instance-ids "$INSTANCE_ID" \
-              --query 'Reservations[0].Instances[0].VpcId' --output text)
-            RT_ID=$(aws ec2 describe-route-tables \
-              --filters "Name=vpc-id,Values=$VPC_ID" "Name=association.main,Values=true" \
-              --query 'RouteTables[0].RouteTableId' --output text)
+            --output json 2>&1); then
+            echo "Route table: $RT_JSON"
+          else
+            echo "WARNING: Cannot query route tables (IAM permission missing): $RT_JSON"
           fi
-          echo "Route table: $RT_ID"
-          aws ec2 describe-route-tables --route-table-ids "$RT_ID" \
-            --query 'RouteTables[0].Routes' --output json
+
+          # Check network ACLs (non-fatal)
+          if NACL_JSON=$(aws ec2 describe-network-acls \
+            --filters "Name=association.subnet-id,Values=$SUBNET_ID" \
+            --query 'NetworkAcls[0].Entries' --output json 2>&1); then
+            echo "Network ACLs: $NACL_JSON"
+          else
+            echo "WARNING: Cannot query NACLs (IAM permission missing): $NACL_JSON"
+          fi
+
+          # Quick connectivity check
+          echo "Checking port 22 reachability..."
+          nc -z -w 5 "$PUBLIC_IP" 22 && echo "Port 22 is OPEN" || echo "Port 22 is CLOSED/FILTERED"
 
           echo "Waiting for SSH..."
           for i in $(seq 1 30); do
