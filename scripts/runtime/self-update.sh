@@ -25,42 +25,21 @@ DEV_ENV="${DEV_ENV:-$HOME/dev-env}"
 UPDATED=()
 NEEDS_RESTART=false
 
-# Detect workspace type
-if [[ -f "$DEV_ENV/.env.workspace" ]]; then
-    # shellcheck disable=SC1091
-    source "$DEV_ENV/.env.workspace"
-fi
-WORKSPACE_TYPE="${WORKSPACE_TYPE:-ec2}"
-
 # Build the correct docker compose command
 docker_compose() {
-    case "$WORKSPACE_TYPE" in
-        local-mac)
-            (cd "$DEV_ENV" && docker compose -f docker-compose.yml -f docker-compose.mac.yml "$@")
-            ;;
-        *)
-            if [[ $EUID -eq 0 ]]; then
-                (cd "$DEV_ENV" && docker compose "$@")
-            else
-                (cd "$DEV_ENV" && sudo --preserve-env=HOME docker compose "$@")
-            fi
-            ;;
-    esac
+    if [[ $EUID -eq 0 ]]; then
+        (cd "$DEV_ENV" && docker compose "$@")
+    else
+        (cd "$DEV_ENV" && sudo --preserve-env=HOME docker compose "$@")
+    fi
 }
 
 docker_cmd() {
-    case "$WORKSPACE_TYPE" in
-        local-mac)
-            docker "$@"
-            ;;
-        *)
-            if [[ $EUID -eq 0 ]]; then
-                docker "$@"
-            else
-                sudo docker "$@"
-            fi
-            ;;
-    esac
+    if [[ $EUID -eq 0 ]]; then
+        docker "$@"
+    else
+        sudo docker "$@"
+    fi
 }
 
 # --- Preflight --------------------------------------------------------------
@@ -70,7 +49,6 @@ if [[ ! -d "$DEV_ENV/.git" ]]; then
 fi
 
 info "Self-update starting"
-echo "  Workspace type: $WORKSPACE_TYPE"
 echo "  Dev env: $DEV_ENV"
 
 # --- Step 1: Pull latest repo changes --------------------------------------
@@ -131,7 +109,7 @@ IMAGE_NEEDS_UPDATE=false
 IMAGE="ghcr.io/verkyyi/always-on-claude:latest"
 
 if [[ -n "$CHANGED_FILES" ]]; then
-    if echo "$CHANGED_FILES" | grep -qE '^(Dockerfile|docker-compose\.yml|docker-compose\.mac\.yml|docker-compose\.build\.yml)$'; then
+    if echo "$CHANGED_FILES" | grep -qE '^(Dockerfile|docker-compose\.yml|docker-compose\.build\.yml)$'; then
         IMAGE_NEEDS_UPDATE=true
         echo "  Dockerfile or compose config changed — image update needed"
     fi
@@ -267,14 +245,7 @@ fi
 
 if [[ "$NEEDS_RESTART" == "true" ]]; then
     echo "  NOTE: Container restart is pending. Run this script again or restart manually:"
-    case "$WORKSPACE_TYPE" in
-        local-mac)
-            echo "    cd ~/dev-env && docker compose -f docker-compose.yml -f docker-compose.mac.yml up -d"
-            ;;
-        *)
-            echo "    cd ~/dev-env && sudo --preserve-env=HOME docker compose up -d"
-            ;;
-    esac
+    echo "    cd ~/dev-env && sudo --preserve-env=HOME docker compose up -d"
     echo ""
 fi
 
