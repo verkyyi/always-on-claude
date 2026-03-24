@@ -72,6 +72,12 @@ info "System user"
 step="rename user"
 
 if id ubuntu &>/dev/null 2>&1 && ! id dev &>/dev/null 2>&1; then
+    # Fix sudoers FIRST — after /etc/passwd rename, sudo won't recognize
+    # the current user as "ubuntu" so it must already reference "dev"
+    if [[ -f /etc/sudoers.d/90-cloud-init-users ]]; then
+        sudo sed -i 's/ubuntu/dev/g' /etc/sudoers.d/90-cloud-init-users
+    fi
+
     # Direct file edit avoids usermod's "user is currently logged in" check
     sudo sed -i '/^ubuntu:/ { s/^ubuntu:/dev:/; s|:/home/ubuntu:|:/home/dev:| }' /etc/passwd
     sudo sed -i 's/^ubuntu:/dev:/' /etc/shadow /etc/group /etc/gshadow /etc/subuid /etc/subgid 2>/dev/null || true
@@ -79,11 +85,6 @@ if id ubuntu &>/dev/null 2>&1 && ! id dev &>/dev/null 2>&1; then
     # Move home dir — cd out first so CWD doesn't block the move
     cd /
     sudo mv /home/ubuntu /home/dev
-
-    # Fix sudoers
-    if [[ -f /etc/sudoers.d/90-cloud-init-users ]]; then
-        sudo sed -i 's/ubuntu/dev/g' /etc/sudoers.d/90-cloud-init-users
-    fi
 
     # Update current session
     export USER=dev
