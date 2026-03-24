@@ -10,16 +10,9 @@ set -euo pipefail
 
 input=$(cat)
 
-# Extract all values in a single jq call to avoid multiple process forks
-read -r remaining remaining_tokens model_id display_name <<< "$(echo "$input" | jq -r '[
-    (.context_window.remaining_percentage // ""),
-    (if .context_window.context_window_size and .context_window.remaining_percentage
-     then ((.context_window.context_window_size * .context_window.remaining_percentage / 100 / 1000) | floor | tostring)
-     else "" end),
-    (.model.id // ""),
-    (.model.display_name // "Claude")
-] | @tsv')"
-
+remaining=$(echo "$input" | jq -r '.context_window.remaining_percentage // empty')
+ctx_size=$(echo "$input" | jq -r '.context_window.context_window_size // empty')
+model_id=$(echo "$input" | jq -r '.model.id // ""')
 effort=$(jq -r '.effortLevel // "normal"' ~/.claude/settings.json 2>/dev/null || echo "normal")
 
 # ANSI color codes
@@ -34,13 +27,14 @@ case "$model_id" in
   *opus*)   model="Opus" ;;
   *sonnet*) model="Sonnet" ;;
   *haiku*)  model="Haiku" ;;
-  *)        model="$display_name" ;;
+  *)        model=$(echo "$input" | jq -r '.model.display_name // "Claude"') ;;
 esac
 
 # Context percentage + absolute tokens with color
 if [[ -n "$remaining" && "$remaining" != "null" ]]; then
     pct=$(printf "%.0f" "$remaining")
-    if [[ -n "$remaining_tokens" ]]; then
+    if [[ -n "$ctx_size" && "$ctx_size" != "null" ]]; then
+        remaining_tokens=$(awk "BEGIN {printf \"%.0f\", $ctx_size * $remaining / 100 / 1000}")
         tokens="${remaining_tokens}k"
     else
         tokens=""
