@@ -46,7 +46,7 @@ echo ""
 # Claude Code doesn't have an "auth status" command.
 # Check for credential files as a fast proxy.
 if [[ -d "$HOME/.claude" ]] && ls "$HOME/.claude/"*.json &>/dev/null 2>&1 && \
-   grep -qr "oauth" "$HOME/.claude/" 2>/dev/null; then
+   grep -qr --exclude-dir=debug "oauth" "$HOME/.claude/" 2>/dev/null; then
     echo "  SKIP: Claude Code credentials found"
 else
     echo "  Claude Code needs authentication."
@@ -82,7 +82,7 @@ fi
 
 # Claude Code
 echo -n "  Claude: "
-if grep -qr "oauth" "$HOME/.claude/" 2>/dev/null; then
+if grep -qr --exclude-dir=debug "oauth" "$HOME/.claude/" 2>/dev/null; then
     echo "credentials found"
 else
     echo "NOT AUTHENTICATED (run 'claude login' inside the container)"

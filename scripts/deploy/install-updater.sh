@@ -8,7 +8,6 @@ set -euo pipefail
 
 info()  { echo ""; echo "=== $* ==="; }
 ok()    { echo "  OK: $*"; }
-skip()  { echo "  SKIP: $* (already done)"; }
 
 # Wrap sudo
 if [[ $EUID -eq 0 ]]; then
