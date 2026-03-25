@@ -85,9 +85,25 @@ Move `AuthorizeSecurityGroupIngress` to the resource-tag IAM statement (it opera
 
 ### `tests/test-aws-lifecycle.sh`
 
-Sources `test-lib.sh` for assertions and the test runner framework. Runs 7 tests sequentially.
+Sources `test-lib.sh` for assertions only (e.g., `assert_eq`, `assert_contains`). Does **not** use `run_tests()` from test-lib.sh because:
 
-**Ordering:** `test-lib.sh` auto-discovers test functions alphabetically via `declare -F | sort`. Since tests must run in order (provision before destroy), all test names are prefixed with a two-digit number: `test_01_*`, `test_02_*`, etc.
+1. `run_tests()` resets `HOME` to a temp directory per test and deletes it in teardown. AWS lifecycle tests need state to persist across tests (SSH key files written by provision.sh, resource IDs for verification).
+2. Tests must run in strict sequential order (provision before destroy).
+
+Instead, the file implements its own minimal runner that calls test functions manually in order with a shared, stable `HOME`.
+
+**Auto-discovery guard:** `tests/run.sh` discovers files matching `test-*.sh`. To prevent the AWS tests from running during `bash tests/run.sh` (which requires no credentials), the file includes a guard at the top:
+
+```bash
+if [[ -z "${AWS_INTEGRATION:-}" ]]; then
+    echo "SKIP: AWS integration tests (set AWS_INTEGRATION=1 to run)"
+    exit 0
+fi
+```
+
+The CI workflow sets `AWS_INTEGRATION=1`. Local `run.sh` invocations skip the file automatically.
+
+**Ordering:** Test names are prefixed with a two-digit number for readability (`test_01_*`, `test_02_*`, etc.), though ordering is enforced by the manual runner, not alphabetical sort.
 
 #### Environment Setup
 
@@ -135,7 +151,8 @@ A `trap` on EXIT always runs `destroy.sh` as a failsafe regardless of test outco
 - Asserts: exits 0, outputs "Nothing to delete"
 
 **test_07_partial_provision_cleanup**
-- Creates a security group manually via `aws` CLI (simulating a mid-provision failure where SG was created but instance launch failed)
+- Note: must run after test_05 has deleted the key pair, since destroy.sh looks up key pairs by `KEY_NAME` and would otherwise hit the key pair deletion prompt
+- Creates a security group manually via `aws` CLI with `Project=aoc-ci-test` tag (simulating a mid-provision failure where SG was created but instance launch failed)
 - Runs `destroy.sh`
 - Asserts: orphaned SG is cleaned up
 
@@ -172,6 +189,7 @@ jobs:
     environment: aws-integration-test
     timeout-minutes: 10
     env:
+      AWS_INTEGRATION: '1'
       TAG: aoc-ci-test
       AWS_REGION: us-west-2
       INSTANCE_TYPE: t4g.micro
