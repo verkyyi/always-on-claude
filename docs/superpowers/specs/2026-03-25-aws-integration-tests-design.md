@@ -35,7 +35,22 @@ The IAM role used by CI is scoped with a condition `aws:RequestTag/Project = aoc
 
 ## Script Modifications
 
-### destroy.sh — Non-interactive mode
+### 1. TAG override — provision.sh + destroy.sh
+
+Both scripts hardcode `TAG="always-on-claude"` with no env var override. The entire isolation strategy depends on setting `TAG=aoc-ci-test` from the environment.
+
+**Change:** In both `provision.sh` (line 26) and `destroy.sh` (line 15), change:
+```bash
+TAG="always-on-claude"
+```
+to:
+```bash
+TAG="${TAG:-always-on-claude}"
+```
+
+This matches the pattern already used for every other config variable in these scripts.
+
+### 2. destroy.sh — Non-interactive mode
 
 `provision.sh` already detects piped input (`[[ -t 0 ]]`) and skips confirmation prompts. `destroy.sh` has two `read -rp` prompts that block in CI.
 
@@ -43,13 +58,36 @@ The IAM role used by CI is scoped with a condition `aws:RequestTag/Project = aoc
 - Main confirmation prompt: auto-proceed when stdin is not a TTY
 - Key pair deletion prompt: auto-delete when stdin is not a TTY
 
-No other scripts need changes.
+### 3. provision.sh — SKIP_SSH_WAIT flag
+
+After `aws ec2 wait instance-running` succeeds, provision.sh enters SSH and container wait loops that take up to 5.5 minutes and will `die` in CI (no SSH access from GitHub Actions runners). This is not a recommendation — it is required.
+
+**Change:** Add `SKIP_SSH_WAIT` env var to provision.sh. When set to `1`, exit successfully after the instance is confirmed running and the public IP is retrieved. Skip:
+- SSH readiness loop (lines 271-281)
+- Cloud-init wait (lines 290-291)
+- Container readiness loop (lines 295-306)
+- `.env.workspace` file write (lines 309-321)
+
+### 4. provision.sh — Tag resources at creation time
+
+The IAM policy uses `aws:RequestTag/Project` conditions on write operations. Currently:
+- `ec2:CreateSecurityGroup` does not pass tags at creation — tags are applied via a separate `create-tags` call afterward
+- `ec2:CreateKeyPair` never gets tagged at all
+- `ec2:AuthorizeSecurityGroupIngress` operates on an existing resource, not a new one
+
+**Change:** Modify provision.sh to pass `--tag-specifications` inline on:
+- `create-security-group` — add `--tag-specifications "ResourceType=security-group,Tags=[{Key=Name,Value=$SG_NAME},{Key=Project,Value=$TAG}]"` and remove the separate `create-tags` call
+- `create-key-pair` — add `--tag-specifications "ResourceType=key-pair,Tags=[{Key=Project,Value=$TAG}]"`
+
+Move `AuthorizeSecurityGroupIngress` to the resource-tag IAM statement (it operates on existing resources, not new ones).
 
 ## Test File
 
 ### `tests/test-aws-lifecycle.sh`
 
-Sources `test-lib.sh` for assertions and the test runner framework. Runs 6 tests sequentially (order matters — provision must complete before destroy verification).
+Sources `test-lib.sh` for assertions and the test runner framework. Runs 7 tests sequentially.
+
+**Ordering:** `test-lib.sh` auto-discovers test functions alphabetically via `declare -F | sort`. Since tests must run in order (provision before destroy), all test names are prefixed with a two-digit number: `test_01_*`, `test_02_*`, etc.
 
 #### Environment Setup
 
@@ -60,47 +98,52 @@ export INSTANCE_NAME="aoc-ci-${GITHUB_RUN_ID:-$(date +%s)}"
 export KEY_NAME="aoc-ci-key-${GITHUB_RUN_ID:-$(date +%s)}"
 export SG_NAME="aoc-ci-sg-${GITHUB_RUN_ID:-$(date +%s)}"
 export INSTANCE_TYPE="t4g.micro"  # smallest/cheapest for tests
+export SKIP_SSH_WAIT=1            # skip SSH/container wait loops
 ```
 
 A `trap` on EXIT always runs `destroy.sh` as a failsafe regardless of test outcome.
 
 #### Tests
 
-**test_provision_creates_instance**
-- Runs `provision.sh` (piped mode, auto-confirms)
+**test_01_provision_creates_instance**
+- Runs `provision.sh` (piped mode, auto-confirms, SKIP_SSH_WAIT=1)
 - Asserts: `aws ec2 describe-instances` finds exactly one instance with tags `Project=aoc-ci-test` and `Name=$INSTANCE_NAME` in state `running` or `pending`
+- Asserts: instance type matches `$INSTANCE_TYPE`
 
-**test_provision_creates_security_group**
-- Asserts: SG named `$SG_NAME` exists with `Project=aoc-ci-test` tag
+**test_02_provision_creates_security_group**
+- Asserts: SG named `$SG_NAME` exists with `Project=aoc-ci-test` tag (applied inline at creation via `--tag-specifications`)
 - Asserts: SG has an ingress rule for TCP port 22
 
-**test_provision_creates_key_pair**
+**test_03_provision_creates_key_pair**
 - Asserts: `aws ec2 describe-key-pairs --key-names $KEY_NAME` succeeds
+- Asserts: key pair has `Project=aoc-ci-test` tag (applied inline at creation)
 - Asserts: local `.pem` file exists at `$HOME/.ssh/$KEY_NAME.pem`
 
-**test_provision_is_idempotent**
+**test_04_provision_is_idempotent**
 - Runs `provision.sh` a second time
 - Asserts: exits 0, outputs "already running", does not create a second instance
 - Asserts: `describe-instances` still returns exactly one instance
 
-**test_destroy_terminates_resources**
+**test_05_destroy_terminates_resources**
 - Runs `destroy.sh` (non-interactive, auto-confirms)
 - Asserts: no instances with `Project=aoc-ci-test` in running/stopped/pending state
 - Asserts: no SG named `$SG_NAME` exists
+- Asserts: key pair deleted
 
-**test_destroy_is_idempotent**
+**test_06_destroy_is_idempotent**
 - Runs `destroy.sh` a second time
 - Asserts: exits 0, outputs "Nothing to delete"
 
+**test_07_partial_provision_cleanup**
+- Creates a security group manually via `aws` CLI (simulating a mid-provision failure where SG was created but instance launch failed)
+- Runs `destroy.sh`
+- Asserts: orphaned SG is cleaned up
+
 #### What Tests Skip
 
-- **SSH into the instance** — Would require the private key in CI and waiting for full boot + Docker pull (~60s+). The AWS orchestration is the test target, not the boot sequence.
+- **SSH into the instance** — Skipped via `SKIP_SSH_WAIT=1`. The AWS orchestration is the test target, not the boot sequence.
 - **User data / install.sh execution** — Runs inside the instance, already covered by smoke tests.
-- **Container readiness polling** — The `for` loop waiting for `docker ps` is skipped since we don't SSH in.
-
-To skip the SSH-dependent sections, provision.sh is run and allowed to timeout/fail on the SSH wait step. The test only asserts on AWS resource state, not SSH reachability. Alternatively, provision.sh could be modified to accept a `SKIP_SSH_WAIT=1` flag that exits after instance launch — this is cleaner and avoids a slow timeout.
-
-**Recommendation:** Add `SKIP_SSH_WAIT=1` env var to provision.sh that exits after the instance is confirmed running, skipping SSH and container wait loops.
+- **Container readiness polling** — Skipped via `SKIP_SSH_WAIT=1`.
 
 ## CI Workflows
 
@@ -113,6 +156,10 @@ on:
   schedule:
     - cron: '0 6 * * *'  # Daily at 06:00 UTC
   workflow_dispatch:       # Manual trigger
+
+concurrency:
+  group: aws-integration
+  cancel-in-progress: false
 
 permissions:
   id-token: write
@@ -128,6 +175,7 @@ jobs:
       TAG: aoc-ci-test
       AWS_REGION: us-west-2
       INSTANCE_TYPE: t4g.micro
+      SKIP_SSH_WAIT: '1'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -143,9 +191,12 @@ jobs:
 
       - name: Cleanup (always)
         if: always()
+        env:
+          TAG: aoc-ci-test
+          AWS_REGION: us-west-2
         run: |
-          export TAG=aoc-ci-test AWS_REGION=us-west-2
-          echo "y" | bash scripts/deploy/destroy.sh || true
+          # Non-interactive: stdin is not a TTY in CI, so destroy.sh auto-confirms
+          bash scripts/deploy/destroy.sh || true
 ```
 
 ### `.github/workflows/aws-cleanup-sweeper.yml`
@@ -176,13 +227,17 @@ jobs:
 
       - name: Sweep old resources
         run: |
-          # Terminate instances tagged aoc-ci-test running > 30 minutes
+          # Note: uses GNU date (-d flag) — only runs on ubuntu-latest, not macOS
+
+          CUTOFF=$(date -u -d '30 minutes ago' +%Y-%m-%dT%H:%M:%S)
+
+          # Terminate instances tagged aoc-ci-test launched > 30 minutes ago
           OLD_INSTANCES=$(aws ec2 describe-instances \
             --region us-west-2 \
             --filters \
               "Name=tag:Project,Values=aoc-ci-test" \
               "Name=instance-state-name,Values=running,stopped,pending" \
-            --query 'Reservations[].Instances[?LaunchTime<=`'"$(date -u -d '30 minutes ago' +%Y-%m-%dT%H:%M:%S)"'`].InstanceId' \
+            --query "Reservations[].Instances[?LaunchTime<=\`${CUTOFF}\`].InstanceId" \
             --output text)
 
           if [[ -n "$OLD_INSTANCES" && "$OLD_INSTANCES" != "None" ]]; then
@@ -191,7 +246,7 @@ jobs:
             aws ec2 wait instance-terminated --region us-west-2 --instance-ids $OLD_INSTANCES
           fi
 
-          # Delete orphaned security groups
+          # Delete orphaned security groups (tagged aoc-ci-test)
           SG_IDS=$(aws ec2 describe-security-groups \
             --region us-west-2 \
             --filters "Name=tag:Project,Values=aoc-ci-test" \
@@ -203,9 +258,10 @@ jobs:
               && echo "Deleted SG $sg" || echo "SG $sg still in use, skipping"
           done
 
-          # Delete orphaned key pairs (aoc-ci- prefix)
+          # Delete orphaned key pairs — only those with aoc-ci- prefix AND
+          # created > 30 min ago. Key pairs have a CreateTime field.
           aws ec2 describe-key-pairs --region us-west-2 \
-            --query 'KeyPairs[?starts_with(KeyName, `aoc-ci-`)].KeyName' \
+            --query "KeyPairs[?starts_with(KeyName, \`aoc-ci-\`) && CreateTime<=\`${CUTOFF}\`].KeyName" \
             --output text | tr '\t' '\n' | while read -r kp; do
             [[ -n "$kp" ]] && aws ec2 delete-key-pair --region us-west-2 --key-name "$kp" \
               && echo "Deleted key pair $kp"
@@ -233,7 +289,7 @@ Trust policy:
   "Statement": [{
     "Effect": "Allow",
     "Principal": {
-      "Federated": "arn:aws:iam::ACCOUNT_ID:oidc-provider/token.actions.githubusercontent.com"
+      "Federated": "arn:aws:iam::<ACCOUNT_ID>:oidc-provider/token.actions.githubusercontent.com"
     },
     "Action": "sts:AssumeRoleWithWebIdentity",
     "Condition": {
@@ -254,7 +310,7 @@ Permissions policy:
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "EC2ReadOnly",
+      "Sid": "ReadOnly",
       "Effect": "Allow",
       "Action": [
         "ec2:Describe*",
@@ -263,16 +319,12 @@ Permissions policy:
       "Resource": "*"
     },
     {
-      "Sid": "EC2WriteTestOnly",
+      "Sid": "CreateWithTestTag",
       "Effect": "Allow",
       "Action": [
         "ec2:RunInstances",
-        "ec2:TerminateInstances",
         "ec2:CreateSecurityGroup",
-        "ec2:DeleteSecurityGroup",
-        "ec2:AuthorizeSecurityGroupIngress",
         "ec2:CreateKeyPair",
-        "ec2:DeleteKeyPair",
         "ec2:CreateTags"
       ],
       "Resource": "*",
@@ -283,12 +335,26 @@ Permissions policy:
       }
     },
     {
-      "Sid": "EC2WriteExistingTestResources",
+      "Sid": "RunInstancesResources",
+      "Effect": "Allow",
+      "Action": "ec2:RunInstances",
+      "Resource": [
+        "arn:aws:ec2:*::image/*",
+        "arn:aws:ec2:*:*:subnet/*",
+        "arn:aws:ec2:*:*:network-interface/*",
+        "arn:aws:ec2:*:*:volume/*",
+        "arn:aws:ec2:*:*:security-group/*",
+        "arn:aws:ec2:*:*:key-pair/*"
+      ]
+    },
+    {
+      "Sid": "ModifyExistingTestResources",
       "Effect": "Allow",
       "Action": [
         "ec2:TerminateInstances",
         "ec2:DeleteSecurityGroup",
-        "ec2:DeleteKeyPair"
+        "ec2:DeleteKeyPair",
+        "ec2:AuthorizeSecurityGroupIngress"
       ],
       "Resource": "*",
       "Condition": {
@@ -300,6 +366,12 @@ Permissions policy:
   ]
 }
 ```
+
+**Policy notes:**
+- `CreateWithTestTag` — covers resource creation where `--tag-specifications` passes the `Project=aoc-ci-test` tag inline. This applies to `RunInstances` (instance + volume), `CreateSecurityGroup`, and `CreateKeyPair`.
+- `RunInstancesResources` — `RunInstances` requires permission on several resource types (image, subnet, etc.) that don't support tag conditions. This statement allows those passthrough resources.
+- `ModifyExistingTestResources` — covers operations on already-tagged resources: terminate, delete, and `AuthorizeSecurityGroupIngress` (which operates on an existing SG, not a new resource).
+- Key pairs: `ec2:DeleteKeyPair` does not support resource-tag conditions in all regions. If this causes issues, move it to a separate statement without conditions scoped to `arn:aws:ec2:us-west-2:*:key-pair/aoc-ci-*` by name pattern.
 
 ### 3. GitHub Configuration
 
