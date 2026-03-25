@@ -194,14 +194,13 @@ test_06_destroy_is_idempotent() {
 # it would hit the key pair deletion prompt in non-TTY mode.
 test_07_partial_provision_cleanup() {
     # Create an orphaned SG manually (simulating mid-provision failure)
-    local orphan_sg
-    orphan_sg=$(aws ec2 create-security-group \
+    aws ec2 create-security-group \
         --region "$AWS_REGION" \
         --group-name "${SG_NAME}-orphan" \
         --description "Orphaned test SG" \
         --tag-specifications "ResourceType=security-group,Tags=[{Key=Project,Value=$TAG}]" \
         --query 'GroupId' \
-        --output text)
+        --output text >/dev/null
 
     # destroy.sh should find and clean it up via Project tag
     bash "$REPO_ROOT/scripts/deploy/destroy.sh" 2>&1
