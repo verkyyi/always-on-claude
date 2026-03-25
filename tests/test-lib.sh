@@ -24,7 +24,7 @@ teardown() { :; }
 # Run all test_* functions in the calling script
 run_tests() {
     local test_funcs
-    test_funcs=$(declare -F | awk '/test_/ {print $3}' | sort)
+    test_funcs=$(declare -F | awk '$3 ~ /^test_/ {print $3}' | sort)
 
     for func in $test_funcs; do
         _CURRENT_TEST="$func"
@@ -43,10 +43,10 @@ run_tests() {
 
         if [[ "$failed" == true ]]; then
             echo "  ${_RED}FAIL${_RESET} $func"
-            ((_FAIL++))
+            ((_FAIL++)) || true
         else
             echo "  ${_GREEN}PASS${_RESET} $func"
-            ((_PASS++))
+            ((_PASS++)) || true
         fi
     done
 }
