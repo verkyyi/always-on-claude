@@ -313,6 +313,14 @@ fi
 # Slash commands now live in .claude/commands/ inside the repo
 # and are picked up automatically as project-level commands — no copy needed
 
+# --- Heartbeat hook validation ------------------------------------------------
+
+if [[ -n "${AOC_HEARTBEAT_URL:-}" && -z "${AOC_HEARTBEAT_TOKEN:-}" ]] || \
+   [[ -z "${AOC_HEARTBEAT_URL:-}" && -n "${AOC_HEARTBEAT_TOKEN:-}" ]]; then
+    echo "  WARN: Both AOC_HEARTBEAT_URL and AOC_HEARTBEAT_TOKEN must be set. Skipping heartbeat hooks."
+    unset AOC_HEARTBEAT_URL AOC_HEARTBEAT_TOKEN
+fi
+
 # Status line script — copy into ~/.claude/ so it's available inside the container
 if [[ -f "$DEV_ENV/scripts/runtime/statusline-command.sh" ]]; then
     cp "$DEV_ENV/scripts/runtime/statusline-command.sh" ~/.claude/statusline-command.sh
@@ -321,6 +329,20 @@ if [[ -f "$DEV_ENV/scripts/runtime/statusline-command.sh" ]]; then
 
     # Build desired user-scope settings
     desired='{"permissions":{"defaultMode":"bypassPermissions"},"statusLine":{"type":"command","command":"bash /home/dev/.claude/statusline-command.sh"},"mcpServers":{"context7":{"command":"npx","args":["-y","@upstash/context7-mcp"]},"fetch":{"command":"uvx","args":["mcp-server-fetch"]}}}'
+
+    # Merge heartbeat hooks if configured (use jq --arg for safe escaping)
+    if [[ -n "${AOC_HEARTBEAT_URL:-}" && -n "${AOC_HEARTBEAT_TOKEN:-}" ]]; then
+        heartbeat_hooks=$(jq -n \
+            --arg url "$AOC_HEARTBEAT_URL" \
+            --arg token "$AOC_HEARTBEAT_TOKEN" \
+            '{hooks: {
+                Notification: [{matcher: "idle_prompt", hooks: [{type: "http", url: $url, headers: {Authorization: ("Bearer " + $token)}}]}],
+                Stop: [{matcher: "", hooks: [{type: "http", url: $url, headers: {Authorization: ("Bearer " + $token)}}]}],
+                SessionStart: [{matcher: "", hooks: [{type: "http", url: $url, headers: {Authorization: ("Bearer " + $token)}}]}]
+            }}')
+        desired=$(echo "$desired" | jq --argjson hb "$heartbeat_hooks" '. * $hb')
+        ok "Added heartbeat hooks to settings"
+    fi
 
     if [[ -f ~/.claude/settings.json ]]; then
         # Merge desired keys into existing settings (existing keys win only if already correct)
@@ -358,13 +380,29 @@ tmux source-file ~/.tmux.conf 2>/dev/null && ok "Reloaded tmux config" || true
 info "SSH server config"
 step="sshd config"
 
-# Allow NO_CLAUDE env var through SSH so users can skip the login menu
-if ! grep -q 'NO_CLAUDE' /etc/ssh/sshd_config.d/custom.conf 2>/dev/null; then
-    echo 'AcceptEnv NO_CLAUDE' | sudo tee /etc/ssh/sshd_config.d/custom.conf > /dev/null
+# Build custom.conf content — single write to avoid clobber issues
+SSHD_CUSTOM="AcceptEnv NO_CLAUDE"
+
+if [[ -n "${AOC_SSH_PASSWORD:-}" ]]; then
+    SSHD_CUSTOM="${SSHD_CUSTOM}
+PasswordAuthentication yes
+KbdInteractiveAuthentication yes"
+fi
+
+# Only write if content changed (preserves idempotency)
+if [[ ! -f /etc/ssh/sshd_config.d/custom.conf ]] || \
+   ! echo "$SSHD_CUSTOM" | diff -q - /etc/ssh/sshd_config.d/custom.conf &>/dev/null; then
+    echo "$SSHD_CUSTOM" | sudo tee /etc/ssh/sshd_config.d/custom.conf > /dev/null
     sudo systemctl reload ssh
-    ok "Added AcceptEnv NO_CLAUDE to sshd"
+    ok "Wrote sshd custom config"
 else
-    skip "AcceptEnv NO_CLAUDE already configured"
+    skip "sshd custom config"
+fi
+
+# Set password if requested
+if [[ -n "${AOC_SSH_PASSWORD:-}" ]]; then
+    echo "${USER}:${AOC_SSH_PASSWORD}" | sudo chpasswd
+    ok "Set SSH password for $USER"
 fi
 
 # --- Shell integration (ssh-login.sh) ---------------------------------------
