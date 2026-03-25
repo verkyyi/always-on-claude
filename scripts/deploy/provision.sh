@@ -267,6 +267,22 @@ PUBLIC_IP=$(aws ec2 describe-instances \
 [[ -z "$PUBLIC_IP" || "$PUBLIC_IP" == "None" ]] && die "Instance has no public IP"
 ok "Running: $PUBLIC_IP"
 
+if [[ "${SKIP_SSH_WAIT:-0}" == "1" ]]; then
+    echo ""
+    echo "============================================"
+    echo "  Provisioning complete! (SSH wait skipped)"
+    echo "============================================"
+    echo ""
+    echo "  Instance:  $INSTANCE_ID"
+    echo "  Public IP: $PUBLIC_IP"
+    echo "  SSH key:   $KEY_FILE"
+    echo ""
+    echo "  Connect:"
+    echo "    ssh -i $KEY_FILE ${SSH_USER}@$PUBLIC_IP"
+    echo ""
+    exit 0
+fi
+
 echo "  Waiting for SSH..."
 for i in $(seq 1 30); do
     if ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -o BatchMode=yes \
