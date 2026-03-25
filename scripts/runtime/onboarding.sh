@@ -5,7 +5,7 @@
 # a quick tour of the workspace.
 #
 # Called from ssh-login.sh when ~/.workspace-initialized doesn't exist.
-# Creates ~/.workspace-initialized when complete.
+# Creates ~/.workspace-initialized when the session ends (exit or detach).
 
 set -euo pipefail
 
@@ -42,5 +42,10 @@ echo ""
 echo "  First-time setup — Claude will walk you through it."
 echo ""
 
-exec tmux new-session -A -s "claude-onboarding" \
+tmux new-session -A -s "claude-onboarding" \
     "bash -lc 'cd \"$COMPOSE_DIR\" && exec claude --append-system-prompt-file \"$ONBOARDING_PROMPT\" \"This is my first time here. Help me get set up.\"'"
+
+# Mark onboarding complete when session ends (exit or detach).
+# This prevents users from getting stuck in an onboarding loop
+# if they disconnect before Claude reaches Step 6 of the prompt.
+touch ~/.workspace-initialized
