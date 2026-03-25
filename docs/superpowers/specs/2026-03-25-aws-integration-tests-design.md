@@ -346,16 +346,20 @@ Permissions policy:
       }
     },
     {
-      "Sid": "RunInstancesResources",
+      "Sid": "PassthroughResources",
       "Effect": "Allow",
-      "Action": "ec2:RunInstances",
+      "Action": [
+        "ec2:RunInstances",
+        "ec2:CreateSecurityGroup"
+      ],
       "Resource": [
         "arn:aws:ec2:*::image/*",
         "arn:aws:ec2:*:*:subnet/*",
         "arn:aws:ec2:*:*:network-interface/*",
         "arn:aws:ec2:*:*:volume/*",
         "arn:aws:ec2:*:*:security-group/*",
-        "arn:aws:ec2:*:*:key-pair/*"
+        "arn:aws:ec2:*:*:key-pair/*",
+        "arn:aws:ec2:*:*:vpc/*"
       ]
     },
     {
@@ -380,7 +384,7 @@ Permissions policy:
 
 **Policy notes:**
 - `CreateWithTestTag` — covers resource creation where `--tag-specifications` passes the `Project=aoc-ci-test` tag inline. This applies to `RunInstances` (instance + volume), `CreateSecurityGroup`, and `CreateKeyPair`.
-- `RunInstancesResources` — `RunInstances` requires permission on several resource types (image, subnet, etc.) that don't support tag conditions. This statement allows those passthrough resources.
+- `PassthroughResources` — `RunInstances` and `CreateSecurityGroup` require permission on existing resources (image, subnet, VPC, etc.) that don't carry the request tag. This statement allows those passthrough resources. VPC is required because `CreateSecurityGroup` authorizes against the VPC the SG is being created in.
 - `ModifyExistingTestResources` — covers operations on already-tagged resources: terminate, delete, and `AuthorizeSecurityGroupIngress` (which operates on an existing SG, not a new resource).
 - Key pairs: `ec2:DeleteKeyPair` does not support resource-tag conditions in all regions. If this causes issues, move it to a separate statement without conditions scoped to `arn:aws:ec2:us-west-2:*:key-pair/aoc-ci-*` by name pattern.
 
