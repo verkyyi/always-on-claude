@@ -19,6 +19,7 @@ The full workspace lifecycle — **provision, setup, update, destroy** — shoul
 Users bring their own Claude authentication. We provide the runtime only. We never provide, share, or manage Claude subscriptions or API keys on behalf of users.
 
 **Two auth options (user's choice):**
+
 - **API key** — user sets `ANTHROPIC_API_KEY`, pay-per-token, no caps, pick any model tier
 - **Subscription** — user runs `claude login` with their own Pro/Max account
 
@@ -34,6 +35,7 @@ Both are the user's own account and credentials. We don't touch billing. We char
 | Self-hosted (DIY) | 15+ setup steps, manage your own server, handle updates yourself |
 
 What we provide:
+
 - **Always on** — sessions survive disconnects, work continues in background
 - **Any device** — SSH from laptop, phone, tablet; same environment everywhere
 - **Persistent** — tmux sessions, repos, auth, Claude context all survive across reconnects
@@ -46,7 +48,7 @@ What we provide:
 
 All scripts are bash. No test suite — test manually via `docker compose up -d` (pulls pre-built image) or `docker compose -f docker-compose.yml -f docker-compose.build.yml build` for local builds.
 
-```
+```text
 Root (Docker config — stays here by convention):
   Dockerfile               — Ubuntu 24.04 + Node 22 + Claude Code + dev tools (multi-arch: amd64 + arm64)
   docker-compose.yml       — Single service, pre-built image from GHCR, host networking, bind mounts
@@ -85,6 +87,7 @@ die()   { echo "ERROR: $*" >&2; exit 1; }
 ```
 
 **Idempotency** — all setup scripts check before acting:
+
 ```bash
 if command -v docker &>/dev/null; then
     skip "Docker"
@@ -95,6 +98,7 @@ fi
 ```
 
 **Guard clauses** for early exits:
+
 ```bash
 [[ -n "${TMUX:-}" ]] && return
 [[ "$-" != *i* ]] && return
@@ -103,6 +107,7 @@ fi
 **Arrays**: `mapfile -t arr < <(cmd)` then `for x in "${arr[@]}"`. Split with `IFS='|' read -r f1 f2 <<< "$entry"`.
 
 **Sudo wrapping** when script may run as root or non-root:
+
 ```bash
 if [[ $EUID -eq 0 ]]; then sudo() { "$@"; }; fi
 ```
