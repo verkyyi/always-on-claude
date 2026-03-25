@@ -46,9 +46,7 @@ jobs:
 
       - name: Cleanup (always)
         if: always()
-        env:
-          TAG: aoc-ci-test
-          AWS_REGION: us-west-2
         run: |
+          # GITHUB_ENV values (TAG, AWS_REGION, KEY_NAME, etc.) persist across steps
           # Non-interactive: stdin is not a TTY in CI, so destroy.sh auto-confirms
           bash scripts/deploy/destroy.sh || true

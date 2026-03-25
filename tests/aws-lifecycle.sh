@@ -49,7 +49,11 @@ _FAIL=0
 run_test() {
     local name="$1"
     echo -n "  "
-    if "$name"; then
+    # Run in subshell so set -e works inside test functions
+    # (if condition disables set -e for its body and all callees)
+    local rc=0
+    ( "$name" ) || rc=$?
+    if [[ $rc -eq 0 ]]; then
         echo "${_GREEN}PASS${_RESET} $name"
         ((_PASS++)) || true
     else
@@ -230,12 +234,12 @@ run_test test_05_destroy_terminates_resources
 run_test test_06_destroy_is_idempotent
 run_test test_07_partial_provision_cleanup
 
-# Disable the cleanup trap — tests already destroyed everything
-trap - EXIT
-
+# Disable cleanup trap only if all tests passed (resources already destroyed)
+# On failure, keep the trap active so the failsafe cleanup runs
 echo ""
 total=$((_PASS + _FAIL))
 if [[ $_FAIL -eq 0 ]]; then
+    trap - EXIT
     echo "${_GREEN}All $total AWS integration tests passed${_RESET}"
 else
     echo "${_RED}$_FAIL/$total AWS integration tests failed${_RESET}"
