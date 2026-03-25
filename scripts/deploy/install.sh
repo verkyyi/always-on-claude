@@ -303,6 +303,14 @@ fi
 # Slash commands now live in .claude/commands/ inside the repo
 # and are picked up automatically as project-level commands — no copy needed
 
+# --- Heartbeat hook validation ------------------------------------------------
+
+if [[ -n "${AOC_HEARTBEAT_URL:-}" && -z "${AOC_HEARTBEAT_TOKEN:-}" ]] || \
+   [[ -z "${AOC_HEARTBEAT_URL:-}" && -n "${AOC_HEARTBEAT_TOKEN:-}" ]]; then
+    echo "  WARN: Both AOC_HEARTBEAT_URL and AOC_HEARTBEAT_TOKEN must be set. Skipping heartbeat hooks."
+    unset AOC_HEARTBEAT_URL AOC_HEARTBEAT_TOKEN
+fi
+
 # Status line script — copy into ~/.claude/ so it's available inside the container
 if [[ -f "$DEV_ENV/scripts/runtime/statusline-command.sh" ]]; then
     cp "$DEV_ENV/scripts/runtime/statusline-command.sh" ~/.claude/statusline-command.sh
@@ -311,6 +319,20 @@ if [[ -f "$DEV_ENV/scripts/runtime/statusline-command.sh" ]]; then
 
     # Build desired user-scope settings
     desired='{"permissions":{"defaultMode":"bypassPermissions"},"statusLine":{"type":"command","command":"bash /home/dev/.claude/statusline-command.sh"},"mcpServers":{"context7":{"command":"npx","args":["-y","@upstash/context7-mcp"]},"fetch":{"command":"uvx","args":["mcp-server-fetch"]}}}'
+
+    # Merge heartbeat hooks if configured (use jq --arg for safe escaping)
+    if [[ -n "${AOC_HEARTBEAT_URL:-}" && -n "${AOC_HEARTBEAT_TOKEN:-}" ]]; then
+        heartbeat_hooks=$(jq -n \
+            --arg url "$AOC_HEARTBEAT_URL" \
+            --arg token "$AOC_HEARTBEAT_TOKEN" \
+            '{hooks: {
+                Notification: [{matcher: "idle_prompt", hooks: [{type: "http", url: $url, headers: {Authorization: ("Bearer " + $token)}}]}],
+                Stop: [{matcher: "", hooks: [{type: "http", url: $url, headers: {Authorization: ("Bearer " + $token)}}]}],
+                SessionStart: [{matcher: "", hooks: [{type: "http", url: $url, headers: {Authorization: ("Bearer " + $token)}}]}]
+            }}')
+        desired=$(echo "$desired" | jq --argjson hb "$heartbeat_hooks" '. * $hb')
+        ok "Added heartbeat hooks to settings"
+    fi
 
     if [[ -f ~/.claude/settings.json ]]; then
         # Merge desired keys into existing settings (existing keys win only if already correct)
