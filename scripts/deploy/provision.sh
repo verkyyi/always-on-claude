@@ -136,6 +136,7 @@ else
         --key-name "$KEY_NAME" \
         --key-type ed25519 \
         --region "$AWS_REGION" \
+        --tag-specifications "ResourceType=key-pair,Tags=[{Key=Project,Value=$TAG}]" \
         --query 'KeyMaterial' \
         --output text > "$KEY_FILE"
     chmod 600 "$KEY_FILE"
@@ -159,6 +160,7 @@ else
         --region "$AWS_REGION" \
         --group-name "$SG_NAME" \
         --description "SSH access for always-on Claude Code" \
+        --tag-specifications "ResourceType=security-group,Tags=[{Key=Name,Value=$SG_NAME},{Key=Project,Value=$TAG}]" \
         --query 'GroupId' \
         --output text)
 
@@ -166,11 +168,6 @@ else
         --region "$AWS_REGION" \
         --group-id "$SG_ID" \
         --protocol tcp --port 22 --cidr 0.0.0.0/0 >/dev/null
-
-    aws ec2 create-tags \
-        --region "$AWS_REGION" \
-        --resources "$SG_ID" \
-        --tags Key=Project,Value="$TAG" Key=Name,Value="$SG_NAME"
 
     ok "Created security group: $SG_ID"
 fi
