@@ -1,0 +1,54 @@
+name: AWS integration tests
+
+on:
+  schedule:
+    - cron: '0 6 * * *'  # Daily at 06:00 UTC
+  workflow_dispatch:       # Manual trigger
+
+concurrency:
+  group: aws-integration
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  aws-lifecycle:
+    name: Provision + destroy lifecycle
+    runs-on: ubuntu-latest
+    environment: aws-integration-test
+    timeout-minutes: 10
+    env:
+      AWS_INTEGRATION: '1'
+      TAG: aoc-ci-test
+      AWS_REGION: us-west-2
+      INSTANCE_TYPE: t4g.micro
+      SKIP_SSH_WAIT: '1'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_CI_ROLE_ARN }}
+          aws-region: us-west-2
+
+      - name: Generate unique resource names
+        run: |
+          echo "INSTANCE_NAME=aoc-ci-${{ github.run_id }}" >> "$GITHUB_ENV"
+          echo "KEY_NAME=aoc-ci-key-${{ github.run_id }}" >> "$GITHUB_ENV"
+          echo "SG_NAME=aoc-ci-sg-${{ github.run_id }}" >> "$GITHUB_ENV"
+
+      - name: Run lifecycle tests
+        run: bash tests/aws-lifecycle.sh
+
+      - name: Cleanup (always)
+        if: always()
+        env:
+          TAG: aoc-ci-test
+          AWS_REGION: us-west-2
+        run: |
+          # Non-interactive: stdin is not a TTY in CI, so destroy.sh auto-confirms
+          bash scripts/deploy/destroy.sh || true
