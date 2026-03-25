@@ -14,17 +14,18 @@ die() { echo "ERROR: $*" >&2; exit 1; }
 COMPOSE_DIR="$HOME/dev-env"
 CONTAINER_NAME="claude-dev"
 ONBOARDING_PROMPT="$COMPOSE_DIR/scripts/runtime/onboarding-prompt.txt"
+COMPOSE_CMD=(sudo --preserve-env=HOME docker compose)
 
 [[ -f "$ONBOARDING_PROMPT" ]] || die "Onboarding prompt not found: $ONBOARDING_PROMPT"
 
 # Start container if not running
-if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
+if ! sudo docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
     echo "  Starting container..."
-    (cd "$COMPOSE_DIR" && docker compose up -d)
+    (cd "$COMPOSE_DIR" && "${COMPOSE_CMD[@]}" up -d)
 
     # Wait for container to be ready (up to 30s)
     for i in $(seq 1 30); do
-        if docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
+        if sudo docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
             break
         fi
         if [[ $i -eq 30 ]]; then
@@ -33,7 +34,7 @@ if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
         sleep 1
     done
 
-    docker exec -u root "$CONTAINER_NAME" bash -c \
+    "${COMPOSE_CMD[@]}" exec -u root dev bash -c \
         "chown -R dev:dev /home/dev/projects" 2>/dev/null || true
 fi
 
