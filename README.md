@@ -52,7 +52,7 @@ claude
 
 Inside the Claude Code session:
 
-```
+```text
 /provision
 ```
 
@@ -80,7 +80,7 @@ This walks you through git config, GitHub CLI, and Claude login (each needs a br
 
 Back in your local Claude Code session:
 
-```
+```text
 /destroy
 ```
 
@@ -102,7 +102,7 @@ All lifecycle operations run from inside a Claude Code session in this repo:
 
 ## What You Get
 
-```
+```text
 Your Mac / Phone / Tablet
     │
     └── SSH
