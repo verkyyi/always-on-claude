@@ -23,7 +23,7 @@ AWS_REGION="${AWS_REGION:-$(aws configure get region 2>/dev/null || echo "us-eas
 INSTANCE_TYPE="${INSTANCE_TYPE:-t4g.small}"
 SG_NAME="${SG_NAME:-claude-dev-sg}"
 SSH_USER="${SSH_USER:-dev}"
-TAG="always-on-claude"
+TAG="${TAG:-always-on-claude}"
 
 # --- Helpers ----------------------------------------------------------------
 

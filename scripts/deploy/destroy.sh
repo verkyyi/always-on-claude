@@ -12,7 +12,7 @@ set -euo pipefail
 # --- Config -----------------------------------------------------------------
 
 AWS_REGION="${AWS_REGION:-$(aws configure get region 2>/dev/null || echo "us-east-1")}"
-TAG="always-on-claude"
+TAG="${TAG:-always-on-claude}"
 KEY_NAME="${KEY_NAME:-claude-dev-key}"
 
 # --- Helpers ----------------------------------------------------------------
