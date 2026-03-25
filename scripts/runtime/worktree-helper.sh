@@ -40,7 +40,7 @@ cmd_create() {
 cmd_remove() {
     local worktree_path="$1"
 
-    if [[ ! -e "$worktree_path/.git" ]]; then
+    if [[ ! -f "$worktree_path/.git" ]]; then
         echo "Error: not a worktree: $worktree_path" >&2
         exit 1
     fi

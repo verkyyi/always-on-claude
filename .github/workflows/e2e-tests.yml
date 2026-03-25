@@ -1,0 +1,32 @@
+name: E2E tests
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/**
+      - tests/**
+      - Dockerfile
+      - docker-compose.yml
+      - docker-compose.build.yml
+      - .github/workflows/e2e-tests.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/**
+      - tests/**
+      - Dockerfile
+      - docker-compose.yml
+      - docker-compose.build.yml
+      - .github/workflows/e2e-tests.yml
+
+jobs:
+  e2e-tests:
+    name: Runtime script tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run tests
+        run: bash tests/run.sh

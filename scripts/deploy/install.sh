@@ -7,6 +7,9 @@
 # Options (env vars):
 #   LOCAL_BUILD=1      — build Docker image locally instead of pulling from GHCR
 #   NON_INTERACTIVE=1  — skip Phase 2 (interactive auth), for use in user data scripts
+#   AOC_SSH_PASSWORD=x  — enable password SSH auth and set password to x
+#   AOC_HEARTBEAT_URL=x — configure Claude Code heartbeat hooks (requires AOC_HEARTBEAT_TOKEN)
+#   AOC_HEARTBEAT_TOKEN=x — bearer token for heartbeat hooks (requires AOC_HEARTBEAT_URL)
 #
 # Idempotent — safe to re-run at any point.
 
@@ -119,6 +122,13 @@ if ! command -v tmux &>/dev/null; then
     ok "tmux installed"
 else
     skip "tmux"
+fi
+
+if ! command -v jq &>/dev/null; then
+    sudo apt-get install -y -qq jq
+    ok "jq installed"
+else
+    skip "jq"
 fi
 
 # Ensure Docker Compose plugin is installed
