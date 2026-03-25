@@ -83,7 +83,9 @@ Move `AuthorizeSecurityGroupIngress` to the resource-tag IAM statement (it opera
 
 ## Test File
 
-### `tests/test-aws-lifecycle.sh`
+### `tests/aws-lifecycle.sh`
+
+Named `aws-lifecycle.sh` (not `test-*.sh`) to avoid auto-discovery by `tests/run.sh`. The `run.sh` runner sources files and calls `run_tests()` — the AWS test file has its own sequential runner and must be invoked directly.
 
 Sources `test-lib.sh` for assertions only (e.g., `assert_eq`, `assert_contains`). Does **not** use `run_tests()` from test-lib.sh because:
 
@@ -92,16 +94,7 @@ Sources `test-lib.sh` for assertions only (e.g., `assert_eq`, `assert_contains`)
 
 Instead, the file implements its own minimal runner that calls test functions manually in order with a shared, stable `HOME`.
 
-**Auto-discovery guard:** `tests/run.sh` discovers files matching `test-*.sh`. To prevent the AWS tests from running during `bash tests/run.sh` (which requires no credentials), the file includes a guard at the top:
-
-```bash
-if [[ -z "${AWS_INTEGRATION:-}" ]]; then
-    echo "SKIP: AWS integration tests (set AWS_INTEGRATION=1 to run)"
-    exit 0
-fi
-```
-
-The CI workflow sets `AWS_INTEGRATION=1`. Local `run.sh` invocations skip the file automatically.
+**Opt-in guard:** The file includes a guard at the top that exits 0 unless `AWS_INTEGRATION=1` is set, providing a clear message when invoked without credentials.
 
 **Ordering:** Test names are prefixed with a two-digit number for readability (`test_01_*`, `test_02_*`, etc.), though ordering is enforced by the manual runner, not alphabetical sort.
 
