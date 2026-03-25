@@ -348,13 +348,29 @@ tmux source-file ~/.tmux.conf 2>/dev/null && ok "Reloaded tmux config" || true
 info "SSH server config"
 step="sshd config"
 
-# Allow NO_CLAUDE env var through SSH so users can skip the login menu
-if ! grep -q 'NO_CLAUDE' /etc/ssh/sshd_config.d/custom.conf 2>/dev/null; then
-    echo 'AcceptEnv NO_CLAUDE' | sudo tee /etc/ssh/sshd_config.d/custom.conf > /dev/null
+# Build custom.conf content — single write to avoid clobber issues
+SSHD_CUSTOM="AcceptEnv NO_CLAUDE"
+
+if [[ -n "${AOC_SSH_PASSWORD:-}" ]]; then
+    SSHD_CUSTOM="${SSHD_CUSTOM}
+PasswordAuthentication yes
+KbdInteractiveAuthentication yes"
+fi
+
+# Only write if content changed (preserves idempotency)
+if [[ ! -f /etc/ssh/sshd_config.d/custom.conf ]] || \
+   ! echo "$SSHD_CUSTOM" | diff -q - /etc/ssh/sshd_config.d/custom.conf &>/dev/null; then
+    echo "$SSHD_CUSTOM" | sudo tee /etc/ssh/sshd_config.d/custom.conf > /dev/null
     sudo systemctl reload ssh
-    ok "Added AcceptEnv NO_CLAUDE to sshd"
+    ok "Wrote sshd custom config"
 else
-    skip "AcceptEnv NO_CLAUDE already configured"
+    skip "sshd custom config"
+fi
+
+# Set password if requested
+if [[ -n "${AOC_SSH_PASSWORD:-}" ]]; then
+    echo "${USER}:${AOC_SSH_PASSWORD}" | sudo chpasswd
+    ok "Set SSH password for $USER"
 fi
 
 # --- Shell integration (ssh-login.sh) ---------------------------------------
