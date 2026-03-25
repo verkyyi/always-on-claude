@@ -1,0 +1,73 @@
+name: AWS resource sweeper
+
+on:
+  schedule:
+    - cron: '0 * * * *'  # Every hour
+  workflow_dispatch:       # Manual trigger
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  sweep:
+    name: Clean orphaned test resources
+    runs-on: ubuntu-latest
+    environment: aws-integration-test
+    timeout-minutes: 5
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_CI_ROLE_ARN }}
+          aws-region: us-west-2
+
+      - name: Sweep old resources
+        run: |
+          # Note: uses GNU date (-d flag) — only runs on ubuntu-latest, not macOS
+          CUTOFF=$(date -u -d '30 minutes ago' +%Y-%m-%dT%H:%M:%S)
+
+          echo "Sweeping resources older than $CUTOFF"
+
+          # Terminate instances tagged aoc-ci-test launched > 30 minutes ago
+          OLD_INSTANCES=$(aws ec2 describe-instances \
+            --region us-west-2 \
+            --filters \
+              "Name=tag:Project,Values=aoc-ci-test" \
+              "Name=instance-state-name,Values=running,stopped,pending" \
+            --query "Reservations[].Instances[?LaunchTime<=\`${CUTOFF}\`].InstanceId" \
+            --output text)
+
+          if [[ -n "$OLD_INSTANCES" && "$OLD_INSTANCES" != "None" ]]; then
+            echo "Terminating stale instances: $OLD_INSTANCES"
+            aws ec2 terminate-instances --region us-west-2 --instance-ids $OLD_INSTANCES
+            aws ec2 wait instance-terminated --region us-west-2 --instance-ids $OLD_INSTANCES
+          else
+            echo "No stale instances found"
+          fi
+
+          # Delete orphaned security groups (tagged aoc-ci-test)
+          SG_IDS=$(aws ec2 describe-security-groups \
+            --region us-west-2 \
+            --filters "Name=tag:Project,Values=aoc-ci-test" \
+            --query 'SecurityGroups[].GroupId' \
+            --output text)
+
+          if [[ -n "$SG_IDS" && "$SG_IDS" != "None" ]]; then
+            for sg in $SG_IDS; do
+              aws ec2 delete-security-group --region us-west-2 --group-id "$sg" 2>/dev/null \
+                && echo "Deleted SG $sg" || echo "SG $sg still in use, skipping"
+            done
+          else
+            echo "No orphaned security groups found"
+          fi
+
+          # Delete orphaned key pairs — aoc-ci- prefix AND created > 30 min ago
+          aws ec2 describe-key-pairs --region us-west-2 \
+            --query "KeyPairs[?starts_with(KeyName, \`aoc-ci-\`) && CreateTime<=\`${CUTOFF}\`].KeyName" \
+            --output text | tr '\t' '\n' | while read -r kp; do
+            [[ -n "$kp" ]] && aws ec2 delete-key-pair --region us-west-2 --key-name "$kp" \
+              && echo "Deleted key pair $kp"
+          done
+
+          echo "Sweep complete"

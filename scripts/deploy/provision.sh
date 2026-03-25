@@ -23,7 +23,7 @@ AWS_REGION="${AWS_REGION:-$(aws configure get region 2>/dev/null || echo "us-eas
 INSTANCE_TYPE="${INSTANCE_TYPE:-t4g.small}"
 SG_NAME="${SG_NAME:-claude-dev-sg}"
 SSH_USER="${SSH_USER:-dev}"
-TAG="always-on-claude"
+TAG="${TAG:-always-on-claude}"
 
 # --- Helpers ----------------------------------------------------------------
 
@@ -136,6 +136,7 @@ else
         --key-name "$KEY_NAME" \
         --key-type ed25519 \
         --region "$AWS_REGION" \
+        --tag-specifications "ResourceType=key-pair,Tags=[{Key=Project,Value=$TAG}]" \
         --query 'KeyMaterial' \
         --output text > "$KEY_FILE"
     chmod 600 "$KEY_FILE"
@@ -159,6 +160,7 @@ else
         --region "$AWS_REGION" \
         --group-name "$SG_NAME" \
         --description "SSH access for always-on Claude Code" \
+        --tag-specifications "ResourceType=security-group,Tags=[{Key=Name,Value=$SG_NAME},{Key=Project,Value=$TAG}]" \
         --query 'GroupId' \
         --output text)
 
@@ -166,11 +168,6 @@ else
         --region "$AWS_REGION" \
         --group-id "$SG_ID" \
         --protocol tcp --port 22 --cidr 0.0.0.0/0 >/dev/null
-
-    aws ec2 create-tags \
-        --region "$AWS_REGION" \
-        --resources "$SG_ID" \
-        --tags Key=Project,Value="$TAG" Key=Name,Value="$SG_NAME"
 
     ok "Created security group: $SG_ID"
 fi
@@ -266,6 +263,22 @@ PUBLIC_IP=$(aws ec2 describe-instances \
 
 [[ -z "$PUBLIC_IP" || "$PUBLIC_IP" == "None" ]] && die "Instance has no public IP"
 ok "Running: $PUBLIC_IP"
+
+if [[ "${SKIP_SSH_WAIT:-0}" == "1" ]]; then
+    echo ""
+    echo "============================================"
+    echo "  Provisioning complete! (SSH wait skipped)"
+    echo "============================================"
+    echo ""
+    echo "  Instance:  $INSTANCE_ID"
+    echo "  Public IP: $PUBLIC_IP"
+    echo "  SSH key:   $KEY_FILE"
+    echo ""
+    echo "  Connect:"
+    echo "    ssh -i $KEY_FILE ${SSH_USER}@$PUBLIC_IP"
+    echo ""
+    exit 0
+fi
 
 echo "  Waiting for SSH..."
 for i in $(seq 1 30); do

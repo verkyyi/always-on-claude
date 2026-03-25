@@ -12,7 +12,7 @@ set -euo pipefail
 # --- Config -----------------------------------------------------------------
 
 AWS_REGION="${AWS_REGION:-$(aws configure get region 2>/dev/null || echo "us-east-1")}"
-TAG="always-on-claude"
+TAG="${TAG:-always-on-claude}"
 KEY_NAME="${KEY_NAME:-claude-dev-key}"
 
 # --- Helpers ----------------------------------------------------------------
@@ -80,10 +80,14 @@ if [[ -z "$INSTANCE_IDS" && -z "$SG_IDS" && "$KEY_EXISTS" == "no" ]]; then
 fi
 
 echo ""
-read -rp "  Delete all of these? [y/N] " confirm
-if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
-    echo "  Aborted."
-    exit 0
+if [[ -t 0 ]]; then
+    read -rp "  Delete all of these? [y/N] " confirm
+    if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
+        echo "  Aborted."
+        exit 0
+    fi
+else
+    echo "  (non-interactive mode — proceeding automatically)"
 fi
 
 # --- Terminate instances ----------------------------------------------------
@@ -120,15 +124,20 @@ fi
 if [[ "$KEY_EXISTS" == "yes" ]]; then
     info "Delete SSH key pair?"
 
-    read -rp "  Delete key pair '$KEY_NAME'? [y/N] " confirm_key
-    if [[ "$confirm_key" == "y" || "$confirm_key" == "Y" ]]; then
+    if [[ -t 0 ]]; then
+        read -rp "  Delete key pair '$KEY_NAME'? [y/N] " confirm_key
+        if [[ "$confirm_key" != "y" && "$confirm_key" != "Y" ]]; then
+            echo "  Kept key pair '$KEY_NAME'"
+            KEY_EXISTS="kept"
+        fi
+    fi
+
+    if [[ "$KEY_EXISTS" == "yes" ]]; then
         aws ec2 delete-key-pair \
             --region "$AWS_REGION" \
             --key-name "$KEY_NAME"
         rm -f "$KEY_FILE"
         ok "Key pair deleted"
-    else
-        echo "  Kept key pair '$KEY_NAME'"
     fi
 fi
 
