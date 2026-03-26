@@ -52,8 +52,11 @@ All scripts are bash. No test suite — test manually via `docker compose up -d`
 Root (Docker config — stays here by convention):
   .env.example             — Documented deployment config template (cp to .env and customize)
   Dockerfile               — Ubuntu 24.04 + Node 22 + Claude Code + dev tools (multi-arch: amd64 + arm64)
+  Dockerfile.portable      — Self-contained image: base + Tailscale + cron/at + all scripts baked in
   docker-compose.yml       — Single service, pre-built image from GHCR, host networking, bind mounts
   docker-compose.build.yml — Override for local builds (docker compose -f ... -f ... build)
+  docker-compose.mac.yml   — Override for local Mac: bridge networking (replaces host mode)
+  docker-compose.portable.yml — Standalone portable mode with named volumes (no host setup needed)
 
 scripts/deploy/ (provisioning & server setup — run locally or during first boot):
   load-config.sh           — Config loader: reads .env, applies defaults, exports vars for all scripts
@@ -70,8 +73,13 @@ scripts/runtime/ (day-to-day server use — run on SSH login or inside the conta
   worktree-helper.sh       — Create/remove/list git worktrees for parallel sessions
   self-update.sh           — Single-command updater: repo, Claude Code, Docker image, host scripts
 
+scripts/portable/ (single-container portable mode — baked into the image):
+  entrypoint.sh            — Container entrypoint: first-run setup, Tailscale, cron/at, keep-alive
+  ssh-login-portable.sh    — Login menu for portable mode (no docker exec, runs directly)
+  start-claude-portable.sh — Workspace picker adapted for in-container use
+
 CI/CD:
-  .github/workflows/docker-publish.yml — Multi-arch build + push to GHCR on main
+  .github/workflows/docker-publish.yml — Multi-arch build + push to GHCR on main (base + portable)
   .github/workflows/build-ami.yml      — Build and publish pre-baked AMI on image update
 
 Add-ons (slash commands — live in .claude/commands/, auto-discovered):
@@ -129,6 +137,14 @@ if [[ $EUID -eq 0 ]]; then sudo() { "$@"; }; fi
 
 All deployment parameters live in a single `.env` file at the repo root. Scripts load it via `scripts/deploy/load-config.sh`.
 
+The project supports three deployment targets:
+
+| Type | Where | Networking | Init system | Slash commands |
+| --- | --- | --- | --- | --- |
+| `ec2` | AWS EC2 instance | `network_mode: host` | systemd | `/provision`, `/destroy` |
+| `local-mac` | Local Mac (mini/Studio) | `network_mode: bridge` | launchd | `/provision-local`, `/destroy-local` |
+| `portable` | Any machine with Docker | bridge (default) | entrypoint.sh | n/a |
+
 **Setup:**
 
 ```bash
@@ -148,12 +164,24 @@ This means `INSTANCE_TYPE=t3.medium bash provision.sh` overrides whatever is in 
 
 Docker Compose also reads `.env` natively for variable substitution in `docker-compose.yml` (image, container name, hostname).
 
+**Portable (single docker run):**
+
+```bash
+docker run -d --name claude-dev \
+  -v claude-data:/home/dev/.claude \
+  -v claude-projects:/home/dev/projects \
+  ghcr.io/verkyyi/always-on-claude:portable
+```
+
 ## Docker architecture
 
 - **Pre-built image** from `ghcr.io/verkyyi/always-on-claude:latest` (multi-arch: amd64 + arm64)
+- **Portable image** from `ghcr.io/verkyyi/always-on-claude:portable` — self-contained, includes Tailscale + cron/at + all scripts
 - **Local build override**: `docker compose -f docker-compose.yml -f docker-compose.build.yml build`
 - **Host networking** (`network_mode: host`) — required for EC2 instance metadata / IAM roles
-- **Bind mounts** persist auth and projects across container rebuilds
+- **Bridge networking** (`docker-compose.mac.yml`) — required for Docker Desktop on macOS (host mode not supported)
+- **Bind mounts** persist auth and projects across container rebuilds (host + container mode)
+- **Named volumes** used by portable mode — no host directories needed
 - `~/.claude.json` is mounted **separately** from `~/.claude/` (onboarding state lives in home dir root, not inside .claude/)
 - `~/.ssh` is mounted **read-only** — use HTTPS clones + `gh auth login`, not SSH git
 - Container runs as `dev:dev` (UID/GID 1000:1000) — Claude Code refuses to run as root

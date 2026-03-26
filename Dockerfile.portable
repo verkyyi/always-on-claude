@@ -1,0 +1,57 @@
+# Dockerfile.portable — Self-contained always-on-claude image.
+#
+# Extends the base image with Tailscale, cron/at, and all scripts baked in.
+# Run with a single `docker run` command — no host setup needed.
+#
+# Usage:
+#   docker run -d --name claude-dev \
+#     -v claude-data:/home/dev/.claude \
+#     -v claude-projects:/home/dev/projects \
+#     ghcr.io/verkyyi/always-on-claude:portable
+#
+# With Tailscale (remote SSH access):
+#   docker run -d --cap-add=NET_ADMIN --name claude-dev \
+#     -v claude-data:/home/dev/.claude \
+#     -v claude-projects:/home/dev/projects \
+#     -v tailscale-state:/var/lib/tailscale \
+#     -e TS_AUTHKEY=tskey-auth-xxx \
+#     ghcr.io/verkyyi/always-on-claude:portable
+
+FROM ghcr.io/verkyyi/always-on-claude:latest
+
+LABEL org.opencontainers.image.source="https://github.com/verkyyi/always-on-claude"
+LABEL org.opencontainers.image.description="Always-on Claude Code workspace (portable) — single container, docker run and go"
+
+# hadolint ignore=DL3002
+USER root
+
+# Portable-specific packages: cron/at for overnight scheduling, sudo/gosu for entrypoint
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    cron at sudo gosu \
+    && rm -rf /var/lib/apt/lists/*
+
+# Passwordless sudo for dev user (entrypoint runs as root, user logs in as dev)
+RUN echo 'dev ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/dev
+
+# Tailscale — for remote SSH access without exposing ports
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+RUN curl -fsSL https://tailscale.com/install.sh | sh
+
+# Pre-create directories that may be volume-mounted
+RUN mkdir -p /home/dev/projects /home/dev/overnight /home/dev/.config/gh \
+    && chown -R dev:dev /home/dev/projects /home/dev/overnight /home/dev/.config
+
+# Tailscale state directory
+RUN mkdir -p /var/lib/tailscale
+
+# Copy all project files into the image as dev-env
+COPY --chown=dev:dev . /home/dev/dev-env
+
+# Make scripts executable
+RUN chmod +x /home/dev/dev-env/scripts/portable/*.sh \
+    /home/dev/dev-env/scripts/runtime/*.sh \
+    /home/dev/dev-env/scripts/deploy/*.sh 2>/dev/null || true
+
+# Entrypoint runs as root (needs to start system services),
+# then drops privileges to dev via gosu before sleeping
+ENTRYPOINT ["/home/dev/dev-env/scripts/portable/entrypoint.sh"]

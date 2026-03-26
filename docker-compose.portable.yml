@@ -1,0 +1,65 @@
+# docker-compose.portable.yml — Single-container portable mode.
+#
+# Usage:
+#   docker compose -f docker-compose.portable.yml up -d
+#
+# With local build:
+#   docker compose -f docker-compose.portable.yml up -d --build
+#
+# Named volumes persist data across container rebuilds.
+# No host-side setup scripts needed — the entrypoint handles everything.
+
+services:
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.portable
+    image: ghcr.io/verkyyi/always-on-claude:portable
+    container_name: claude-dev
+    hostname: claude-dev
+    stdin_open: true
+    tty: true
+
+    volumes:
+      # Claude Code config/auth/history
+      # Also stores .claude.json (onboarding state) — symlinked by entrypoint
+      - claude-data:/home/dev/.claude
+
+      # Git config (persists user.name, user.email, etc. across rebuilds)
+      # Uses XDG path ~/.config/git/ — git reads ~/.config/git/config natively
+      - gitconfig:/home/dev/.config/git
+
+      # User's code repos
+      - projects:/home/dev/projects
+
+      # Overnight task files + logs
+      - overnight:/home/dev/overnight
+
+      # GitHub CLI config/auth
+      - gh-config:/home/dev/.config/gh
+
+      # Tailscale identity (persists hostname + auth across restarts)
+      - tailscale-state:/var/lib/tailscale
+
+    environment:
+      - NODE_ENV=development
+      # Set TS_AUTHKEY to auto-connect Tailscale on start
+      # - TS_AUTHKEY=tskey-auth-xxx
+      # Set TS_HOSTNAME to customize the Tailscale hostname (default: claude-dev)
+      # - TS_HOSTNAME=claude-dev
+      # Set ANTHROPIC_API_KEY for API key auth (alternative to claude login)
+      # - ANTHROPIC_API_KEY=sk-ant-xxx
+
+    # NET_ADMIN needed for Tailscale
+    cap_add:
+      - NET_ADMIN
+
+    restart: unless-stopped
+
+volumes:
+  claude-data:
+  gitconfig:
+  projects:
+  overnight:
+  gh-config:
+  tailscale-state:
