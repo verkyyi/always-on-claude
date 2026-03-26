@@ -524,12 +524,10 @@ Requires=docker.service
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-User=dev
 Environment=HOME=/home/dev
 WorkingDirectory=$DEV_ENV
 ExecStart=/usr/bin/docker compose up -d
 ExecStop=/usr/bin/docker compose stop
-ExecStartPost=/usr/bin/docker compose exec -T -u root dev bash -c "chown dev:dev /home/dev/projects /home/dev/.claude" 2>/dev/null || true
 
 [Install]
 WantedBy=multi-user.target
