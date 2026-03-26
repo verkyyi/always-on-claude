@@ -145,15 +145,16 @@ bash <(curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/mai
 bash <(curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/scripts/deploy/destroy.sh)
 ```
 
-For script details, see [deployment scripts](docs/deployment-scripts.md).
+For script details, see [Deployment](docs/deployment.md).
 
 ---
 
 ## Further Reading
 
-- [Docker architecture](docs/docker-architecture.md) — container config, volumes, networking
-- [CI/CD pipelines](docs/ci-cd.md) — Docker image + AMI build workflows
-- [Deployment scripts](docs/deployment-scripts.md) — install.sh, provision.sh, build-ami.sh internals
+- [Architecture](docs/architecture.md) — Docker, networking, sessions, resource limits, update pipeline
+- [Deployment](docs/deployment.md) — provisioning, install, config, AMI, portable mode, Tailscale
+- [Operations](docs/operations.md) — onboarding, sessions, worktrees, updates, mobile, slash commands
+- [CI/CD](docs/ci-cd.md) — all GitHub Actions workflows
 
 ---
 
