@@ -66,6 +66,7 @@ scripts/runtime/ (day-to-day server use — run on SSH login or inside the conta
   ssh-login.sh             — Menu on SSH login: [1] Claude Code, [2] container bash, [3] host shell
   start-claude.sh          — Workspace picker, auto-starts container, launches Claude in tmux
   worktree-helper.sh       — Create/remove/list git worktrees for parallel sessions
+  self-update.sh           — Single-command updater: repo, Claude Code, Docker image, host scripts
 
 CI/CD:
   .github/workflows/docker-publish.yml — Multi-arch build + push to GHCR on main
