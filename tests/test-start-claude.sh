@@ -110,7 +110,8 @@ MOCK
     _source_functions
     local result
     result=$(get_max_sessions)
-    assert_eq "1" "$result"
+    # 2048MB RAM, 512MB OS reserve: (2048-512)/650 = 2, capped by 8 CPUs = 2
+    assert_eq "2" "$result"
 }
 
 test_to_container_path() {
