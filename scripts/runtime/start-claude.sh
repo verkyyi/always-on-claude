@@ -126,17 +126,22 @@ to_container_path() {
 
 # --- Layer 1: Pick a repo ---
 show_repos() {
-    # Show active claude-* tmux sessions
-    local sessions
-    sessions=$(tmux list-sessions -F '#{session_name} #{?session_attached,(attached),(idle)}' 2>/dev/null \
-        | grep '^claude-' || true)
+    # Collect active claude-* and shell-* tmux sessions
+    # Note: all_sessions is intentionally global — read by reattach_session()
+    all_sessions=()
+    while IFS= read -r line; do
+        [[ -n "$line" ]] && all_sessions+=("$line")
+    done < <(tmux list-sessions -F '#{session_name} #{?session_attached,(attached),(idle)}' 2>/dev/null \
+        | grep -E '^(claude-|shell-)' || true)
 
-    if [[ -n "$sessions" ]]; then
+    if [[ ${#all_sessions[@]} -gt 0 ]]; then
         echo ""
         echo "  === Active sessions ($(count_sessions)/$(get_max_sessions)) ==="
-        while IFS= read -r line; do
-            echo "  $line"
-        done <<< "$sessions"
+        local ai=1
+        for s in "${all_sessions[@]}"; do
+            echo "  [a${ai}] $s"
+            ((ai++))
+        done
     fi
 
     echo ""
@@ -154,7 +159,8 @@ show_repos() {
     fi
 
     echo "  [m] Manage workspaces"
-    echo "      Clone repos, create worktrees, and more"
+    echo "  [h] Host shell"
+    echo "  [c] Container shell"
     echo ""
 }
 
@@ -215,6 +221,35 @@ launch_host() {
         "bash -lc 'cd \"$dir\" && exec claude --append-system-prompt-file \"$MANAGER_PROMPT\" \"Greet me and show what you can help with.\"'"
 }
 
+# --- Launch a host shell in tmux ---
+launch_shell_host() {
+    echo "  -> host shell"
+    echo ""
+    exec tmux new-session -A -s "shell-host" "bash -l"
+}
+
+# --- Launch a container shell in tmux ---
+launch_shell_container() {
+    echo "  -> container shell"
+    echo ""
+    exec tmux new-session -A -s "shell-container" \
+        "docker exec -it ${CONTAINER_NAME} bash -l"
+}
+
+# --- Reattach to an active session by index ---
+# Note: all_sessions is intentionally global — populated by show_repos(), read here
+reattach_session() {
+    local idx="$1"
+    if [[ $idx -ge 1 && $idx -le ${#all_sessions[@]} ]]; then
+        local session_line="${all_sessions[$((idx - 1))]}"
+        local session_name="${session_line%% *}"
+        echo "  -> reattach $session_name"
+        echo ""
+        exec tmux attach-session -t "$session_name"
+    fi
+    return 1
+}
+
 # --- Main ---
 discover
 
@@ -222,15 +257,20 @@ discover
 while true; do
     show_repos
 
-    read -n 1 -p "  > " choice || true
-    echo ""
+    read -r -p "  > " choice || true
 
     if [[ "$choice" == "m" ]]; then
         # Launch Claude on the host for workspace management and updates
         launch_host "$COMPOSE_DIR" || continue
+    elif [[ "$choice" == "h" ]]; then
+        launch_shell_host
+    elif [[ "$choice" == "c" ]]; then
+        launch_shell_container
+    elif [[ "$choice" =~ ^a([0-9]+)$ ]]; then
+        reattach_session "${BASH_REMATCH[1]}" || continue
     elif [[ "$choice" =~ ^[0-9]+$ && "$choice" -ge 1 && "$choice" -le "${#repos[@]}" ]]; then
         IFS='|' read -r selected_path selected_branch <<< "${repos[$((choice - 1))]}"
-    elif [[ -z "$choice" || "$choice" == $'\n' ]]; then
+    elif [[ -z "$choice" ]]; then
         # Default: first repo, or home if none
         if [[ ${#repos[@]} -gt 0 ]]; then
             IFS='|' read -r selected_path selected_branch <<< "${repos[0]}"
@@ -253,12 +293,11 @@ while true; do
     while true; do
         show_branches "$selected_path" "$selected_branch"
 
-        read -n 1 -p "  > " choice2 || true
-        echo ""
+        read -r -p "  > " choice2 || true
 
         if [[ "$choice2" == "b" ]]; then
             break  # Back to Layer 1
-        elif [[ "$choice2" == "1" || -z "$choice2" || "$choice2" == $'\n' ]]; then
+        elif [[ "$choice2" == "1" || -z "$choice2" ]]; then
             # Main repo
             launch "$selected_path" || continue
         elif [[ "$choice2" =~ ^[0-9]+$ && "$choice2" -ge 2 && "$choice2" -le $(( ${#worktrees[@]} + 1 )) ]]; then
