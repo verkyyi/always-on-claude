@@ -83,94 +83,6 @@ fi
 
 ok "Running as $USER ($(if [[ $EUID -eq 0 ]]; then echo "root"; else echo "non-root, using sudo"; fi)) on $(hostname)"
 
-# --- Pre-baked AMI fast path ------------------------------------------------
-# When booting from a pre-baked AMI, cloud-init re-runs and triggers install.sh
-# again via User Data. Detect this: dev user exists + Docker image already pulled.
-# cloud-init clean wipes /home/dev entirely, so we must rebuild the home dir,
-# but skip slow steps (apt, Docker install, Claude Code install, image pull).
-
-if id dev &>/dev/null 2>&1 && sudo docker image inspect ghcr.io/verkyyi/always-on-claude:latest &>/dev/null 2>&1; then
-    info "Pre-baked AMI detected — fast path"
-
-    # cloud-init recreates 'ubuntu' user (UID 1001) with the EC2 SSH key.
-    # Copy the key to dev before removing ubuntu so SSH works as dev.
-    if id ubuntu &>/dev/null 2>&1 && [[ -f /home/ubuntu/.ssh/authorized_keys ]]; then
-        sudo mkdir -p /home/dev/.ssh
-        sudo cp /home/ubuntu/.ssh/authorized_keys /home/dev/.ssh/authorized_keys
-        sudo chmod 700 /home/dev/.ssh
-        sudo chmod 600 /home/dev/.ssh/authorized_keys
-        sudo chown -R dev:dev /home/dev/.ssh
-        ok "Copied SSH key from ubuntu to dev"
-        sudo userdel -r ubuntu 2>/dev/null || true
-        ok "Removed cloud-init ubuntu user"
-    fi
-
-    # Switch to dev context
-    export USER=dev HOME=/home/dev
-    DEV_ENV=/home/dev/dev-env
-
-    # Clone repo (cloud-init clean wipes /home/dev entirely)
-    if [[ ! -d "$DEV_ENV/.git" ]]; then
-        sudo rm -rf "$DEV_ENV"
-        sudo -u dev git clone https://github.com/verkyyi/always-on-claude.git "$DEV_ENV"
-        ok "Cloned repository"
-    fi
-
-    # Rebuild home dir essentials that cloud-init wiped
-    sudo mkdir -p /home/dev/.claude/debug /home/dev/.claude/commands \
-        /home/dev/.config/gh /home/dev/projects /home/dev/.gitconfig.d
-    [[ -f /home/dev/.claude.json ]] || echo '{}' | sudo tee /home/dev/.claude.json > /dev/null
-    sudo touch /home/dev/.claude/remote-settings.json
-    sudo touch /home/dev/.ssh/known_hosts 2>/dev/null || true
-    sudo chown -R dev:dev /home/dev
-
-    # Reinstall Claude Code for dev user
-    sudo -u dev bash -c 'curl -fsSL https://claude.ai/install.sh | bash' || true
-    ok "Installed Claude Code"
-
-    # Install settings, statusline, tmux config
-    if [[ -f "$DEV_ENV/scripts/runtime/statusline-command.sh" ]]; then
-        sudo -u dev cp "$DEV_ENV/scripts/runtime/statusline-command.sh" /home/dev/.claude/statusline-command.sh
-        chmod +x /home/dev/.claude/statusline-command.sh
-        desired='{"permissions":{"defaultMode":"bypassPermissions"},"statusLine":{"type":"command","command":"bash /home/dev/.claude/statusline-command.sh"},"mcpServers":{"context7":{"command":"npx","args":["-y","@upstash/context7-mcp"]},"fetch":{"command":"uvx","args":["mcp-server-fetch"]}}}'
-        echo "$desired" | jq . | sudo -u dev tee /home/dev/.claude/settings.json > /dev/null
-        ok "Installed settings.json"
-    fi
-    if [[ -f "$DEV_ENV/scripts/runtime/tmux.conf" ]]; then
-        sudo -u dev cp "$DEV_ENV/scripts/runtime/tmux.conf" /home/dev/.tmux.conf
-    fi
-    if [[ -f "$DEV_ENV/scripts/runtime/tmux-status.sh" ]]; then
-        sudo -u dev cp "$DEV_ENV/scripts/runtime/tmux-status.sh" /home/dev/.tmux-status.sh
-        chmod +x /home/dev/.tmux-status.sh
-    fi
-
-    # Rebuild .bash_profile
-    cat <<'PROF' | sudo -u dev tee /home/dev/.bash_profile > /dev/null
-# PATH additions
-export PATH="$HOME/.local/bin:$PATH"
-
-# Source .bashrc
-[[ -f ~/.bashrc ]] && source ~/.bashrc
-
-# Auto-launch Claude Code on SSH login
-source ~/dev-env/scripts/runtime/ssh-login.sh
-PROF
-    ok "Rebuilt .bash_profile"
-
-    # Start container
-    cd "$DEV_ENV"
-    sudo --preserve-env=HOME docker compose up -d
-    ok "Container running"
-
-    # Fix container permissions
-    sudo --preserve-env=HOME docker compose exec -T -u root dev bash -c \
-        "chown dev:dev /home/dev/projects /home/dev/.claude" 2>/dev/null || true
-
-    echo ""
-    echo "  Pre-baked AMI boot complete."
-    exit 0
-fi
-
 # --- Rename ubuntu user to dev (matches container user) ---------------------
 
 info "System user"
@@ -568,6 +480,64 @@ info "CloudWatch alarms"
 step="cloudwatch alarms"
 
 bash "$DEV_ENV/scripts/deploy/install-cloudwatch-alarms.sh" || true
+
+# --- Cloud-init config (for pre-baked AMI boots) -----------------------------
+
+info "Cloud-init config"
+step="cloud-init config"
+
+# Tell cloud-init the default user is 'dev' (not 'ubuntu').
+# On pre-baked AMI boots, cloud-init creates this user and injects the EC2 SSH
+# key — so the user can SSH as dev@ immediately without User Data running.
+CLOUDINIT_CFG="/etc/cloud/cloud.cfg.d/99-always-on-claude.cfg"
+if [[ ! -f "$CLOUDINIT_CFG" ]]; then
+    cat <<'CLOUDINIT' | sudo tee "$CLOUDINIT_CFG" > /dev/null
+system_info:
+  default_user:
+    name: dev
+    lock_passwd: false
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    groups: [docker, sudo]
+    gecos: Developer
+    homedir: /home/dev
+CLOUDINIT
+    ok "Wrote cloud-init config (default user: dev)"
+else
+    skip "cloud-init config"
+fi
+
+# --- Container boot service (systemd) ----------------------------------------
+
+info "Container boot service"
+step="systemd service"
+
+SERVICE_NAME="always-on-claude"
+SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
+
+cat <<EOF | sudo tee "$SERVICE_FILE" > /dev/null
+[Unit]
+Description=Always-on Claude Code container
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=dev
+Environment=HOME=/home/dev
+WorkingDirectory=$DEV_ENV
+ExecStart=/usr/bin/docker compose up -d
+ExecStop=/usr/bin/docker compose stop
+ExecStartPost=/usr/bin/docker compose exec -T -u root dev bash -c "chown dev:dev /home/dev/projects /home/dev/.claude" 2>/dev/null || true
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable "$SERVICE_NAME" 2>/dev/null
+ok "Systemd service installed and enabled"
 
 # --- Make scripts executable ------------------------------------------------
 
