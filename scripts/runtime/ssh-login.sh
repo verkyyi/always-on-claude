@@ -14,8 +14,7 @@
 [[ "${NO_CLAUDE:-}" == "1" ]] && return
 
 # Detect narrow terminal (likely mobile SSH client)
-COLS=$(tput cols 2>/dev/null || echo 80)
-if [[ "$COLS" -lt 60 ]]; then
+if [[ "$(tput cols 2>/dev/null || echo 80)" -lt 60 ]]; then
     export CLAUDE_MOBILE=1
 fi
 

@@ -5,6 +5,7 @@ Find failing tests, fix them, and commit. Minimize back-and-forth — act autono
 ## Steps
 
 1. Detect the test framework and run tests:
+
    ```bash
    if [[ -f package.json ]]; then
      echo "node"

@@ -5,12 +5,14 @@ Summarize open PRs and help approve/merge them. Optimized for quick review from 
 ## Steps
 
 1. List open PRs:
+
    ```bash
    gh pr list --state open --json number,title,author,createdAt,additions,deletions,reviewDecision --limit 10 2>/dev/null || echo "gh not configured"
    ```
 
 2. Present a compact summary:
-   ```
+
+   ```text
    Open PRs:
    #42 "Add feature X" by alice (+50/-10) needs-review
    #41 "Fix bug Y" by bob (+5/-3) approved
@@ -20,10 +22,12 @@ Summarize open PRs and help approve/merge them. Optimized for quick review from 
 3. Ask the user which PR to review (by number), or if they want to approve/merge one directly.
 
 4. When reviewing a specific PR, show:
+
    ```bash
    gh pr view NUMBER --json title,body,files,commits
    gh pr diff NUMBER
    ```
+
    - Summarize the changes in 3-5 bullet points
    - Note any concerns or suggestions
    - Keep the diff summary concise — mention files changed and the gist of each change
