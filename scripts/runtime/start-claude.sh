@@ -40,6 +40,7 @@ get_max_sessions() {
     fi
 
     # Auto-calculate: min(memory_based, cpu_count), minimum 1
+    # Reserve 512MB for OS (Docker + SSH + earlyoom), ~650MB per Claude session
     local total_mem_mb cpus mem_based max
     if [[ -f /proc/meminfo ]]; then
         total_mem_mb=$(awk '/MemTotal/ {printf "%.0f", $2/1024}' /proc/meminfo)
@@ -50,7 +51,7 @@ get_max_sessions() {
     fi
 
     cpus=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 2)
-    mem_based=$(( (total_mem_mb - 1024) / 650 ))
+    mem_based=$(( (total_mem_mb - 512) / 650 ))
     [[ $mem_based -lt 1 ]] && mem_based=1
 
     max=$(( mem_based < cpus ? mem_based : cpus ))
