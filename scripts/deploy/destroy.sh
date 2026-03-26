@@ -2,12 +2,21 @@
 # destroy.sh — Tear down always-on-claude EC2 resources.
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/scripts/deploy/destroy.sh | bash
+#   bash destroy.sh                  # destroy ALL instances with Project tag
+#   bash destroy.sh claude-dev-2     # destroy only the named instance
+#   curl -fsSL .../destroy.sh | bash # destroy all (no name filter)
 #
-# Finds resources by Project=always-on-claude tag and deletes them.
-# Prompts for confirmation before each destructive action.
+# When a name is given, only the matching instance is terminated.
+# Security groups and key pairs are NOT deleted (they may be shared).
+# The SSH config entry and .env.workspace for that name are cleaned up.
+#
+# Without a name, all Project-tagged resources are deleted (original behavior).
 
 set -euo pipefail
+
+# --- Parse arguments ---------------------------------------------------------
+
+INSTANCE_NAME="${1:-}"
 
 # --- Config (from .env file, override with env vars) -------------------------
 
@@ -42,44 +51,63 @@ ok "AWS CLI configured (region: $AWS_REGION)"
 
 info "Finding resources"
 
+# Build instance filters
+INSTANCE_FILTERS=(
+    "Name=tag:Project,Values=$TAG"
+    "Name=instance-state-name,Values=running,stopped,pending"
+)
+if [[ -n "$INSTANCE_NAME" ]]; then
+    INSTANCE_FILTERS+=("Name=tag:Name,Values=$INSTANCE_NAME")
+fi
+
 # Find instances
 INSTANCE_IDS=$(aws ec2 describe-instances \
     --region "$AWS_REGION" \
-    --filters \
-        "Name=tag:Project,Values=$TAG" \
-        "Name=instance-state-name,Values=running,stopped,pending" \
+    --filters "${INSTANCE_FILTERS[@]}" \
     --query 'Reservations[].Instances[].InstanceId' \
     --output text 2>/dev/null || echo "")
 
-# Find security groups
-SG_IDS=$(aws ec2 describe-security-groups \
-    --region "$AWS_REGION" \
-    --filters "Name=tag:Project,Values=$TAG" \
-    --query 'SecurityGroups[].GroupId' \
-    --output text 2>/dev/null || echo "")
-
-# Check for key pair
+# Skip shared resources when destroying a specific instance by name
+SG_IDS=""
 KEY_EXISTS="no"
-if aws ec2 describe-key-pairs --key-names "$KEY_NAME" --region "$AWS_REGION" &>/dev/null 2>&1; then
-    KEY_EXISTS="yes"
-fi
-
 KEY_FILE="$HOME/.ssh/${KEY_NAME}.pem"
+
+if [[ -z "$INSTANCE_NAME" ]]; then
+    # Find security groups (only when destroying all)
+    SG_IDS=$(aws ec2 describe-security-groups \
+        --region "$AWS_REGION" \
+        --filters "Name=tag:Project,Values=$TAG" \
+        --query 'SecurityGroups[].GroupId' \
+        --output text 2>/dev/null || echo "")
+
+    # Check for key pair (only when destroying all)
+    if aws ec2 describe-key-pairs --key-names "$KEY_NAME" --region "$AWS_REGION" &>/dev/null 2>&1; then
+        KEY_EXISTS="yes"
+    fi
+fi
 
 # --- Show what we found -----------------------------------------------------
 
 echo ""
+if [[ -n "$INSTANCE_NAME" ]]; then
+    echo "  Filter:          Name=$INSTANCE_NAME"
+fi
 if [[ -n "$INSTANCE_IDS" ]]; then
-    echo "  Instances:      $INSTANCE_IDS"
+    echo "  Instances:       $INSTANCE_IDS"
 else
-    echo "  Instances:      none"
+    echo "  Instances:       none"
 fi
-if [[ -n "$SG_IDS" ]]; then
-    echo "  Security groups: $SG_IDS"
+if [[ -z "$INSTANCE_NAME" ]]; then
+    if [[ -n "$SG_IDS" ]]; then
+        echo "  Security groups: $SG_IDS"
+    else
+        echo "  Security groups: none"
+    fi
+    echo "  Key pair:        $KEY_NAME ($KEY_EXISTS in AWS, $(if [[ -f $KEY_FILE ]]; then echo "local file exists"; else echo "no local file"; fi))"
 else
-    echo "  Security groups: none"
+    echo "  Security groups: skipped (shared)"
+    echo "  Key pair:        skipped (shared)"
 fi
-echo "  Key pair:        $KEY_NAME ($KEY_EXISTS in AWS, $(if [[ -f $KEY_FILE ]]; then echo "local file exists"; else echo "no local file"; fi))"
 
 if [[ -z "$INSTANCE_IDS" && -z "$SG_IDS" && "$KEY_EXISTS" == "no" ]]; then
     echo ""
@@ -146,6 +174,32 @@ if [[ "$KEY_EXISTS" == "yes" ]]; then
             --key-name "$KEY_NAME"
         rm -f "$KEY_FILE"
         ok "Key pair deleted"
+    fi
+fi
+
+# --- Clean up local files ---------------------------------------------------
+
+if [[ -n "$INSTANCE_NAME" ]]; then
+    info "Cleaning up local files for $INSTANCE_NAME"
+
+    # Remove SSH config entry for this instance name
+    SSH_CONFIG="$HOME/.ssh/config"
+    if [[ -f "$SSH_CONFIG" ]] && grep -q "^Host $INSTANCE_NAME\$" "$SSH_CONFIG"; then
+        # Remove the Host block (Host line + all indented lines below it)
+        sed -i "/^Host ${INSTANCE_NAME}$/,/^Host \|^$/{ /^Host ${INSTANCE_NAME}$/d; /^[[:space:]]/d; }" "$SSH_CONFIG"
+        ok "Removed SSH config entry for $INSTANCE_NAME"
+    else
+        echo "  No SSH config entry for $INSTANCE_NAME"
+    fi
+
+    # Remove .env.workspace if it references this instance
+    if [[ -n "$SCRIPT_DIR" ]]; then
+        REPO_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+        WORKSPACE_FILE="$REPO_DIR/.env.workspace"
+        if [[ -f "$WORKSPACE_FILE" ]] && grep -q "INSTANCE_NAME=$INSTANCE_NAME" "$WORKSPACE_FILE"; then
+            rm -f "$WORKSPACE_FILE"
+            ok "Removed $WORKSPACE_FILE"
+        fi
     fi
 fi
 
