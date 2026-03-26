@@ -86,12 +86,12 @@ check_mount "$HOME/.gitconfig.d" "Git config dir"
 if [[ -f "$HOME/.claude.json" ]]; then
     ok "Claude onboarding state"
 elif [[ -d "$HOME/.claude.json" ]]; then
-    warn "~/.claude.json is a directory (should be a file) — fixing"
+    warn "\$HOME/.claude.json is a directory (should be a file) — fixing"
     rm -rf "$HOME/.claude.json"
     echo '{}' > "$HOME/.claude.json"
     restore_ok=false
 else
-    warn "~/.claude.json missing — creating"
+    warn "\$HOME/.claude.json missing — creating"
     echo '{}' > "$HOME/.claude.json"
     restore_ok=false
 fi
