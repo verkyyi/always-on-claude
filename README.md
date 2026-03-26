@@ -124,7 +124,7 @@ Your Mac / Phone / Tablet
 
 | Component | Purpose |
 |---|---|
-| **Pre-built AMI** | Docker + Claude Code pre-installed (~40s boot) |
+| **Pre-built AMI** | Docker + Claude Code pre-installed, arm64 + x86_64 (~40s boot) |
 | **Docker container** | Isolated workspace with dev tools, bind-mounted for persistence |
 | **tmux** | Sessions survive SSH disconnects |
 | **Login menu** | SSH in → choose Claude Code, bash, or host shell |
