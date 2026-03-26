@@ -68,7 +68,7 @@ scripts/deploy/ (provisioning & server setup — run locally or during first boo
   setup-auth.sh            — Interactive auth: git config, gh auth login, claude login
 
 scripts/runtime/ (day-to-day server use — run on SSH login or inside the container):
-  ssh-login.sh             — Menu on SSH login: [1] Claude Code, [2] container bash, [3] host shell
+  ssh-login.sh             — Menu on SSH login: numbered repos, [m] manage, [h] host shell, [c] container shell, [aN] reattach
   start-claude.sh          — Workspace picker, auto-starts container, launches Claude in tmux
   worktree-helper.sh       — Create/remove/list git worktrees for parallel sessions
   self-update.sh           — Single-command updater: repo, Claude Code, Docker image, host scripts
