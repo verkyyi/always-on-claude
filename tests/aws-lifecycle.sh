@@ -31,7 +31,8 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # --- Environment --------------------------------------------------------------
 
-export TAG="${TAG:-aoc-ci-test}"
+export PROJECT_TAG="${PROJECT_TAG:-aoc-ci-test}"
+export TAG="${PROJECT_TAG}"
 export AWS_REGION="${AWS_REGION:-us-west-2}"
 
 _RUN_ID="${GITHUB_RUN_ID:-$(date +%s)}"
