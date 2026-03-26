@@ -41,7 +41,7 @@ _defaults() {
 
     # AMI build
     : "${AMI_BUILD_INSTANCE_TYPE:=t3.medium}"
-    : "${AMI_BUILD_VOLUME_SIZE:=30}"
+    : "${AMI_BUILD_VOLUME_SIZE:=20}"
 }
 
 # --- Load .env ----------------------------------------------------------------
