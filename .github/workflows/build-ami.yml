@@ -184,6 +184,7 @@ jobs:
 
           for ami in $OLD_AMIS; do
             [[ "$ami" == "None" || -z "$ami" ]] && continue
+            [[ "$ami" == "$NEW_AMI" ]] && continue
             echo "Deregistering old AMI: $ami"
             SNAPS=$(aws ec2 describe-images --image-ids "$ami" \
               --query 'Images[0].BlockDeviceMappings[*].Ebs.SnapshotId' --output text)
