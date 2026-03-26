@@ -116,10 +116,9 @@ if command -v tailscaled &>/dev/null; then
 
     # Start tailscaled in the background
     tailscaled --state=/var/lib/tailscale/tailscaled.state --tun=userspace-networking &
-    TAILSCALED_PID=$!
 
     # Wait for tailscaled to be ready (up to 10s)
-    for i in $(seq 10); do tailscale status &>/dev/null && break; sleep 1; done
+    for _ in $(seq 10); do tailscale status &>/dev/null && break; sleep 1; done
 
     TS_HOSTNAME="${TS_HOSTNAME:-claude-dev}"
 

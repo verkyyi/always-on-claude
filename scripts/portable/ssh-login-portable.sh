@@ -9,6 +9,9 @@
 #   - Already inside tmux
 #   - Non-interactive shell (scp, rsync, etc.)
 #   - NO_CLAUDE=1 env var is set
+#
+# NOTE: No `set -euo pipefail` — this file is sourced from .bash_profile,
+# so strict error handling would kill the user's login shell on any failure.
 
 # Guard: only run for interactive, non-tmux sessions
 [[ $- != *i* ]] && return

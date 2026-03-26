@@ -25,8 +25,9 @@ services:
       # Also stores .claude.json (onboarding state) — symlinked by entrypoint
       - claude-data:/home/dev/.claude
 
-      # Git config
-      - gitconfig:/home/dev/.gitconfig.d
+      # Git config (persists user.name, user.email, etc. across rebuilds)
+      # Uses XDG path ~/.config/git/ — git reads ~/.config/git/config natively
+      - gitconfig:/home/dev/.config/git
 
       # User's code repos
       - projects:/home/dev/projects

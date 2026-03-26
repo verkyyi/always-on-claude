@@ -35,7 +35,7 @@ first_run_check() {
         echo "  [1] Run setup (git + GitHub CLI + Claude Code)"
         echo "  [2] Skip for now"
         echo ""
-        read -n 1 -p "  > " setup_choice || true
+        read -rn 1 -p "  > " setup_choice || true
         echo ""
 
         if [[ "$setup_choice" == "1" ]]; then
@@ -102,7 +102,7 @@ show_repos() {
     local i=1
     for item in "${repos[@]+"${repos[@]}"}"; do
         IFS='|' read -r path branch <<< "$item"
-        local short_path="${path#$HOME/}"
+        local short_path="${path#"$HOME"/}"
         echo "  [$i] ${short_path} (${branch})"
         ((i++))
     done
@@ -120,7 +120,7 @@ show_repos() {
 
 show_branches() {
     local repo_path="$1" repo_branch="$2"
-    local short_path="${repo_path#$HOME/}"
+    local short_path="${repo_path#"$HOME"/}"
 
     echo ""
     echo "  === ${short_path} ==="
@@ -174,7 +174,7 @@ discover
 while true; do
     show_repos
 
-    read -n 1 -p "  > " choice || true
+    read -rn 1 -p "  > " choice || true
     echo ""
 
     if [[ "$choice" == "m" ]]; then
@@ -204,7 +204,7 @@ while true; do
     while true; do
         show_branches "$selected_path" "$selected_branch"
 
-        read -n 1 -p "  > " choice2 || true
+        read -rn 1 -p "  > " choice2 || true
         echo ""
 
         if [[ "$choice2" == "b" ]]; then

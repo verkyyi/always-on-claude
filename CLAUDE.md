@@ -140,7 +140,7 @@ All deployment parameters live in a single `.env` file at the repo root. Scripts
 The project supports three deployment targets:
 
 | Type | Where | Networking | Init system | Slash commands |
-|------|-------|-----------|-------------|----------------|
+| --- | --- | --- | --- | --- |
 | `ec2` | AWS EC2 instance | `network_mode: host` | systemd | `/provision`, `/destroy` |
 | `local-mac` | Local Mac (mini/Studio) | `network_mode: bridge` | launchd | `/provision-local`, `/destroy-local` |
 | `portable` | Any machine with Docker | bridge (default) | entrypoint.sh | n/a |
@@ -165,6 +165,7 @@ This means `INSTANCE_TYPE=t3.medium bash provision.sh` overrides whatever is in 
 Docker Compose also reads `.env` natively for variable substitution in `docker-compose.yml` (image, container name, hostname).
 
 **Portable (single docker run):**
+
 ```bash
 docker run -d --name claude-dev \
   -v claude-data:/home/dev/.claude \
