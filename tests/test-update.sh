@@ -55,13 +55,27 @@ test_noop_when_up_to_date() {
     assert_file_not_exists "$HOME/.update-pending"
 }
 
-test_handles_ff_only_failure() {
+test_fetch_does_not_modify_working_tree() {
     _push_upstream_commit "upstream-file" "Upstream change"
-    touch "$HOME/dev-env/local-file"
-    git -C "$HOME/dev-env" add .
-    git -C "$HOME/dev-env" commit -q -m "Local divergent change"
+    bash "$UPDATE_SCRIPT"
+    # The new file should NOT be in the local working tree (fetch only, no pull)
+    assert_file_not_exists "$HOME/dev-env/upstream-file"
+}
 
-    assert_exit_code 1 bash "$UPDATE_SCRIPT"
+test_local_head_unchanged_after_check() {
+    local before
+    before=$(git -C "$HOME/dev-env" rev-parse HEAD)
+    _push_upstream_commit "somefile" "New commit"
+    bash "$UPDATE_SCRIPT"
+    local after
+    after=$(git -C "$HOME/dev-env" rev-parse HEAD)
+    assert_eq "$before" "$after" "local HEAD should not change after fetch-only check"
+}
+
+test_clears_pending_when_up_to_date() {
+    # Create a stale pending file
+    echo "stale=true" > "$HOME/.update-pending"
+    bash "$UPDATE_SCRIPT"
     assert_file_not_exists "$HOME/.update-pending"
 }
 
