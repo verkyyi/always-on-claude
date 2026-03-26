@@ -85,58 +85,86 @@ ok "Running as $USER ($(if [[ $EUID -eq 0 ]]; then echo "root"; else echo "non-r
 
 # --- Pre-baked AMI fast path ------------------------------------------------
 # When booting from a pre-baked AMI, cloud-init re-runs and triggers install.sh
-# again via User Data. Detect this (dev user exists + Docker installed + Claude
-# Code installed under /home/dev) and skip the full install — just handle user
-# cleanup, repo clone, and container start.
+# again via User Data. Detect this: dev user exists + Docker image already pulled.
+# cloud-init clean wipes /home/dev entirely, so we must rebuild the home dir,
+# but skip slow steps (apt, Docker install, Claude Code install, image pull).
 
-if id dev &>/dev/null 2>&1 && command -v docker &>/dev/null && [[ -d /home/dev/.local/bin ]]; then
+if id dev &>/dev/null 2>&1 && sudo docker image inspect ghcr.io/verkyyi/always-on-claude:latest &>/dev/null 2>&1; then
     info "Pre-baked AMI detected — fast path"
 
     # cloud-init recreates 'ubuntu' user (UID 1001) with the EC2 SSH key.
     # Copy the key to dev before removing ubuntu so SSH works as dev.
-    if id ubuntu &>/dev/null 2>&1; then
-        if [[ -f /home/ubuntu/.ssh/authorized_keys ]]; then
-            sudo cp /home/ubuntu/.ssh/authorized_keys /home/dev/.ssh/authorized_keys
-            sudo chown dev:dev /home/dev/.ssh/authorized_keys
-            ok "Copied SSH key from ubuntu to dev"
-        fi
+    if id ubuntu &>/dev/null 2>&1 && [[ -f /home/ubuntu/.ssh/authorized_keys ]]; then
+        sudo mkdir -p /home/dev/.ssh
+        sudo cp /home/ubuntu/.ssh/authorized_keys /home/dev/.ssh/authorized_keys
+        sudo chmod 700 /home/dev/.ssh
+        sudo chmod 600 /home/dev/.ssh/authorized_keys
+        sudo chown -R dev:dev /home/dev/.ssh
+        ok "Copied SSH key from ubuntu to dev"
         sudo userdel -r ubuntu 2>/dev/null || true
         ok "Removed cloud-init ubuntu user"
     fi
 
-    # Ensure we're operating as dev
+    # Switch to dev context
     export USER=dev HOME=/home/dev
     DEV_ENV=/home/dev/dev-env
 
-    # Re-clone repo if .git was lost (cloud-init clean wipes state)
+    # Clone repo (cloud-init clean wipes /home/dev entirely)
     if [[ ! -d "$DEV_ENV/.git" ]]; then
-        rm -rf "$DEV_ENV"
-        git clone https://github.com/verkyyi/always-on-claude.git "$DEV_ENV"
-        ok "Re-cloned repository"
-    else
-        git -C "$DEV_ENV" pull --ff-only 2>/dev/null || true
-        ok "Updated repository"
+        sudo rm -rf "$DEV_ENV"
+        sudo -u dev git clone https://github.com/verkyyi/always-on-claude.git "$DEV_ENV"
+        ok "Cloned repository"
     fi
+
+    # Rebuild home dir essentials that cloud-init wiped
+    sudo mkdir -p /home/dev/.claude/debug /home/dev/.claude/commands \
+        /home/dev/.config/gh /home/dev/projects /home/dev/.gitconfig.d
+    [[ -f /home/dev/.claude.json ]] || echo '{}' | sudo tee /home/dev/.claude.json > /dev/null
+    sudo touch /home/dev/.claude/remote-settings.json
+    sudo touch /home/dev/.ssh/known_hosts 2>/dev/null || true
+    sudo chown -R dev:dev /home/dev
+
+    # Reinstall Claude Code for dev user
+    sudo -u dev bash -c 'curl -fsSL https://claude.ai/install.sh | bash' || true
+    ok "Installed Claude Code"
+
+    # Install settings, statusline, tmux config
+    if [[ -f "$DEV_ENV/scripts/runtime/statusline-command.sh" ]]; then
+        sudo -u dev cp "$DEV_ENV/scripts/runtime/statusline-command.sh" /home/dev/.claude/statusline-command.sh
+        chmod +x /home/dev/.claude/statusline-command.sh
+        desired='{"permissions":{"defaultMode":"bypassPermissions"},"statusLine":{"type":"command","command":"bash /home/dev/.claude/statusline-command.sh"},"mcpServers":{"context7":{"command":"npx","args":["-y","@upstash/context7-mcp"]},"fetch":{"command":"uvx","args":["mcp-server-fetch"]}}}'
+        echo "$desired" | jq . | sudo -u dev tee /home/dev/.claude/settings.json > /dev/null
+        ok "Installed settings.json"
+    fi
+    if [[ -f "$DEV_ENV/scripts/runtime/tmux.conf" ]]; then
+        sudo -u dev cp "$DEV_ENV/scripts/runtime/tmux.conf" /home/dev/.tmux.conf
+    fi
+    if [[ -f "$DEV_ENV/scripts/runtime/tmux-status.sh" ]]; then
+        sudo -u dev cp "$DEV_ENV/scripts/runtime/tmux-status.sh" /home/dev/.tmux-status.sh
+        chmod +x /home/dev/.tmux-status.sh
+    fi
+
+    # Rebuild .bash_profile
+    cat <<'PROF' | sudo -u dev tee /home/dev/.bash_profile > /dev/null
+# PATH additions
+export PATH="$HOME/.local/bin:$PATH"
+
+# Source .bashrc
+[[ -f ~/.bashrc ]] && source ~/.bashrc
+
+# Auto-launch Claude Code on SSH login
+source ~/dev-env/scripts/runtime/ssh-login.sh
+PROF
+    ok "Rebuilt .bash_profile"
 
     # Start container
     cd "$DEV_ENV"
-    if [[ $EUID -eq 0 ]]; then
-        docker compose pull 2>/dev/null || true
-        HOME=/home/dev docker compose up -d
-    else
-        sudo docker compose pull 2>/dev/null || true
-        sudo --preserve-env=HOME docker compose up -d
-    fi
+    sudo --preserve-env=HOME docker compose up -d
     ok "Container running"
 
     # Fix container permissions
-    if [[ $EUID -eq 0 ]]; then
-        docker compose exec -T -u root dev bash -c \
-            "chown dev:dev /home/dev/projects /home/dev/.claude" 2>/dev/null || true
-    else
-        sudo --preserve-env=HOME docker compose exec -T -u root dev bash -c \
-            "chown dev:dev /home/dev/projects /home/dev/.claude" 2>/dev/null || true
-    fi
+    sudo --preserve-env=HOME docker compose exec -T -u root dev bash -c \
+        "chown dev:dev /home/dev/projects /home/dev/.claude" 2>/dev/null || true
 
     echo ""
     echo "  Pre-baked AMI boot complete."
