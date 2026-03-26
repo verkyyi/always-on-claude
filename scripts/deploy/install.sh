@@ -85,14 +85,21 @@ ok "Running as $USER ($(if [[ $EUID -eq 0 ]]; then echo "root"; else echo "non-r
 
 # --- Pre-baked AMI fast path ------------------------------------------------
 # When booting from a pre-baked AMI, cloud-init re-runs and triggers install.sh
-# again via User Data. Detect this (dev user exists + .provisioned marker) and
-# skip the full install — just handle user rename, repo clone, and container start.
+# again via User Data. Detect this (dev user exists + Docker installed + Claude
+# Code installed under /home/dev) and skip the full install — just handle user
+# cleanup, repo clone, and container start.
 
-if [[ -f /home/dev/dev-env/.provisioned ]] && id dev &>/dev/null 2>&1; then
+if id dev &>/dev/null 2>&1 && command -v docker &>/dev/null && [[ -d /home/dev/.local/bin ]]; then
     info "Pre-baked AMI detected — fast path"
 
-    # cloud-init recreates 'ubuntu' user (UID 1001) — remove it
+    # cloud-init recreates 'ubuntu' user (UID 1001) with the EC2 SSH key.
+    # Copy the key to dev before removing ubuntu so SSH works as dev.
     if id ubuntu &>/dev/null 2>&1; then
+        if [[ -f /home/ubuntu/.ssh/authorized_keys ]]; then
+            sudo cp /home/ubuntu/.ssh/authorized_keys /home/dev/.ssh/authorized_keys
+            sudo chown dev:dev /home/dev/.ssh/authorized_keys
+            ok "Copied SSH key from ubuntu to dev"
+        fi
         sudo userdel -r ubuntu 2>/dev/null || true
         ok "Removed cloud-init ubuntu user"
     fi
