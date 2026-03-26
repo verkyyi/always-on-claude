@@ -139,7 +139,7 @@ if [[ "$IMAGE_NEEDS_UPDATE" == "true" ]]; then
     if [[ -n "$active_sessions" ]]; then
         echo ""
         warn "Active Claude sessions detected:"
-        echo "$active_sessions" | sed 's/^/    /'
+        while IFS= read -r session; do echo "    $session"; done <<< "$active_sessions"
         echo ""
         echo "  The container needs to restart to apply image updates."
         echo "  Sessions will be preserved (tmux runs on the host)."
