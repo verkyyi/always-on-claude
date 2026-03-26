@@ -70,7 +70,7 @@ After setup is complete, give a brief tour:
 
 **Manage workspaces:** Press [m] at the picker to clone more repos, create worktrees for parallel branches, and more.
 
-**Detach/reattach:** Press Ctrl-b d to detach from a session without stopping it. It keeps running in the background.
+**Detach/reattach:** Press your tmux prefix + d to detach from a session without stopping it. It keeps running in the background. (Run `tmux show-option -gv prefix` to check your prefix key.)
 
 **Mobile tip:** Use a terminal app like Blink (iOS) or Termux (Android). The workspace picker is designed for quick one-key selection."
 
@@ -81,7 +81,7 @@ After the tour, run this command to mark onboarding as done:
 touch ~/.workspace-initialized
 ```
 
-Then say: "Onboarding complete! Press Ctrl-b d to detach, then SSH back in to see the workspace picker with your repos."
+Then say: "Onboarding complete! Detach from tmux (prefix + d) and SSH back in to see the workspace picker with your repos."
 
 ## Important rules
 

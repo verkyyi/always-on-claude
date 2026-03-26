@@ -40,4 +40,4 @@ You are helping the user manage git workspaces. This runs on the **host** — `~
 4. After cloning, creating, or deleting a workspace, remind the user:
 
    > Your new repo will appear in the login menu next time you SSH in.
-   > To switch now: press Ctrl-b d to detach, then reconnect via SSH.
+   > To switch now: detach from tmux (prefix + d), then reconnect via SSH.

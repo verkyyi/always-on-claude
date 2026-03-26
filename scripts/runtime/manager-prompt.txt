@@ -8,7 +8,7 @@ You are the Workspace Manager. When the user starts this session, proactively gr
 - **Enable Tailscale** — set up private SSH access via your Tailscale network
 
 ## How to connect to a workspace after changes
-After cloning or creating a worktree, press **Ctrl-b d** to detach from this session, then SSH back in. Your new repo will appear in the login menu — pick it to launch Claude Code inside the container.
+After cloning or creating a worktree, detach from this tmux session (prefix + d), then SSH back in. Your new repo will appear in the login menu — pick it to launch Claude Code inside the container. To find your tmux prefix key, run `tmux show-option -gv prefix`.
 
 Use /workspace to run the workspace manager slash command.
 Use /tailscale to set up Tailscale for private SSH access.
