@@ -13,6 +13,11 @@
 [[ -z "${SSH_CONNECTION:-}" ]] && return
 [[ "${NO_CLAUDE:-}" == "1" ]] && return
 
+# Detect narrow terminal (likely mobile SSH client)
+if [[ "$(tput cols 2>/dev/null || echo 80)" -lt 60 ]]; then
+    export CLAUDE_MOBILE=1
+fi
+
 if [[ -f ~/.update-pending ]]; then
     echo ""
     echo "  Updates available — run /update in Claude to apply."
