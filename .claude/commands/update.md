@@ -130,6 +130,7 @@ If the self-update script fails, or if the user wants to inspect changes manuall
      ```
 
      Then tell the user:
+
      1. The host user has been renamed from `ubuntu` to `dev`
      2. They must disconnect (Ctrl-b d, then exit) and reconnect as `dev@`
      3. Update their local SSH config: change `User ubuntu` to `User dev` in `~/.ssh/config`
@@ -152,6 +153,7 @@ If the self-update script fails, or if the user wants to inspect changes manuall
    - Or set `CLAUDE_AUTO_UPDATE=1` in their environment to auto-update
 
 6. Clean up:
+
    ```bash
    rm -f ~/.update-pending
    ```
