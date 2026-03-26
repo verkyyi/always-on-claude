@@ -146,11 +146,14 @@ jobs:
 
       - name: Clean instance for snapshot
         run: |
-          # install.sh renames ubuntu → dev, so use dev@ for post-install commands
+          # install.sh renames ubuntu → dev, so use dev@ for post-install commands.
+          # cloud-init clean causes User Data to re-run on boot — install.sh detects
+          # the pre-baked AMI via .provisioned marker and takes a fast path.
           ssh -o StrictHostKeyChecking=no -o BatchMode=yes -i /tmp/build-key.pem \
             "dev@${PUBLIC_IP}" bash <<'EOF'
           sudo rm -f /etc/ssh/ssh_host_*
           sudo cloud-init clean --logs
+          sudo userdel -r ubuntu 2>/dev/null || true
           rm -f ~/.bash_history
           cd ~/dev-env && sudo docker compose stop 2>/dev/null || true
           EOF
