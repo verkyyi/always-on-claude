@@ -23,8 +23,7 @@ concurrency:
 
 env:
   AWS_REGION: us-east-1
-  INSTANCE_TYPE: t4g.small
-  TAG: always-on-claude
+  PROJECT_TAG: always-on-claude
 
 jobs:
   build-ami:
@@ -34,6 +33,17 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       github.event_name == 'push' ||
       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            instance_type: t4g.small
+            ubuntu_ami: ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-arm64-server-*
+          - arch: x86_64
+            instance_type: t3.small
+            ubuntu_ami: ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*
 
     steps:
       - name: Checkout
@@ -48,7 +58,7 @@ jobs:
 
       - name: Create temporary SSH key pair
         run: |
-          KEY_NAME="ami-builder-${GITHUB_RUN_ID}"
+          KEY_NAME="ami-builder-${GITHUB_RUN_ID}-${{ matrix.arch }}"
           aws ec2 create-key-pair \
             --key-name "$KEY_NAME" \
             --query 'KeyMaterial' \
@@ -61,12 +71,12 @@ jobs:
           AMI_ID=$(aws ec2 describe-images \
             --owners 099720109477 \
             --filters \
-              "Name=name,Values=ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-arm64-server-*" \
+              "Name=name,Values=${{ matrix.ubuntu_ami }}" \
               "Name=state,Values=available" \
             --query 'Images | sort_by(@, &CreationDate) | [-1].ImageId' \
             --output text)
           echo "BASE_AMI=$AMI_ID" >> "$GITHUB_ENV"
-          echo "Base AMI: $AMI_ID"
+          echo "Base AMI: $AMI_ID (${{ matrix.arch }})"
 
       - name: Find or create security group
         run: |
@@ -81,17 +91,12 @@ jobs:
               --description "SSH access for always-on Claude Code" \
               --query 'GroupId' --output text)
             aws ec2 create-tags --resources "$SG_ID" \
-              --tags Key=Project,Value=${{ env.TAG }}
+              --tags Key=Project,Value=${{ env.PROJECT_TAG }}
           fi
 
           # Ensure SSH rule exists (idempotent — fails silently if already present)
           aws ec2 authorize-security-group-ingress \
             --group-id "$SG_ID" --protocol tcp --port 22 --cidr 0.0.0.0/0 2>/dev/null || true
-
-          # Log SG rules for debugging
-          echo "Security group $SG_ID rules:"
-          aws ec2 describe-security-groups --group-ids "$SG_ID" \
-            --query 'SecurityGroups[0].IpPermissions' --output json
 
           echo "SG_ID=$SG_ID" >> "$GITHUB_ENV"
 
@@ -99,23 +104,18 @@ jobs:
         run: |
           INSTANCE_ID=$(aws ec2 run-instances \
             --image-id "$BASE_AMI" \
-            --instance-type "$INSTANCE_TYPE" \
+            --instance-type "${{ matrix.instance_type }}" \
             --key-name "$KEY_NAME" \
             --security-group-ids "$SG_ID" \
             --block-device-mappings 'DeviceName=/dev/sda1,Ebs={VolumeSize=30,VolumeType=gp3,DeleteOnTermination=true}' \
-            --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=ami-builder},{Key=Project,Value=${{ env.TAG }}}]" \
+            --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=ami-builder-${{ matrix.arch }}},{Key=Project,Value=${{ env.PROJECT_TAG }}}]" \
             --query 'Instances[0].InstanceId' --output text)
           echo "INSTANCE_ID=$INSTANCE_ID" >> "$GITHUB_ENV"
-          echo "Instance: $INSTANCE_ID"
+          echo "Instance: $INSTANCE_ID (${{ matrix.arch }})"
 
       - name: Wait for instance + SSH
         run: |
           aws ec2 wait instance-running --instance-ids "$INSTANCE_ID"
-
-          # Log instance networking details for debugging
-          aws ec2 describe-instances --instance-ids "$INSTANCE_ID" \
-            --query 'Reservations[0].Instances[0].{PublicIp:PublicIpAddress,SubnetId:SubnetId,VpcId:VpcId,SecurityGroups:SecurityGroups,State:State.Name}' \
-            --output json
 
           PUBLIC_IP=$(aws ec2 describe-instances \
             --instance-ids "$INSTANCE_ID" \
@@ -123,34 +123,8 @@ jobs:
           echo "PUBLIC_IP=$PUBLIC_IP" >> "$GITHUB_ENV"
           echo "IP: $PUBLIC_IP"
 
-          # Check subnet internet gateway (non-fatal if IAM lacks DescribeRouteTables)
-          SUBNET_ID=$(aws ec2 describe-instances --instance-ids "$INSTANCE_ID" \
-            --query 'Reservations[0].Instances[0].SubnetId' --output text)
-          echo "Subnet: $SUBNET_ID"
-          if RT_JSON=$(aws ec2 describe-route-tables \
-            --filters "Name=association.subnet-id,Values=$SUBNET_ID" \
-            --output json 2>&1); then
-            echo "Route table: $RT_JSON"
-          else
-            echo "WARNING: Cannot query route tables (IAM permission missing): $RT_JSON"
-          fi
-
-          # Check network ACLs (non-fatal)
-          if NACL_JSON=$(aws ec2 describe-network-acls \
-            --filters "Name=association.subnet-id,Values=$SUBNET_ID" \
-            --query 'NetworkAcls[0].Entries' --output json 2>&1); then
-            echo "Network ACLs: $NACL_JSON"
-          else
-            echo "WARNING: Cannot query NACLs (IAM permission missing): $NACL_JSON"
-          fi
-
-          # Quick connectivity check
-          echo "Checking port 22 reachability..."
-          nc -z -w 5 "$PUBLIC_IP" 22 && echo "Port 22 is OPEN" || echo "Port 22 is CLOSED/FILTERED"
-
           echo "Waiting for SSH..."
           for i in $(seq 1 30); do
-            # Show SSH errors for debugging (stderr visible in logs)
             if ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -o BatchMode=yes \
               -i /tmp/build-key.pem "ubuntu@${PUBLIC_IP}" "echo ok" 2>&1; then
               echo "SSH ready"
@@ -183,27 +157,29 @@ jobs:
 
       - name: Create AMI
         run: |
-          AMI_NAME="always-on-claude-$(date +%Y%m%d)-${GITHUB_SHA::7}"
+          AMI_NAME="always-on-claude-$(date +%Y%m%d)-${{ matrix.arch }}-${GITHUB_SHA::7}"
           NEW_AMI=$(aws ec2 create-image \
             --instance-id "$INSTANCE_ID" \
             --name "$AMI_NAME" \
-            --description "Always-on Claude Code workspace - Ubuntu 24.04 + Docker + Claude Code" \
-            --tag-specifications "ResourceType=image,Tags=[{Key=Name,Value=$AMI_NAME},{Key=Project,Value=${{ env.TAG }}}]" \
+            --description "Always-on Claude Code workspace - Ubuntu 24.04 + Docker + Claude Code (${{ matrix.arch }})" \
+            --tag-specifications "ResourceType=image,Tags=[{Key=Name,Value=$AMI_NAME},{Key=Project,Value=${{ env.PROJECT_TAG }}}]" \
             --query 'ImageId' --output text)
           echo "NEW_AMI=$NEW_AMI" >> "$GITHUB_ENV"
           echo "AMI_NAME=$AMI_NAME" >> "$GITHUB_ENV"
-          echo "AMI: $NEW_AMI"
+          echo "AMI: $NEW_AMI (${{ matrix.arch }})"
 
           echo "Waiting for AMI to be available..."
           aws ec2 wait image-available --image-ids "$NEW_AMI"
 
       - name: Deregister old AMIs
         run: |
-          # Keep the 2 most recent AMIs (including the one just built), deregister the rest
-          # AWS limits public AMIs to 5 per region
+          # Keep the 1 most recent AMI per architecture, deregister the rest
+          # With 2 architectures × 1 kept = 2 steady state, well under the 5 public AMI limit
           OLD_AMIS=$(aws ec2 describe-images --owners self \
-            --filters "Name=tag:Project,Values=${{ env.TAG }}" \
-            --query 'Images | sort_by(@, &CreationDate) | [:-2].ImageId' \
+            --filters \
+              "Name=tag:Project,Values=${{ env.PROJECT_TAG }}" \
+              "Name=architecture,Values=${{ matrix.arch }}" \
+            --query 'Images | sort_by(@, &CreationDate) | [:-1].ImageId' \
             --output text)
 
           for ami in $OLD_AMIS; do
@@ -245,9 +221,10 @@ jobs:
 
       - name: Summary
         run: |
-          echo "## AMI Build Complete" >> "$GITHUB_STEP_SUMMARY"
+          echo "## AMI Build Complete (${{ matrix.arch }})" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "- **AMI ID:** \`$NEW_AMI\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- **Name:** $AMI_NAME" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Arch:** ${{ matrix.arch }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- **Region:** $AWS_REGION" >> "$GITHUB_STEP_SUMMARY"
           echo "- **Public:** yes" >> "$GITHUB_STEP_SUMMARY"
