@@ -80,7 +80,7 @@ scripts/portable/ (single-container portable mode — baked into the image):
 
 CI/CD:
   .github/workflows/docker-publish.yml — Multi-arch build + push to GHCR on main (base + portable)
-  .github/workflows/build-ami.yml      — Build and publish pre-baked AMI on image update
+  .github/workflows/build-ami.yml      — Build and publish pre-baked AMIs (arm64 + x86_64) on image update
 
 Add-ons (slash commands — live in .claude/commands/, auto-discovered):
   .claude/commands/provision.md        — Slash command: orchestrates full AWS provisioning via Claude

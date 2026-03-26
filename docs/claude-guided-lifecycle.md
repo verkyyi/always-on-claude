@@ -1,8 +1,8 @@
-# Claude-Guided Lifecycle (Coming Soon)
+# Claude-Guided Lifecycle
 
 ## Vision
 
-The full workspace lifecycle — provision, setup, update, destroy — should be Claude Code-guided first, with shell scripts as fallback. Users run slash commands and Claude orchestrates everything.
+The full workspace lifecycle — provision, setup, update, destroy — is Claude Code-guided first, with shell scripts as fallback. Users run slash commands and Claude orchestrates everything.
 
 ## Slash commands
 
@@ -10,17 +10,27 @@ The full workspace lifecycle — provision, setup, update, destroy — should be
 |---|---|---|
 | **Provision** | `/provision` | `provision.sh` |
 | **Auth setup** | Claude walks through it | `setup-auth.sh` |
+| **Update** | `/update` | `self-update.sh` |
 | **Destroy** | `/destroy` | `destroy.sh` |
+| **Tailscale** | `/tailscale` | manual setup |
+| **Workspace** | `/workspace` | `worktree-helper.sh` |
 
-## How to install (preview)
+## Mobile-friendly commands
 
-```bash
-mkdir -p ~/.claude/commands
-curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/commands/provision.md -o ~/.claude/commands/provision.md
-curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/commands/destroy.md -o ~/.claude/commands/destroy.md
-```
+Short aliases for phone use:
 
-Then in Claude Code: type `/provision` and Claude orchestrates the entire AWS setup.
+| Command | Does |
+|---|---|
+| `/s` | Status: git state, PRs, instance health |
+| `/d` | Deploy current project |
+| `/l` | Show recent logs |
+| `/fix` | Fix failing tests and commit |
+| `/ship` | Merge PR, deploy, verify health |
+| `/review` | Summarize open PRs, approve/merge |
+
+## How it works
+
+Slash commands live in `.claude/commands/` and are auto-discovered by Claude Code when running in this repo. No manual installation needed — just clone the repo and run `claude`.
 
 ## Advantages over scripts
 
@@ -28,7 +38,3 @@ Then in Claude Code: type `/provision` and Claude orchestrates the entire AWS se
 - **Error recovery** — diagnoses and fixes issues mid-flight
 - **Adaptive** — detects existing resources, suggests reuse
 - **No memorizing env vars** — just describe what you want
-
-## Status
-
-Slash commands exist and work but are still being refined. The script fallbacks are the stable path for now.

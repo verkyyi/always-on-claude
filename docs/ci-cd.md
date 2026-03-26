@@ -12,12 +12,14 @@ Builds and pushes a multi-arch Docker image to GHCR on push to main.
 
 ## AMI build (`.github/workflows/build-ami.yml`)
 
-Builds a pre-baked AMI with everything pre-installed for ~40s provisioning.
+Builds pre-baked AMIs for both arm64 and x86_64 with everything pre-installed for ~40s provisioning.
 
 - **Triggers**: After Docker image publish, changes to `install.sh`, or manual dispatch
-- **Process**: Launch temp EC2 → run install.sh → snapshot AMI → make public → terminate
-- **Tag**: `Project=always-on-claude` (provision.sh finds it by tag)
+- **Architectures**: arm64 (t4g.small) and x86_64 (t3.small) built in parallel via matrix strategy
+- **Process**: Launch temp EC2 → run install.sh → snapshot AMI → clean up old AMIs → make public → terminate
+- **Tag**: `Project=always-on-claude` (provision.sh finds AMIs by this tag + architecture)
 - **Region**: us-east-1 (copy to other regions manually)
+- **Cleanup**: Automatically deregisters old AMIs per architecture (keeps 1 per arch) to stay under the 5 public AMI quota
 
 ### Required secrets
 
@@ -28,4 +30,4 @@ Builds a pre-baked AMI with everything pre-installed for ~40s provisioning.
 
 ### IAM permissions needed
 
-`ec2:RunInstances`, `ec2:TerminateInstances`, `ec2:CreateImage`, `ec2:ModifyImageAttribute`, `ec2:DisableImageBlockPublicAccess`, `ec2:CreateKeyPair`, `ec2:DeleteKeyPair`, `ec2:DescribeImages`, `ec2:DescribeInstances`, `ec2:DescribeSecurityGroups`, `ec2:CreateSecurityGroup`, `ec2:AuthorizeSecurityGroupIngress`, `ec2:CreateTags`, `ec2:DescribeSnapshots`, `ec2:CreateSnapshot`
+`ec2:RunInstances`, `ec2:TerminateInstances`, `ec2:CreateImage`, `ec2:DeregisterImage`, `ec2:ModifyImageAttribute`, `ec2:DisableImageBlockPublicAccess`, `ec2:CreateKeyPair`, `ec2:DeleteKeyPair`, `ec2:DescribeImages`, `ec2:DescribeInstances`, `ec2:DescribeSecurityGroups`, `ec2:CreateSecurityGroup`, `ec2:AuthorizeSecurityGroupIngress`, `ec2:CreateTags`, `ec2:DescribeSnapshots`, `ec2:CreateSnapshot`, `ec2:DeleteSnapshot`

@@ -7,7 +7,7 @@ Runs on your Mac. Creates an EC2 instance and waits for it to be ready.
 **Flow:**
 1. Checks for existing instance (reuses if found)
 2. Creates/reuses SSH key pair and security group
-3. Finds pre-built AMI (falls back to stock Ubuntu if not found)
+3. Finds pre-built AMI matching the instance architecture (falls back to stock Ubuntu if not found)
 4. Launches instance with User Data
 5. Waits for SSH + container to be running
 6. Prints connection details
@@ -19,7 +19,11 @@ Runs on your Mac. Creates an EC2 instance and waits for it to be ready.
 | `INSTANCE_NAME` | `claude-dev` | EC2 instance name tag |
 | `KEY_NAME` | `claude-dev-key` | SSH key pair name |
 | `AWS_REGION` | from `aws configure` | AWS region |
-| `INSTANCE_TYPE` | `t3.medium` | EC2 instance type |
+| `INSTANCE_TYPE` | `t4g.small` | EC2 instance type |
+| `VOLUME_SIZE` | `20` | EBS volume size in GB |
+| `PROJECT_TAG` | `always-on-claude` | AWS resource tag for identification |
+
+Architecture is auto-detected from instance type: `*g.*` patterns (t4g, m7g, c7g) = arm64, otherwise x86_64. The matching pre-built AMI is selected automatically.
 
 ## destroy.sh
 
@@ -39,13 +43,13 @@ Runs on the server (or during AMI build). Sets up everything from a stock Ubuntu
 
 ## build-ami.sh
 
-Runs locally or via GitHub Actions. Builds a pre-baked AMI.
+Runs locally or via GitHub Actions. Builds pre-baked AMIs. The GitHub Actions workflow builds both arm64 and x86_64 AMIs in parallel; the local script builds for a single architecture based on `AMI_BUILD_INSTANCE_TYPE`.
 
 **Flow:**
 1. Launches a temp instance with stock Ubuntu
 2. Runs install.sh via SSH
 3. Cleans instance (removes SSH host keys, cloud-init state)
-4. Snapshots AMI, makes it public
+4. Snapshots AMI, deregisters old AMIs, makes new one public
 5. Terminates the temp instance
 
 ## setup-auth.sh
