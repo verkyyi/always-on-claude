@@ -9,11 +9,19 @@
 
 set -euo pipefail
 
-# --- Config -----------------------------------------------------------------
+# --- Config (from .env file, override with env vars) -------------------------
 
-AWS_REGION="${AWS_REGION:-$(aws configure get region 2>/dev/null || echo "us-east-1")}"
-TAG="${TAG:-always-on-claude}"
-KEY_NAME="${KEY_NAME:-claude-dev-key}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd 2>/dev/null)" || SCRIPT_DIR=""
+if [[ -n "$SCRIPT_DIR" && -f "$SCRIPT_DIR/load-config.sh" ]]; then
+    # shellcheck disable=SC1091
+    source "$SCRIPT_DIR/load-config.sh"
+else
+    # Running via curl pipe or without repo — use defaults with env var overrides
+    : "${AWS_REGION:=$(aws configure get region 2>/dev/null || echo "us-east-1")}"
+    : "${KEY_NAME:=claude-dev-key}"
+    : "${PROJECT_TAG:=always-on-claude}"
+    TAG="$PROJECT_TAG"
+fi
 
 # --- Helpers ----------------------------------------------------------------
 

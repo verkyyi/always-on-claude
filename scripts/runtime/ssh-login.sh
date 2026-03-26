@@ -41,17 +41,19 @@ if [[ -f ~/.claude-version-check ]]; then
     unset _cv_status _cv_installed _cv_latest
 fi
 
+_DEV_ENV="${DEV_ENV:-$HOME/dev-env}"
+
 # First-run onboarding: guide new users through setup before workspace picker
 if [[ ! -f ~/.workspace-initialized ]]; then
-    if [[ -x ~/dev-env/scripts/runtime/onboarding.sh ]]; then
-        exec bash ~/dev-env/scripts/runtime/onboarding.sh
+    if [[ -x "$_DEV_ENV/scripts/runtime/onboarding.sh" ]]; then
+        exec bash "$_DEV_ENV/scripts/runtime/onboarding.sh"
     else
-        echo "  ⚠ onboarding.sh not found or not executable — skipping first-run setup"
+        echo "  onboarding.sh not found or not executable — skipping first-run setup"
     fi
 fi
 
-if [[ -x ~/dev-env/scripts/runtime/start-claude.sh ]]; then
-    exec bash ~/dev-env/scripts/runtime/start-claude.sh
+if [[ -x "$_DEV_ENV/scripts/runtime/start-claude.sh" ]]; then
+    exec bash "$_DEV_ENV/scripts/runtime/start-claude.sh"
 else
-    echo "  ⚠ start-claude.sh not found at ~/dev-env/scripts/runtime/start-claude.sh"
+    echo "  start-claude.sh not found at $_DEV_ENV/scripts/runtime/start-claude.sh"
 fi

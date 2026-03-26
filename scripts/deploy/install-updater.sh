@@ -22,6 +22,7 @@ else
 fi
 
 RUN_HOME=$(eval echo "~$RUN_USER")
+RUN_DEV_ENV="${DEV_ENV:-$RUN_HOME/dev-env}"
 SERVICE_NAME="claude-update"
 
 info "Auto-updater (systemd timer)"
@@ -37,7 +38,7 @@ Wants=network-online.target
 Type=oneshot
 User=$RUN_USER
 Environment=HOME=$RUN_HOME
-ExecStart=/bin/bash $RUN_HOME/dev-env/scripts/runtime/update.sh
+ExecStart=/bin/bash "$RUN_DEV_ENV/scripts/runtime/update.sh"
 EOF
 
 # Create timer unit

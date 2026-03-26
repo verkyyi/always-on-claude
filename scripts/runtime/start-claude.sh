@@ -10,8 +10,16 @@
 
 set -euo pipefail
 
-COMPOSE_DIR="$HOME/dev-env"
-CONTAINER_NAME="claude-dev"
+COMPOSE_DIR="${DEV_ENV:-$HOME/dev-env}"
+
+# Load config if available
+if [[ -f "$COMPOSE_DIR/scripts/deploy/load-config.sh" ]]; then
+    # shellcheck disable=SC1091
+    source "$COMPOSE_DIR/scripts/deploy/load-config.sh"
+fi
+
+: "${CONTAINER_NAME:=claude-dev}"
+
 WORKTREE_HELPER="$COMPOSE_DIR/scripts/runtime/worktree-helper.sh"
 MANAGER_PROMPT="$COMPOSE_DIR/scripts/runtime/manager-prompt.txt"
 CONTAINER_PROJECTS="/home/dev/projects"

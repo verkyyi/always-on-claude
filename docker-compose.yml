@@ -1,8 +1,8 @@
 services:
   dev:
-    image: ghcr.io/verkyyi/always-on-claude:latest
-    container_name: claude-dev
-    hostname: claude-dev
+    image: ${DOCKER_IMAGE:-ghcr.io/verkyyi/always-on-claude:latest}
+    container_name: ${CONTAINER_NAME:-claude-dev}
+    hostname: ${CONTAINER_HOSTNAME:-claude-dev}
     stdin_open: true
     tty: true
     volumes:

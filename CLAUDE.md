@@ -50,11 +50,13 @@ All scripts are bash. No test suite — test manually via `docker compose up -d`
 
 ```text
 Root (Docker config — stays here by convention):
+  .env.example             — Documented deployment config template (cp to .env and customize)
   Dockerfile               — Ubuntu 24.04 + Node 22 + Claude Code + dev tools (multi-arch: amd64 + arm64)
   docker-compose.yml       — Single service, pre-built image from GHCR, host networking, bind mounts
   docker-compose.build.yml — Override for local builds (docker compose -f ... -f ... build)
 
 scripts/deploy/ (provisioning & server setup — run locally or during first boot):
+  load-config.sh           — Config loader: reads .env, applies defaults, exports vars for all scripts
   provision.sh             — AWS provisioning: direct EC2 launch, ~40s with pre-built AMI
   destroy.sh               — Tear down EC2 resources by Project tag
   install.sh               — One-line server setup for EC2/Linux (pulls pre-built image)
@@ -122,6 +124,29 @@ fi
 ```bash
 if [[ $EUID -eq 0 ]]; then sudo() { "$@"; }; fi
 ```
+
+## Configuration
+
+All deployment parameters live in a single `.env` file at the repo root. Scripts load it via `scripts/deploy/load-config.sh`.
+
+**Setup:**
+
+```bash
+cp .env.example .env    # copy template
+vim .env                # customize values
+```
+
+**Resolution order** (later wins):
+
+1. Defaults (hardcoded in `load-config.sh`)
+2. `.env` file
+3. Environment variables at runtime
+
+This means `INSTANCE_TYPE=t3.medium bash provision.sh` overrides whatever is in `.env`. If no `.env` exists, all defaults match the values in `.env.example`.
+
+**Key variables:** `INSTANCE_TYPE`, `AWS_REGION`, `VOLUME_SIZE`, `INSTANCE_NAME`, `KEY_NAME`, `DOCKER_IMAGE`, `CONTAINER_NAME`, `DEV_ENV`, `PROJECTS_DIR`. See `.env.example` for the full list with documentation.
+
+Docker Compose also reads `.env` natively for variable substitution in `docker-compose.yml` (image, container name, hostname).
 
 ## Docker architecture
 
