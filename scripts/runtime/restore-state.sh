@@ -111,15 +111,15 @@ if [[ -s "$BACKUP_DIR/user-packages.txt" ]]; then
     missing_pkgs=()
     for pkg in "${pkgs[@]}"; do
         [[ -z "$pkg" ]] && continue
-        if ! docker exec "$CONTAINER_NAME" dpkg -s "$pkg" &>/dev/null 2>&1; then
+        if ! docker exec "$CONTAINER_NAME" dpkg -s "$pkg" &>/dev/null; then
             missing_pkgs+=("$pkg")
         fi
     done
 
     if [[ ${#missing_pkgs[@]} -gt 0 ]]; then
         echo "  Installing ${#missing_pkgs[@]} missing package(s): ${missing_pkgs[*]}"
-        docker exec -u root "$CONTAINER_NAME" bash -c \
-            "apt-get update -qq && apt-get install -y -qq ${missing_pkgs[*]}" \
+        docker exec -u root "$CONTAINER_NAME" apt-get update -qq 2>&1 | tail -5
+        docker exec -u root "$CONTAINER_NAME" apt-get install -y -qq "${missing_pkgs[@]}" \
             2>&1 | tail -5
         ok "Restored ${#missing_pkgs[@]} apt package(s)"
     else
@@ -181,7 +181,7 @@ if [[ -s "$BACKUP_DIR/dirty-repos.txt" ]]; then
         while IFS= read -r repo; do
             [[ -z "$repo" ]] && continue
             # Check if changes are still there
-            status=$(docker exec "$CONTAINER_NAME" bash -c "cd '$repo' && git status --porcelain 2>/dev/null" || true)
+            status=$(docker exec -w "$repo" "$CONTAINER_NAME" git status --porcelain 2>/dev/null || true)
             if [[ -n "$status" ]]; then
                 ok "$repo — changes still intact"
             else

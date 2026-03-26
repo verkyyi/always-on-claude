@@ -19,6 +19,7 @@ info()  { echo ""; echo "=== $* ==="; }
 ok()    { echo "  OK: $*"; }
 warn()  { echo "  WARN: $*"; }
 skip()  { echo "  SKIP: $*"; }
+die()   { echo "ERROR: $*" >&2; exit 1; }
 
 CONTAINER_NAME="claude-dev"
 BACKUP_DIR="$HOME/backups/$(date +%Y%m%d-%H%M%S)"
@@ -48,7 +49,7 @@ mapfile -t repos < <(
 
 for repo in "${repos[@]}"; do
     [[ -z "$repo" ]] && continue
-    status=$(docker exec "$CONTAINER_NAME" bash -c "cd '$repo' && git status --porcelain 2>/dev/null" || true)
+    status=$(docker exec -w "$repo" "$CONTAINER_NAME" git status --porcelain 2>/dev/null || true)
     if [[ -n "$status" ]]; then
         dirty_repos+=("$repo")
         warn "Uncommitted changes: $repo"
@@ -65,7 +66,11 @@ if [[ ${#dirty_repos[@]} -eq 0 ]]; then
 fi
 
 # Write dirty repos list for restore script reference
-printf '%s\n' "${dirty_repos[@]}" > "$BACKUP_DIR/dirty-repos.txt" 2>/dev/null || true
+if [[ ${#dirty_repos[@]} -gt 0 ]]; then
+    printf '%s\n' "${dirty_repos[@]}" > "$BACKUP_DIR/dirty-repos.txt"
+else
+    touch "$BACKUP_DIR/dirty-repos.txt"
+fi
 
 # --- 2. Snapshot user-installed packages ------------------------------------
 
@@ -95,9 +100,10 @@ zsh
 BASEPKGS
 
 # Compute user-added packages (installed minus base)
+# Sort base-packages.txt to ensure comm -23 works correctly
 comm -23 \
     "$BACKUP_DIR/installed-packages.txt" \
-    "$BACKUP_DIR/base-packages.txt" \
+    <(sort "$BACKUP_DIR/base-packages.txt") \
     > "$BACKUP_DIR/user-packages.txt" 2>/dev/null || true
 
 # Also capture pip packages installed by user
@@ -105,10 +111,7 @@ docker exec "$CONTAINER_NAME" bash -c \
     'pip3 list --user --format=freeze 2>/dev/null || true' \
     > "$BACKUP_DIR/user-pip-packages.txt" 2>/dev/null || true
 
-# Also capture npm global packages installed by user
-docker exec "$CONTAINER_NAME" bash -c \
-    'npm list -g --depth=0 --json 2>/dev/null || echo "{}"' \
-    > "$BACKUP_DIR/user-npm-packages.json" 2>/dev/null || true
+# TODO: future enhancement — capture and restore npm global packages
 
 user_pkg_count=$(wc -l < "$BACKUP_DIR/user-packages.txt" | tr -d ' ')
 pip_pkg_count=$(wc -l < "$BACKUP_DIR/user-pip-packages.txt" | tr -d ' ')
@@ -123,7 +126,7 @@ fi
 
 info "Exporting tmux session layouts"
 
-if tmux list-sessions &>/dev/null 2>&1; then
+if tmux list-sessions &>/dev/null; then
     tmux list-sessions -F '#{session_name}|#{session_windows}|#{session_width}x#{session_height}' \
         > "$BACKUP_DIR/tmux-sessions.txt" 2>/dev/null || true
 
