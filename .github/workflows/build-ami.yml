@@ -197,6 +197,28 @@ jobs:
           echo "Waiting for AMI to be available..."
           aws ec2 wait image-available --image-ids "$NEW_AMI"
 
+      - name: Deregister old AMIs
+        run: |
+          # Keep the 2 most recent AMIs (including the one just built), deregister the rest
+          # AWS limits public AMIs to 5 per region
+          OLD_AMIS=$(aws ec2 describe-images --owners self \
+            --filters "Name=tag:Project,Values=${{ env.TAG }}" \
+            --query 'Images | sort_by(@, &CreationDate) | [:-2].ImageId' \
+            --output text)
+
+          for ami in $OLD_AMIS; do
+            [[ "$ami" == "None" || -z "$ami" ]] && continue
+            echo "Deregistering old AMI: $ami"
+            SNAPS=$(aws ec2 describe-images --image-ids "$ami" \
+              --query 'Images[0].BlockDeviceMappings[*].Ebs.SnapshotId' --output text)
+            aws ec2 deregister-image --image-id "$ami"
+            for snap in $SNAPS; do
+              [[ "$snap" == "None" || -z "$snap" ]] && continue
+              aws ec2 delete-snapshot --snapshot-id "$snap" 2>/dev/null || true
+              echo "  Deleted snapshot: $snap"
+            done
+          done
+
       - name: Make AMI public
         run: |
           aws ec2 disable-image-block-public-access >/dev/null 2>&1 || true
