@@ -26,6 +26,15 @@ CONTAINER_PROJECTS="/home/dev/projects"
 
 COMPOSE_CMD=(sudo --preserve-env=HOME docker compose)
 
+# --- tmux prefix detection ---
+tmux_detach_hint() {
+    local prefix
+    prefix=$(tmux show-option -gv prefix 2>/dev/null || echo "C-b")
+    local pretty
+    pretty=$(echo "$prefix" | sed 's/C-/Ctrl-/')
+    echo "${pretty} d"
+}
+
 # --- Session limit helpers ---
 count_sessions() {
     tmux list-sessions -F '#{session_name}' 2>/dev/null \
@@ -76,7 +85,7 @@ check_session_limit() {
         echo ""
         echo "  Options:"
         echo "    - Re-attach to an existing session (select it from the menu)"
-        echo "    - Exit a running session (Ctrl-b d to detach, then /exit inside it)"
+        echo "    - Exit a running session ($(tmux_detach_hint) to detach, then /exit inside it)"
         echo ""
         return 1
     fi
