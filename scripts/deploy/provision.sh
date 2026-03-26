@@ -223,16 +223,21 @@ fi
 
 info "Launching instance"
 
-if [[ "$USE_CUSTOM_AMI" == "1" ]]; then
-    # Pre-built AMI: just start the container and update repo
-    USER_DATA=$(cat <<'USERDATA'
-#!/bin/bash
-exec > /var/log/install.log 2>&1
-su - dev -c 'cd ~/dev-env && git pull --ff-only 2>/dev/null; sudo --preserve-env=HOME docker compose up -d'
-USERDATA
+# Build launch args — pre-built AMI skips User Data (systemd service starts container)
+LAUNCH_ARGS=(
+    --region "$AWS_REGION"
+    --image-id "$AMI_ID"
+    --instance-type "$INSTANCE_TYPE"
+    --key-name "$KEY_NAME"
+    --security-group-ids "$SG_ID"
+    --block-device-mappings "DeviceName=/dev/sda1,Ebs={VolumeSize=$VOLUME_SIZE,VolumeType=gp3,DeleteOnTermination=true}"
+    --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$INSTANCE_NAME},{Key=Project,Value=$TAG}]"
+    --query 'Instances[0].InstanceId'
+    --output text
 )
-else
-    # Stock Ubuntu: full install
+
+if [[ "$USE_CUSTOM_AMI" == "0" ]]; then
+    # Stock Ubuntu: full install via User Data
     USER_DATA=$(cat <<'USERDATA'
 #!/bin/bash
 exec > /var/log/install.log 2>&1
@@ -240,22 +245,17 @@ su - ubuntu -c "NON_INTERACTIVE=1 bash -c 'curl -fsSL https://raw.githubusercont
 # install.sh renames ubuntu → dev; subsequent logins use dev
 USERDATA
 )
+    LAUNCH_ARGS+=(--user-data "$USER_DATA")
 fi
 
-INSTANCE_ID=$(aws ec2 run-instances \
-    --region "$AWS_REGION" \
-    --image-id "$AMI_ID" \
-    --instance-type "$INSTANCE_TYPE" \
-    --key-name "$KEY_NAME" \
-    --security-group-ids "$SG_ID" \
-    --user-data "$USER_DATA" \
-    --block-device-mappings "DeviceName=/dev/sda1,Ebs={VolumeSize=$VOLUME_SIZE,VolumeType=gp3,DeleteOnTermination=true}" \
-    --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$INSTANCE_NAME},{Key=Project,Value=$TAG}]" \
-    --query 'Instances[0].InstanceId' \
-    --output text)
+INSTANCE_ID=$(aws ec2 run-instances "${LAUNCH_ARGS[@]}")
 
 ok "Instance launched: $INSTANCE_ID"
-echo "  install.sh is running via User Data in the background..."
+if [[ "$USE_CUSTOM_AMI" == "1" ]]; then
+    echo "  Pre-built AMI — container starts via systemd service (~40s)"
+else
+    echo "  Stock Ubuntu — install.sh is running via User Data (~90s)"
+fi
 
 # --- Wait for instance + SSH ------------------------------------------------
 

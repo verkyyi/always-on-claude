@@ -66,18 +66,31 @@ SG_ID=$(aws ec2 describe-security-groups --region "$REGION" --filters "Name=grou
 
 ---
 
-## Step 4 — Find Ubuntu 24.04 AMI
+## Step 4 — Find AMI
+
+Try a pre-built AMI first (tagged `Project=always-on-claude`, matching architecture). Fall back to stock Ubuntu 24.04 if none found.
 
 ```bash
-aws ec2 describe-images \
-    --owners 099720109477 --region "$REGION" \
-    --filters "Name=name,Values=ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-arm64-server-*" "Name=state,Values=available" \
+# Determine arch from instance type: *g.* = arm64, otherwise x86_64
+# Try pre-built AMI
+aws ec2 describe-images --region "$REGION" \
+    --filters "Name=tag:Project,Values=always-on-claude" "Name=state,Values=available" "Name=is-public,Values=true" \
+        "Name=architecture,Values=$ARCH" \
+    --query 'Images | sort_by(@, &CreationDate) | [-1].ImageId' --output text
+
+# Fall back to stock Ubuntu
+aws ec2 describe-images --owners 099720109477 --region "$REGION" \
+    --filters "Name=name,Values=ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-$ARCH-server-*" "Name=state,Values=available" \
     --query 'Images | sort_by(@, &CreationDate) | [-1].ImageId' --output text
 ```
 
 ---
 
 ## Step 5 — Launch instance
+
+**If using a pre-built AMI**: launch WITHOUT `--user-data`. The AMI has a systemd service that starts the container on boot, and cloud-init injects the SSH key to the `dev` user automatically.
+
+**If using stock Ubuntu**: launch WITH `--user-data` to run install.sh:
 
 ```bash
 aws ec2 run-instances \
@@ -94,7 +107,9 @@ su - ubuntu -c "NON_INTERACTIVE=1 bash -c '\''curl -fsSL https://raw.githubuserc
     --query 'Instances[0].InstanceId' --output text
 ```
 
-Tell the user "Instance launched — install.sh is running in the background via User Data."
+Tell the user what to expect based on AMI type:
+- Pre-built: "Container starts via systemd (~40s)"
+- Stock Ubuntu: "install.sh is running via User Data (~90s)"
 
 ---
 
