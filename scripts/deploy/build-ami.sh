@@ -179,13 +179,20 @@ ok "Install complete"
 
 info "Preparing instance for snapshot"
 
-# Remove host-specific state that shouldn't be baked into the AMI
+# Remove host-specific state that shouldn't be baked into the AMI.
+# cloud-init clean causes cloud-init to re-run User Data (install.sh) on boot.
+# install.sh detects the pre-baked AMI via .provisioned marker and takes a fast
+# path: remove stale ubuntu user, re-clone repo if needed, start container.
 ssh -o StrictHostKeyChecking=no -o BatchMode=yes -i "$KEY_FILE" "dev@${PUBLIC_IP}" bash <<'CLEANUP'
 # Remove SSH host keys (regenerated on boot)
 sudo rm -f /etc/ssh/ssh_host_*
 
 # Clear cloud-init state so it runs fresh on new instances
 sudo cloud-init clean --logs
+
+# Remove cloud-init's ubuntu user if it exists (will be recreated on boot,
+# then removed by install.sh fast path)
+sudo userdel -r ubuntu 2>/dev/null || true
 
 # Remove bash history
 rm -f ~/.bash_history

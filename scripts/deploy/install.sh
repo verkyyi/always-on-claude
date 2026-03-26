@@ -83,6 +83,59 @@ fi
 
 ok "Running as $USER ($(if [[ $EUID -eq 0 ]]; then echo "root"; else echo "non-root, using sudo"; fi)) on $(hostname)"
 
+# --- Pre-baked AMI fast path ------------------------------------------------
+# When booting from a pre-baked AMI, cloud-init re-runs and triggers install.sh
+# again via User Data. Detect this (dev user exists + .provisioned marker) and
+# skip the full install — just handle user rename, repo clone, and container start.
+
+if [[ -f /home/dev/dev-env/.provisioned ]] && id dev &>/dev/null 2>&1; then
+    info "Pre-baked AMI detected — fast path"
+
+    # cloud-init recreates 'ubuntu' user (UID 1001) — remove it
+    if id ubuntu &>/dev/null 2>&1; then
+        sudo userdel -r ubuntu 2>/dev/null || true
+        ok "Removed cloud-init ubuntu user"
+    fi
+
+    # Ensure we're operating as dev
+    export USER=dev HOME=/home/dev
+    DEV_ENV=/home/dev/dev-env
+
+    # Re-clone repo if .git was lost (cloud-init clean wipes state)
+    if [[ ! -d "$DEV_ENV/.git" ]]; then
+        rm -rf "$DEV_ENV"
+        git clone https://github.com/verkyyi/always-on-claude.git "$DEV_ENV"
+        ok "Re-cloned repository"
+    else
+        git -C "$DEV_ENV" pull --ff-only 2>/dev/null || true
+        ok "Updated repository"
+    fi
+
+    # Start container
+    cd "$DEV_ENV"
+    if [[ $EUID -eq 0 ]]; then
+        docker compose pull 2>/dev/null || true
+        HOME=/home/dev docker compose up -d
+    else
+        sudo docker compose pull 2>/dev/null || true
+        sudo --preserve-env=HOME docker compose up -d
+    fi
+    ok "Container running"
+
+    # Fix container permissions
+    if [[ $EUID -eq 0 ]]; then
+        docker compose exec -T -u root dev bash -c \
+            "chown dev:dev /home/dev/projects /home/dev/.claude" 2>/dev/null || true
+    else
+        sudo --preserve-env=HOME docker compose exec -T -u root dev bash -c \
+            "chown dev:dev /home/dev/projects /home/dev/.claude" 2>/dev/null || true
+    fi
+
+    echo ""
+    echo "  Pre-baked AMI boot complete."
+    exit 0
+fi
+
 # --- Rename ubuntu user to dev (matches container user) ---------------------
 
 info "System user"
