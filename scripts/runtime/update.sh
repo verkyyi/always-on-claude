@@ -69,8 +69,3 @@ else
 
     log "Updates pulled: ${before:0:7}..${after:0:7} (rebuild=$needs_rebuild) — pending /update"
 fi
-
-# Check for Claude Code binary updates
-if [[ -x "$DEV_ENV/scripts/runtime/check-claude-version.sh" ]]; then
-    bash "$DEV_ENV/scripts/runtime/check-claude-version.sh" || true
-fi

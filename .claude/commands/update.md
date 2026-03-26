@@ -32,10 +32,9 @@ bash ~/dev-env/scripts/runtime/self-update.sh
 This single command:
 
 1. Pulls the latest repo changes
-2. Updates Claude Code binary inside the container
-3. Pulls a new Docker image (only if Dockerfile/compose changed or registry has a newer image)
-4. Updates host-side scripts (statusline, tmux config)
-5. Reports what was updated
+2. Pulls a new Docker image (only if Dockerfile/compose changed or registry has a newer image)
+3. Updates host-side scripts (statusline, tmux config)
+4. Reports what was updated
 
 If the script completes successfully with no issues, summarize the output for the user and stop here.
 
@@ -163,25 +162,13 @@ If the self-update script fails, or if the user wants to inspect changes manuall
 
    - **CLAUDE.md or docs changed**: No action needed.
 
-6. Check for Claude Code binary updates:
-
-   ```bash
-   cat ~/.claude-version-check 2>/dev/null || echo "No version check data"
-   ```
-
-   If status is "update-available", inform the user:
-
-   - Current version and available version
-   - They can run `/update-claude-code` to update the binary
-   - Or set `CLAUDE_AUTO_UPDATE=1` in their environment to auto-update
-
-7. Clean up:
+6. Clean up:
 
    ```bash
    rm -f ~/.update-pending
    ```
 
-8. Summarize what was updated and any actions taken. Include backup/restore status if applicable.
+7. Summarize what was updated and any actions taken. Include backup/restore status if applicable.
 
 ## Important
 

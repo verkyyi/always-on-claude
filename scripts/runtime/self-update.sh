@@ -3,10 +3,9 @@
 #
 # Updates (in order):
 #   1. Dev environment repo (git pull)
-#   2. Claude Code binary (inside container)
-#   3. Docker image (only if Dockerfile/compose changed)
-#   4. Host-side scripts (statusline, tmux config)
-#   5. Reports what was updated
+#   2. Docker image (only if Dockerfile/compose changed)
+#   3. Host-side scripts (statusline, tmux config)
+#   4. Reports what was updated
 #
 # Run manually or via the /update slash command.
 # Preserves running tmux sessions — only restarts container when necessary.
@@ -53,7 +52,7 @@ echo "  Dev env: $DEV_ENV"
 
 # --- Step 1: Pull latest repo changes --------------------------------------
 
-info "Step 1/5: Dev environment repo"
+info "Step 1/4: Dev environment repo"
 
 before=$(git -C "$DEV_ENV" rev-parse HEAD)
 
@@ -77,33 +76,9 @@ else
     CHANGED_FILES=""
 fi
 
-# --- Step 2: Update Claude Code binary (inside container) -------------------
+# --- Step 2: Docker image (only if Dockerfile/compose changed) --------------
 
-info "Step 2/5: Claude Code binary"
-
-if docker_cmd ps --format '{{.Names}}' 2>/dev/null | grep -q "claude-dev"; then
-    # Get current version
-    current_version=$(docker_compose exec -T dev claude --version 2>/dev/null | head -1 || echo "unknown")
-
-    # Run the official installer inside the container
-    if docker_compose exec -T dev bash -c "curl -fsSL https://claude.ai/install.sh | bash" 2>&1; then
-        new_version=$(docker_compose exec -T dev claude --version 2>/dev/null | head -1 || echo "unknown")
-        if [[ "$current_version" != "$new_version" ]]; then
-            ok "Claude Code updated: $current_version -> $new_version"
-            UPDATED+=("claude-code: $current_version -> $new_version")
-        else
-            skip "Claude Code already latest ($current_version)"
-        fi
-    else
-        warn "Failed to update Claude Code inside container"
-    fi
-else
-    warn "Container not running — skipping Claude Code update"
-fi
-
-# --- Step 3: Docker image (only if Dockerfile/compose changed) --------------
-
-info "Step 3/5: Docker image"
+info "Step 2/4: Docker image"
 
 IMAGE_NEEDS_UPDATE=false
 IMAGE="ghcr.io/verkyyi/always-on-claude:latest"
@@ -172,9 +147,9 @@ if [[ "$IMAGE_NEEDS_UPDATE" == "true" ]]; then
     fi
 fi
 
-# --- Step 4: Host-side scripts ---------------------------------------------
+# --- Step 3: Host-side scripts ---------------------------------------------
 
-info "Step 4/5: Host-side scripts"
+info "Step 3/4: Host-side scripts"
 
 host_updated=false
 
@@ -223,9 +198,9 @@ else
     skip "All host-side scripts unchanged"
 fi
 
-# --- Step 5: Report --------------------------------------------------------
+# --- Step 4: Report --------------------------------------------------------
 
-info "Step 5/5: Summary"
+info "Step 4/4: Summary"
 
 # Clean up the pending file if it existed
 rm -f "$HOME/.update-pending"

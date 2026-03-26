@@ -23,24 +23,6 @@ if [[ -f ~/.update-pending ]]; then
     echo "  Updates available — run /update in Claude to apply."
 fi
 
-if [[ -f ~/.claude-version-check ]]; then
-    _cv_status=""
-    _cv_installed=""
-    _cv_latest=""
-    while IFS='=' read -r key val; do
-        case "$key" in
-            status)    _cv_status="$val" ;;
-            installed) _cv_installed="$val" ;;
-            latest)    _cv_latest="$val" ;;
-        esac
-    done < ~/.claude-version-check
-    if [[ "$_cv_status" == "update-available" ]]; then
-        echo "  Claude Code update: ${_cv_installed} -> ${_cv_latest}"
-        echo "  Run /update-claude-code to update, or set CLAUDE_AUTO_UPDATE=1"
-    fi
-    unset _cv_status _cv_installed _cv_latest
-fi
-
 _DEV_ENV="${DEV_ENV:-$HOME/dev-env}"
 
 # First-run onboarding: guide new users through setup before workspace picker
