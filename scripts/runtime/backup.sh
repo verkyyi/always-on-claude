@@ -46,6 +46,7 @@ info "Preflight checks"
 
 command -v aws &>/dev/null || die "AWS CLI not found"
 command -v curl &>/dev/null || die "curl not found"
+aws sts get-caller-identity &>/dev/null || die "AWS credentials not configured. Run: aws configure"
 
 # --- Discover instance and volume -------------------------------------------
 
@@ -85,7 +86,7 @@ VOLUME_ID=$(aws ec2 describe-instances \
     --instance-ids "$INSTANCE_ID" \
     --region "$REGION" \
     --query 'Reservations[0].Instances[0].BlockDeviceMappings[?DeviceName==`/dev/sda1`].Ebs.VolumeId' \
-    --output text 2>/dev/null)
+    --output text)
 
 [[ -n "$VOLUME_ID" && "$VOLUME_ID" != "None" ]] || die "Could not find root volume for instance $INSTANCE_ID"
 
@@ -118,6 +119,7 @@ if [[ "$NO_PRUNE" == "false" ]]; then
     # Get all project snapshots sorted newest first
     mapfile -t ALL_SNAPSHOTS < <(aws ec2 describe-snapshots \
         --region "$REGION" \
+        --owner-ids self \
         --filters "Name=tag:Project,Values=$TAG" \
         --query 'Snapshots | sort_by(@, &StartTime) | reverse(@).[].SnapshotId' \
         --output text | tr '\t' '\n' | grep -v '^$')

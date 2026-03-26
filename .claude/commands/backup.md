@@ -21,6 +21,7 @@ If the AWS CLI context above shows an error, stop and help the user fix their cr
 Source `.env.workspace` to get `INSTANCE_ID`, `REGION`, and other variables.
 
 If `$ARGUMENTS` is provided, parse it for a subcommand:
+
 - `backup` or empty → create a snapshot (default)
 - `list` → list existing snapshots
 - `restore` → describe how to restore
@@ -33,18 +34,21 @@ If `$ARGUMENTS` is provided, parse it for a subcommand:
 ### Step 1 — Get instance and volume info
 
 Get the instance ID from EC2 metadata using IMDSv2 (works inside the container with host networking):
+
 ```bash
 TOKEN=$(curl -s --connect-timeout 2 -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 60" 2>/dev/null) || true
 INSTANCE_ID=$(curl -s --connect-timeout 2 -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-id 2>/dev/null) || true
 ```
 
 If metadata is unavailable, fall back to `.env.workspace`:
+
 ```bash
 source .env.workspace 2>/dev/null || true
 echo "INSTANCE_ID=${INSTANCE_ID:-not found}"
 ```
 
 Get the root volume ID:
+
 ```bash
 VOLUME_ID=$(aws ec2 describe-instances \
     --instance-ids "$INSTANCE_ID" \
@@ -71,7 +75,8 @@ echo "Snapshot: $SNAPSHOT_ID"
 ### Step 3 — Confirm
 
 Show the user:
-```
+
+```text
 Snapshot created!
 
   Snapshot ID: $SNAPSHOT_ID
@@ -91,12 +96,14 @@ List all snapshots tagged with `Project=always-on-claude`:
 ```bash
 aws ec2 describe-snapshots \
     --region "$REGION" \
+    --owner-ids self \
     --filters "Name=tag:Project,Values=always-on-claude" \
     --query 'Snapshots | sort_by(@, &StartTime) | reverse(@).[].[SnapshotId,StartTime,State,VolumeSize,Description]' \
     --output table
 ```
 
 Present the results in a readable format showing:
+
 - Snapshot ID
 - Created timestamp
 - State (pending/completed/error)
@@ -117,6 +124,7 @@ Restoring from a snapshot requires creating a new volume and either swapping the
 1. List available snapshots (use the list subcommand)
 2. Ask the user which snapshot to restore from
 3. Create an AMI from the snapshot:
+
    ```bash
    AMI_ID=$(aws ec2 register-image \
        --region "$REGION" \
@@ -129,7 +137,9 @@ Restoring from a snapshot requires creating a new volume and either swapping the
        --query 'ImageId' \
        --output text)
    ```
+
 4. Tell the user to run `/provision` and use this AMI, or launch manually:
+
    ```bash
    aws ec2 run-instances \
        --region "$REGION" \
@@ -141,6 +151,7 @@ Restoring from a snapshot requires creating a new volume and either swapping the
 ### Option B — Attach snapshot as secondary volume (data recovery)
 
 1. Create a volume from the snapshot:
+
    ```bash
    VOLUME_ID=$(aws ec2 create-volume \
        --region "$REGION" \
@@ -151,6 +162,7 @@ Restoring from a snapshot requires creating a new volume and either swapping the
        --query 'VolumeId' \
        --output text)
    ```
+
 2. Attach it to the current instance and mount it to copy files
 
 Explain both options and let the user choose. Recommend Option A for full restore and Option B for selective file recovery.
@@ -166,6 +178,7 @@ Delete old snapshots, keeping the most recent N (default 5).
 ```bash
 aws ec2 describe-snapshots \
     --region "$REGION" \
+    --owner-ids self \
     --filters "Name=tag:Project,Values=always-on-claude" \
     --query 'Snapshots | sort_by(@, &StartTime) | reverse(@).[].[SnapshotId,StartTime,Description]' \
     --output text
@@ -175,7 +188,7 @@ aws ec2 describe-snapshots \
 
 Keep the most recent N snapshots (default 5, or the number specified in `$ARGUMENTS`). Show the user which snapshots will be kept and which will be deleted.
 
-```
+```text
 Keeping (most recent 5):
   snap-abc123  2026-03-20T10:00:00Z  always-on-claude backup ...
   snap-def456  2026-03-19T10:00:00Z  always-on-claude backup ...
