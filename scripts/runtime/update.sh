@@ -1,12 +1,10 @@
 #!/bin/bash
-# update.sh — Lightweight updater that pulls latest repo changes.
+# update.sh — Check for available updates (fetch only, never pull).
 #
-# This script only pulls code. It does NOT apply changes — that's
-# orchestrated by Claude via the /update slash command.
-#
-# When updates include Dockerfile/compose changes (which require a
-# container rebuild), a pre-update backup is taken automatically
-# via backup-state.sh.
+# This script only checks if the remote has new commits. It does NOT
+# apply changes — that's done by self-update.sh via the /update slash
+# command. This keeps the workspace static until the user explicitly
+# triggers an update.
 #
 # Run by systemd timer every 6 hours, or manually.
 
@@ -22,7 +20,6 @@ fi
 
 PENDING_FILE="$HOME/.update-pending"
 LOG_FILE="$DEV_ENV/update.log"
-BACKUP_SCRIPT="$DEV_ENV/scripts/runtime/backup-state.sh"
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOG_FILE"; }
 
@@ -31,41 +28,33 @@ if [[ ! -d "$DEV_ENV/.git" ]]; then
     exit 1
 fi
 
-# Record current commit before pull
-before=$(git -C "$DEV_ENV" rev-parse HEAD)
-
-# Pull latest
-if ! git -C "$DEV_ENV" pull --ff-only >> "$LOG_FILE" 2>&1; then
-    log "ERROR: git pull --ff-only failed (divergent history?)"
+# Fetch latest without applying
+if ! git -C "$DEV_ENV" fetch --quiet >> "$LOG_FILE" 2>&1; then
+    log "ERROR: git fetch failed"
     exit 1
 fi
 
-after=$(git -C "$DEV_ENV" rev-parse HEAD)
+local_head=$(git -C "$DEV_ENV" rev-parse HEAD)
+remote_head=$(git -C "$DEV_ENV" rev-parse '@{upstream}' 2>/dev/null || echo "$local_head")
 
-if [[ "$before" == "$after" ]]; then
+if [[ "$local_head" == "$remote_head" ]]; then
     log "No updates available"
+    rm -f "$PENDING_FILE"
 else
-    # Check if the update includes Dockerfile or compose changes (needs rebuild)
+    # Check if the update includes Dockerfile or compose changes
     needs_rebuild=false
-    if git -C "$DEV_ENV" diff --name-only "${before}..${after}" | grep -qE '^(Dockerfile|docker-compose)'; then
+    if git -C "$DEV_ENV" diff --name-only "${local_head}..${remote_head}" | grep -qE '^(Dockerfile|docker-compose)'; then
         needs_rebuild=true
     fi
 
-    # Auto-backup when updates require a container rebuild
-    if [[ "$needs_rebuild" == "true" && -x "$BACKUP_SCRIPT" ]]; then
-        log "Container rebuild needed — running pre-update backup"
-        bash "$BACKUP_SCRIPT" >> "$LOG_FILE" 2>&1 || log "WARN: backup-state.sh failed (continuing)"
-    fi
-
-    # New commits pulled — write pending file with details
+    # Write pending file with details (no changes applied yet)
     {
         echo "updated=$(date -Iseconds)"
-        echo "before=$before"
-        echo "after=$after"
+        echo "before=$local_head"
+        echo "after=$remote_head"
         echo "needs_rebuild=$needs_rebuild"
-        echo "backup_dir=$HOME/backups/latest"
-        git -C "$DEV_ENV" log --oneline "${before}..${after}"
+        git -C "$DEV_ENV" log --oneline "${local_head}..${remote_head}"
     } > "$PENDING_FILE"
 
-    log "Updates pulled: ${before:0:7}..${after:0:7} (rebuild=$needs_rebuild) — pending /update"
+    log "Updates available: ${local_head:0:7}..${remote_head:0:7} (rebuild=$needs_rebuild) — run /update to apply"
 fi
