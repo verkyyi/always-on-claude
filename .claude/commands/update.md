@@ -130,6 +130,7 @@ If the self-update script fails, or if the user wants to inspect changes manuall
      ```
 
      Then tell the user:
+
      1. The host user has been renamed from `ubuntu` to `dev`
      2. They must disconnect (Ctrl-b d, then exit) and reconnect as `dev@`
      3. Update their local SSH config: change `User ubuntu` to `User dev` in `~/.ssh/config`
@@ -139,13 +140,25 @@ If the self-update script fails, or if the user wants to inspect changes manuall
 
    - **CLAUDE.md or docs changed**: No action needed.
 
-5. Clean up:
+5. Check for Claude Code binary updates:
+
+   ```bash
+   cat ~/.claude-version-check 2>/dev/null || echo "No version check data"
+   ```
+
+   If status is "update-available", inform the user:
+
+   - Current version and available version
+   - They can run `/update-claude-code` to update the binary
+   - Or set `CLAUDE_AUTO_UPDATE=1` in their environment to auto-update
+
+6. Clean up:
 
    ```bash
    rm -f ~/.update-pending
    ```
 
-6. Summarize what was updated and any actions taken.
+7. Summarize what was updated and any actions taken.
 
 ## Important
 

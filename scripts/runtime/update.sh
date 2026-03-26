@@ -32,15 +32,19 @@ after=$(git -C "$DEV_ENV" rev-parse HEAD)
 
 if [[ "$before" == "$after" ]]; then
     log "No updates available"
-    exit 0
+else
+    # New commits pulled — write pending file with details
+    {
+        echo "updated=$(date -Iseconds)"
+        echo "before=$before"
+        echo "after=$after"
+        git -C "$DEV_ENV" log --oneline "${before}..${after}"
+    } > "$PENDING_FILE"
+
+    log "Updates pulled: ${before:0:7}..${after:0:7} — pending /update"
 fi
 
-# New commits pulled — write pending file with details
-{
-    echo "updated=$(date -Iseconds)"
-    echo "before=$before"
-    echo "after=$after"
-    git -C "$DEV_ENV" log --oneline "${before}..${after}"
-} > "$PENDING_FILE"
-
-log "Updates pulled: ${before:0:7}..${after:0:7} — pending /update"
+# Check for Claude Code binary updates
+if [[ -x "$DEV_ENV/scripts/runtime/check-claude-version.sh" ]]; then
+    bash "$DEV_ENV/scripts/runtime/check-claude-version.sh" || true
+fi
