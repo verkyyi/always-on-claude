@@ -39,7 +39,7 @@ Don't want to manage infrastructure? **[Always-On Claude Hosted](https://aoc.ain
 ### Prerequisites
 
 - Claude Code CLI installed (`npm install -g @anthropic-ai/claude-code`)
-- **Claude subscription** active (Pro or Max)
+- **Claude auth** — either a subscription (Pro/Max) or an API key (`ANTHROPIC_API_KEY`)
 - **AWS account** with CLI configured (`brew install awscli && aws configure`)
 
 ### 1. Clone and provision
@@ -64,19 +64,9 @@ Claude walks you through the entire AWS setup — SSH keys, security groups, ins
 ssh claude-dev
 ```
 
-You'll see a login menu — press Enter for Claude Code.
+On first login, Claude walks you through setup — git config, GitHub auth, and cloning your first repo. After that, you'll see a workspace picker to launch Claude Code in any repo.
 
-### 3. First-time auth
-
-From the login menu, choose `[2]` for container bash, then:
-
-```bash
-bash ~/dev-env/scripts/deploy/setup-auth.sh
-```
-
-This walks you through git config, GitHub CLI, and Claude login (each needs a browser).
-
-### 4. Tear down when done
+### 3. Tear down when done
 
 Back in your local Claude Code session:
 
