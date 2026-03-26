@@ -107,7 +107,7 @@ jobs:
             --instance-type "${{ matrix.instance_type }}" \
             --key-name "$KEY_NAME" \
             --security-group-ids "$SG_ID" \
-            --block-device-mappings 'DeviceName=/dev/sda1,Ebs={VolumeSize=30,VolumeType=gp3,DeleteOnTermination=true}' \
+            --block-device-mappings 'DeviceName=/dev/sda1,Ebs={VolumeSize=20,VolumeType=gp3,DeleteOnTermination=true}' \
             --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=ami-builder-${{ matrix.arch }}},{Key=Project,Value=${{ env.PROJECT_TAG }}}]" \
             --query 'Instances[0].InstanceId' --output text)
           echo "INSTANCE_ID=$INSTANCE_ID" >> "$GITHUB_ENV"
