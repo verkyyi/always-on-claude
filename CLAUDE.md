@@ -130,12 +130,14 @@ if [[ $EUID -eq 0 ]]; then sudo() { "$@"; }; fi
 All deployment parameters live in a single `.env` file at the repo root. Scripts load it via `scripts/deploy/load-config.sh`.
 
 **Setup:**
+
 ```bash
 cp .env.example .env    # copy template
 vim .env                # customize values
 ```
 
 **Resolution order** (later wins):
+
 1. Defaults (hardcoded in `load-config.sh`)
 2. `.env` file
 3. Environment variables at runtime
