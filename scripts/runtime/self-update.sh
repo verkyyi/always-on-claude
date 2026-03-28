@@ -22,6 +22,7 @@ warn()  { echo "  WARN: $*"; }
 die()   { echo "ERROR: $*" >&2; exit 1; }
 
 DEV_ENV="${DEV_ENV:-$HOME/dev-env}"
+TARGET_BRANCH="${TARGET_BRANCH:-main}"
 UPDATED=()
 NEEDS_RESTART=false
 AUTO_YES="${AUTO_YES:-false}"
@@ -56,13 +57,27 @@ echo "  Dev env: $DEV_ENV"
 
 info "Step 1/4: Fetching latest changes"
 
+current_branch=$(git -C "$DEV_ENV" branch --show-current)
 before=$(git -C "$DEV_ENV" rev-parse HEAD)
 git -C "$DEV_ENV" fetch --quiet origin 2>&1
 
-# Check if there are changes to apply
-upstream=$(git -C "$DEV_ENV" rev-parse '@{u}' 2>/dev/null || echo "$before")
+# Always compare against origin/main, not the current branch upstream
+upstream=$(git -C "$DEV_ENV" rev-parse "origin/$TARGET_BRANCH" 2>/dev/null || echo "$before")
 
-if [[ "$before" == "$upstream" ]]; then
+BRANCH_SWITCH=false
+if [[ "$current_branch" != "$TARGET_BRANCH" ]]; then
+    BRANCH_SWITCH=true
+    echo "  Currently on branch '$current_branch' — will switch to '$TARGET_BRANCH'"
+fi
+
+# Check for local uncommitted changes
+local_changes=$(git -C "$DEV_ENV" status --porcelain 2>/dev/null || true)
+if [[ -n "$local_changes" ]]; then
+    echo "  Local changes detected (will stash and restore):"
+    echo "$local_changes" | sed 's/^/    /'
+fi
+
+if [[ "$before" == "$upstream" && "$BRANCH_SWITCH" == "false" ]]; then
     skip "Repo already up to date"
     CHANGED_FILES=""
 else
@@ -79,6 +94,12 @@ local_digest_before=$(docker_cmd inspect --format='{{.Id}}' "$IMAGE" 2>/dev/null
 info "Step 2/4: Preview"
 
 has_changes=false
+
+if [[ "$BRANCH_SWITCH" == "true" ]]; then
+    has_changes=true
+    echo ""
+    echo "  Branch: $current_branch -> $TARGET_BRANCH"
+fi
 
 # Categorize changed files by impact area
 if [[ -n "$CHANGED_FILES" ]]; then
@@ -240,13 +261,38 @@ fi
 info "Step 4/4: Applying updates"
 
 # 4a. Pull repo changes
-if [[ "$before" != "$upstream" ]]; then
+if [[ "$before" != "$upstream" || "$BRANCH_SWITCH" == "true" ]]; then
+    # Stash local changes if any
+    stashed=false
+    if [[ -n "$local_changes" ]]; then
+        git -C "$DEV_ENV" stash push -m "self-update $(date +%Y%m%d-%H%M%S)" 2>&1
+        stashed=true
+        ok "Stashed local changes"
+    fi
+
+    # Switch to target branch if needed
+    if [[ "$BRANCH_SWITCH" == "true" ]]; then
+        git -C "$DEV_ENV" checkout "$TARGET_BRANCH" 2>&1
+        ok "Switched to $TARGET_BRANCH"
+    fi
+
+    # Pull latest
     if git -C "$DEV_ENV" pull --ff-only 2>&1; then
         after=$(git -C "$DEV_ENV" rev-parse HEAD)
         ok "Repo updated (${before:0:7}..${after:0:7})"
         UPDATED+=("repo: ${before:0:7}..${after:0:7}")
     else
         warn "git pull --ff-only failed (divergent history?). Skipping repo update."
+    fi
+
+    # Restore stashed changes
+    if [[ "$stashed" == "true" ]]; then
+        if git -C "$DEV_ENV" stash pop 2>&1; then
+            ok "Restored local changes"
+        else
+            warn "Stash pop had conflicts — local changes saved in git stash"
+            UPDATED+=("warning: stash pop conflicts, run 'git -C ~/dev-env stash pop' manually")
+        fi
     fi
 
     # Make all scripts executable

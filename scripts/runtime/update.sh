@@ -34,8 +34,9 @@ if ! git -C "$DEV_ENV" fetch --quiet >> "$LOG_FILE" 2>&1; then
     exit 1
 fi
 
+TARGET_BRANCH="${TARGET_BRANCH:-main}"
 local_head=$(git -C "$DEV_ENV" rev-parse HEAD)
-remote_head=$(git -C "$DEV_ENV" rev-parse '@{upstream}' 2>/dev/null || echo "$local_head")
+remote_head=$(git -C "$DEV_ENV" rev-parse "origin/$TARGET_BRANCH" 2>/dev/null || echo "$local_head")
 
 if [[ "$local_head" == "$remote_head" ]]; then
     log "No updates available"
