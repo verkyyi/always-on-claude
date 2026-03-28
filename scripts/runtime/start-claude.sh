@@ -317,7 +317,7 @@ select_entry() {
         if [[ "$state" == "idle" || "$state" == "attached" ]]; then
             echo "  -> $session_name"
             echo ""
-            exec tmux attach-session -t "$session_name"
+            tmux attach-session -t "$session_name"
         else
             wait_for_container || return 1
             launch "$path" || return 1
@@ -328,7 +328,7 @@ select_entry() {
         IFS='|' read -r sname _ _ <<< "${orphaned_sessions[$oi]}"
         echo "  -> $sname"
         echo ""
-        exec tmux attach-session -t "$sname"
+        tmux attach-session -t "$sname"
     fi
 }
 
