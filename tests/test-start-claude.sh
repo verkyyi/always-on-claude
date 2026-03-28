@@ -178,6 +178,7 @@ test_discover_entries_finds_repos() {
     assert_eq "$expected_branch" "$branch"
     assert_eq "$repo" "$path"
     assert_eq "none" "$state"
+    assert_eq "0" "$activity"
 }
 
 test_discover_entries_finds_worktrees() {

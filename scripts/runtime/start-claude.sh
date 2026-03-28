@@ -175,6 +175,8 @@ discover_entries() {
                 if [[ "$wt_path" != "$dir" && -n "$wt_branch" ]]; then
                     entries+=("${repo_name}|${wt_branch}|${wt_path}|none|0")
                 fi
+                wt_path=""
+                wt_branch=""
             fi
         done < <(git -C "$dir" worktree list --porcelain 2>/dev/null; echo)
     done
