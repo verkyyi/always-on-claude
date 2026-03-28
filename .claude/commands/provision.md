@@ -23,10 +23,17 @@ If `$ARGUMENTS` is provided, parse it for preferences (e.g. region, instance typ
 
 Use sensible defaults. If `$ARGUMENTS` specifies preferences (region, instance type, name), use those. Otherwise use defaults. If an existing instance with the default name exists, auto-increment (e.g. `claude-dev-2`).
 
-**Do NOT ask the user to confirm defaults.** Just announce what you're provisioning and proceed immediately:
+Show the settings and ask the user to confirm or adjust:
 
 ```
-Provisioning: claude-dev-2 (t4g.small, us-east-1)
+Provisioning an always-on Claude Code server:
+
+  Region:        us-east-1
+  Instance type: t4g.small
+  Instance name: claude-dev-2
+  SSH key:       claude-dev-2-key
+
+Say "go" to proceed, or tell me what to change.
 ```
 
 Adjust defaults based on context (e.g. if AWS region is already configured, use that).
