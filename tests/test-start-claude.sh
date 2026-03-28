@@ -288,3 +288,55 @@ test_match_sessions_detects_orphaned() {
     assert_eq "1" "${#orphaned_sessions[@]}" "should detect 1 orphaned session"
     assert_contains "${orphaned_sessions[0]}" "claude-deleted-repo"
 }
+
+test_compute_default_prefers_idle() {
+    entries=(
+        "app1|main|/path/app1|none|0"
+        "app2|main|/path/app2|idle|1711612800"
+    )
+    _source_v2
+
+    compute_default
+    assert_eq "1" "$default_idx"
+}
+
+test_compute_default_most_recent_idle() {
+    entries=(
+        "app1|main|/path/app1|idle|1711612000"
+        "app2|main|/path/app2|idle|1711612800"
+    )
+    _source_v2
+
+    compute_default
+    assert_eq "1" "$default_idx"
+}
+
+test_compute_default_no_sessions_first_entry() {
+    entries=(
+        "app1|main|/path/app1|none|0"
+        "app2|dev|/path/app2|none|0"
+    )
+    _source_v2
+
+    compute_default
+    assert_eq "0" "$default_idx"
+}
+
+test_compute_default_empty_entries() {
+    entries=()
+    _source_v2
+
+    compute_default
+    assert_eq "0" "$default_idx"
+}
+
+test_compute_default_skips_attached() {
+    entries=(
+        "app1|main|/path/app1|attached|1711613000"
+        "app2|main|/path/app2|idle|1711612800"
+    )
+    _source_v2
+
+    compute_default
+    assert_eq "1" "$default_idx" "should prefer idle over attached even if attached is newer"
+}

@@ -237,6 +237,29 @@ match_sessions() {
     done
 }
 
+# --- Smart default ---
+compute_default() {
+    default_idx=0
+
+    [[ ${#entries[@]} -eq 0 ]] && return
+
+    # Find the most recently active idle session
+    local best_idx=-1
+    local best_activity=0
+
+    for i in "${!entries[@]}"; do
+        IFS='|' read -r _ _ _ state activity <<< "${entries[$i]}"
+        if [[ "$state" == "idle" && "$activity" -gt "$best_activity" ]]; then
+            best_activity="$activity"
+            best_idx=$i
+        fi
+    done
+
+    if [[ $best_idx -ge 0 ]]; then
+        default_idx=$best_idx
+    fi
+}
+
 # --- Layer 1: Pick a repo ---
 show_repos() {
     # Collect active claude-* and shell-* tmux sessions
