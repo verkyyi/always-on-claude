@@ -184,6 +184,59 @@ discover_entries() {
     rm -rf "$tmpdir"
 }
 
+# --- Session matching ---
+get_sessions() {
+    session_names=()
+    session_states=()
+    session_activities=()
+
+    local line
+    while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        local name attached activity
+        read -r name attached activity <<< "$line"
+
+        # Only track claude-* sessions
+        [[ "$name" == claude-* ]] || continue
+
+        session_names+=("$name")
+        if [[ "$attached" -gt 0 ]]; then
+            session_states+=("attached")
+        else
+            session_states+=("idle")
+        fi
+        session_activities+=("$activity")
+    done < <(tmux list-sessions -F '#{session_name} #{session_attached} #{session_activity}' 2>/dev/null || true)
+}
+
+match_sessions() {
+    orphaned_sessions=()
+
+    for si in "${!session_names[@]}"; do
+        local sname="${session_names[$si]}"
+        local sstate="${session_states[$si]}"
+        local sactivity="${session_activities[$si]}"
+        local found=false
+
+        for ei in "${!entries[@]}"; do
+            IFS='|' read -r repo_name branch path _state _activity <<< "${entries[$ei]}"
+            local dirname
+            dirname=$(basename "$path" | tr './:' '-')
+            local expected_session="claude-${dirname}"
+
+            if [[ "$sname" == "$expected_session" ]]; then
+                entries[$ei]="${repo_name}|${branch}|${path}|${sstate}|${sactivity}"
+                found=true
+                break
+            fi
+        done
+
+        if [[ "$found" == false ]]; then
+            orphaned_sessions+=("${sname}|${sstate}|${sactivity}")
+        fi
+    done
+}
+
 # --- Layer 1: Pick a repo ---
 show_repos() {
     # Collect active claude-* and shell-* tmux sessions

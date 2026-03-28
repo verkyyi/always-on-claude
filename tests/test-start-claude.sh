@@ -212,3 +212,77 @@ test_discover_entries_multiple_repos() {
     assert_eq "app-one" "$name1"
     assert_eq "app-two" "$name2"
 }
+
+test_get_sessions_parses_idle() {
+    cat > "$TEST_DIR/bin/tmux" <<'MOCK'
+#!/bin/bash
+if [[ "$1" == "list-sessions" ]]; then
+    echo "claude-myrepo 0 1711612800"
+fi
+MOCK
+    chmod +x "$TEST_DIR/bin/tmux"
+    _source_v2
+
+    get_sessions
+    assert_eq "1" "${#session_names[@]}"
+    assert_eq "claude-myrepo" "${session_names[0]}"
+    assert_eq "idle" "${session_states[0]}"
+    assert_eq "1711612800" "${session_activities[0]}"
+}
+
+test_get_sessions_parses_attached() {
+    cat > "$TEST_DIR/bin/tmux" <<'MOCK'
+#!/bin/bash
+if [[ "$1" == "list-sessions" ]]; then
+    echo "claude-myrepo 1 1711612800"
+fi
+MOCK
+    chmod +x "$TEST_DIR/bin/tmux"
+    _source_v2
+
+    get_sessions
+    assert_eq "attached" "${session_states[0]}"
+}
+
+test_get_sessions_filters_non_claude() {
+    cat > "$TEST_DIR/bin/tmux" <<'MOCK'
+#!/bin/bash
+if [[ "$1" == "list-sessions" ]]; then
+    echo "claude-myrepo 0 1711612800"
+    echo "shell-host 0 1711612000"
+    echo "other-session 0 1711611000"
+fi
+MOCK
+    chmod +x "$TEST_DIR/bin/tmux"
+    _source_v2
+
+    get_sessions
+    assert_eq "1" "${#session_names[@]}" "should only include claude-* sessions"
+}
+
+test_match_sessions_annotates_entry() {
+    entries=("myrepo|main|/home/dev/projects/myrepo|none|0")
+    session_names=("claude-myrepo")
+    session_states=("idle")
+    session_activities=("1711612800")
+    _source_v2
+
+    orphaned_sessions=()
+    match_sessions
+    IFS='|' read -r _ _ _ state activity <<< "${entries[0]}"
+    assert_eq "idle" "$state"
+    assert_eq "1711612800" "$activity"
+}
+
+test_match_sessions_detects_orphaned() {
+    entries=("myrepo|main|/home/dev/projects/myrepo|none|0")
+    session_names=("claude-myrepo" "claude-deleted-repo")
+    session_states=("idle" "idle")
+    session_activities=("1711612800" "1711611000")
+    _source_v2
+
+    orphaned_sessions=()
+    match_sessions
+    assert_eq "1" "${#orphaned_sessions[@]}" "should detect 1 orphaned session"
+    assert_contains "${orphaned_sessions[0]}" "claude-deleted-repo"
+}
