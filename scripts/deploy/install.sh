@@ -515,7 +515,7 @@ Type=oneshot
 RemainAfterExit=yes
 Environment=HOME=/home/dev
 WorkingDirectory=$DEV_ENV
-ExecStart=/usr/bin/docker compose up -d
+ExecStart=/usr/bin/docker compose up -d --force-recreate
 ExecStop=/usr/bin/docker compose stop
 
 [Install]
