@@ -210,7 +210,7 @@ launch() {
     echo "  -> $selected"
     echo ""
 
-    exec tmux new-session -A -s "$session_name" \
+    tmux new-session -A -s "$session_name" \
         "docker exec -it -e CLAUDE_MOBILE=\"${CLAUDE_MOBILE:-}\" -w '$container_path' ${CONTAINER_NAME} bash -lc 'exec claude'"
 }
 
@@ -226,7 +226,7 @@ launch_host() {
     echo "  -> $dir (host)"
     echo ""
 
-    exec tmux new-session -A -s "claude-manager" \
+    tmux new-session -A -s "claude-manager" \
         "bash -lc 'cd \"$dir\" && exec claude --append-system-prompt-file \"$MANAGER_PROMPT\" \"Greet me and show what you can help with.\"'"
 }
 
@@ -234,14 +234,14 @@ launch_host() {
 launch_shell_host() {
     echo "  -> host shell"
     echo ""
-    exec tmux new-session -A -s "shell-host" "bash -l"
+    tmux new-session -A -s "shell-host" "bash -l"
 }
 
 # --- Launch a container shell in tmux ---
 launch_shell_container() {
     echo "  -> container shell"
     echo ""
-    exec tmux new-session -A -s "shell-container" \
+    tmux new-session -A -s "shell-container" \
         "docker exec -it ${CONTAINER_NAME} bash -l"
 }
 
@@ -254,7 +254,7 @@ reattach_session() {
         local session_name="${session_line%% *}"
         echo "  -> reattach $session_name"
         echo ""
-        exec tmux attach-session -t "$session_name"
+        tmux attach-session -t "$session_name"
     fi
     return 1
 }
