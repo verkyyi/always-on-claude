@@ -16,11 +16,21 @@ _source_functions() {
     eval "$(sed -n '/^discover()/,/^}/p' "$START_SCRIPT")"
 }
 
+_source_v2() {
+    export PROJECTS_DIR="$HOME/projects"
+    eval "$(sed -n '/^discover_entries()/,/^}/p' "$START_SCRIPT")" 2>/dev/null || true
+    eval "$(sed -n '/^get_sessions()/,/^}/p' "$START_SCRIPT")" 2>/dev/null || true
+    eval "$(sed -n '/^match_sessions()/,/^}/p' "$START_SCRIPT")" 2>/dev/null || true
+    eval "$(sed -n '/^compute_default()/,/^}/p' "$START_SCRIPT")" 2>/dev/null || true
+    eval "$(sed -n '/^show_menu()/,/^}/p' "$START_SCRIPT")" 2>/dev/null || true
+}
+
 setup() {
     mkdir -p "$HOME/dev-env/scripts/runtime" "$HOME/projects"
     mock_binary tmux ""
     mock_binary nproc "2"
     _source_functions
+    _source_v2
 }
 
 test_count_sessions_zero() {
@@ -152,4 +162,52 @@ MOCK
     chmod +x "$TEST_DIR/bin/tmux"
     _source_functions
     MAX_SESSIONS=2 check_session_limit "claude-myrepo"
+}
+
+test_discover_entries_finds_repos() {
+    local repo
+    repo=$(create_test_repo "projects/my-app")
+    local expected_branch
+    expected_branch=$(git -C "$repo" branch --show-current)
+
+    entries=()
+    discover_entries
+    assert_eq "1" "${#entries[@]}" "should find 1 repo"
+    IFS='|' read -r name branch path state activity <<< "${entries[0]}"
+    assert_eq "my-app" "$name"
+    assert_eq "$expected_branch" "$branch"
+    assert_eq "$repo" "$path"
+    assert_eq "none" "$state"
+}
+
+test_discover_entries_finds_worktrees() {
+    local repo
+    repo=$(create_test_repo "projects/my-app")
+    create_test_worktree "$repo" "feature-x"
+
+    entries=()
+    discover_entries
+    assert_eq "2" "${#entries[@]}" "should find repo + worktree"
+    IFS='|' read -r name branch _ _ _ <<< "${entries[1]}"
+    assert_eq "my-app" "$name"
+    assert_eq "feature-x" "$branch"
+}
+
+test_discover_entries_empty() {
+    entries=()
+    discover_entries
+    assert_eq "0" "${#entries[@]}" "should find nothing"
+}
+
+test_discover_entries_multiple_repos() {
+    create_test_repo "projects/app-one"
+    create_test_repo "projects/app-two"
+
+    entries=()
+    discover_entries
+    assert_eq "2" "${#entries[@]}" "should find 2 repos"
+    IFS='|' read -r name1 _ _ _ _ <<< "${entries[0]}"
+    IFS='|' read -r name2 _ _ _ _ <<< "${entries[1]}"
+    assert_eq "app-one" "$name1"
+    assert_eq "app-two" "$name2"
 }

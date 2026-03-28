@@ -19,6 +19,7 @@ if [[ -f "$COMPOSE_DIR/scripts/deploy/load-config.sh" ]]; then
 fi
 
 : "${CONTAINER_NAME:=claude-dev}"
+: "${PROJECTS_DIR:=$HOME/projects}"
 
 WORKTREE_HELPER="$COMPOSE_DIR/scripts/runtime/worktree-helper.sh"
 MANAGER_PROMPT="$COMPOSE_DIR/scripts/runtime/manager-prompt.txt"
@@ -131,6 +132,54 @@ get_worktrees() {
 # --- Translate host path to container path ---
 to_container_path() {
     echo "${1/$HOME\/projects/$CONTAINER_PROJECTS}"
+}
+
+# --- Inline discovery (flat: repos + worktrees in one pass) ---
+discover_entries() {
+    entries=()
+    local repo_dirs=()
+    mapfile -t repo_dirs < <(find "$PROJECTS_DIR" -maxdepth 3 -name ".git" -type d 2>/dev/null | sort)
+
+    [[ ${#repo_dirs[@]} -eq 0 ]] && return
+
+    # Parallel git branch queries
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    for i in "${!repo_dirs[@]}"; do
+        local dir
+        dir=$(dirname "${repo_dirs[$i]}")
+        ( git -C "$dir" branch --show-current 2>/dev/null || echo "unknown" ) > "$tmpdir/$i" &
+    done
+    wait
+
+    for i in "${!repo_dirs[@]}"; do
+        local dir
+        dir=$(dirname "${repo_dirs[$i]}")
+        local branch
+        branch=$(cat "$tmpdir/$i")
+        local repo_name
+        repo_name=$(basename "$dir")
+
+        # Add main repo entry: repo_name|branch|path|session_state|session_activity
+        entries+=("${repo_name}|${branch}|${dir}|none|0")
+
+        # Discover worktrees for this repo
+        local wt_path="" wt_branch=""
+        while IFS= read -r line; do
+            if [[ "$line" == "worktree "* ]]; then
+                wt_path="${line#worktree }"
+                wt_branch=""
+            elif [[ "$line" == "branch "* ]]; then
+                wt_branch="${line#branch refs/heads/}"
+            elif [[ -z "$line" ]]; then
+                if [[ "$wt_path" != "$dir" && -n "$wt_branch" ]]; then
+                    entries+=("${repo_name}|${wt_branch}|${wt_path}|none|0")
+                fi
+            fi
+        done < <(git -C "$dir" worktree list --porcelain 2>/dev/null; echo)
+    done
+
+    rm -rf "$tmpdir"
 }
 
 # --- Layer 1: Pick a repo ---
