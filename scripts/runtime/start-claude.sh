@@ -108,10 +108,7 @@ ensure_container_bg() {
 
 wait_for_container() {
     if [[ -n "$container_pid" ]]; then
-        local bg_ok=true
-        if ! wait "$container_pid" 2>/dev/null; then
-            bg_ok=false
-        fi
+        wait "$container_pid" 2>/dev/null || true
         container_pid=""  # Always clear — prevents cascading failures
     fi
 
