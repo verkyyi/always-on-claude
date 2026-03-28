@@ -29,14 +29,21 @@ For most updates, run the self-update script which handles everything automatica
 bash ~/dev-env/scripts/runtime/self-update.sh
 ```
 
-This single command:
+The script follows a **fetch → preview → confirm → apply** flow:
 
-1. Pulls the latest repo changes
-2. Pulls a new Docker image (only if Dockerfile/compose changed or registry has a newer image)
-3. Updates host-side scripts (statusline, tmux config)
-4. Reports what was updated
+1. Fetches latest changes (without applying)
+2. Shows a categorized preview of ALL changes:
+   - **Container changes** (Dockerfile/compose) — will require restart
+   - **Runtime scripts** (start menu, ssh-login, etc.) — take effect immediately on pull
+   - **Slash commands** — take effect immediately on pull
+   - **Host-side configs** (statusline, tmux) — will be copied
+   - **Deploy scripts** — provision-time only, no runtime effect
+   - **Docs/CI** — no runtime effect
+   - **Docker image** — checks registry for newer image
+3. Asks user to confirm before applying anything
+4. Applies: pulls repo, updates image, copies host scripts
 
-If the script completes successfully with no issues, summarize the output for the user and stop here.
+If the script completes successfully, summarize the output for the user and stop here.
 
 ## Detailed path: manual inspection
 
@@ -48,7 +55,7 @@ If the self-update script fails, or if the user wants to inspect changes manuall
    cat ~/.update-pending 2>/dev/null || echo "No pending updates"
    ```
 
-2. If no pending file exists, pull manually and check:
+2. If no pending file exists, fetch and check:
 
    ```bash
    bash ~/dev-env/scripts/runtime/update.sh
@@ -59,7 +66,6 @@ If the self-update script fails, or if the user wants to inspect changes manuall
 
    ```bash
    # The pending file contains before/after commit hashes and rebuild flag
-   # Use them to see exactly what files changed
    cat ~/.update-pending
    ```
 
