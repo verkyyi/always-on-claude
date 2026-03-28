@@ -13,7 +13,7 @@ You are orchestrating the provisioning of an always-on Claude Code workspace on 
 
 If the AWS CLI context above shows an error or is not configured, stop and help the user set it up before proceeding. They need `aws configure` with a valid access key, secret, and region.
 
-If an existing instance is found, ask if they want to reuse it (skip to auth) or destroy and recreate.
+If an existing instance is found, ask if they want to reuse it (skip to auth) or destroy and recreate. **Always confirm before terminating** — termination is irreversible and data on the root volume will be lost.
 
 If `$ARGUMENTS` is provided, parse it for preferences (e.g. region, instance type, name). Anything not specified uses defaults.
 
@@ -181,17 +181,7 @@ Expected: `dev` in docker+sudo groups, container `claude-dev` running, dev-env m
 
 ---
 
-## Step 8 — Interactive auth
-
-```bash
-ssh -t -i $KEY dev@$IP "docker exec -it claude-dev bash /home/dev/dev-env/scripts/deploy/setup-auth.sh"
-```
-
-Tell the user what to expect before running it (git config, GitHub CLI, Claude login — each requires browser auth).
-
----
-
-## Step 9 — Save workspace info
+## Step 8 — Save workspace info
 
 Write provisioning details to `.env.workspace.$INSTANCE_NAME` (gitignored via `.env.*` pattern):
 
@@ -210,7 +200,7 @@ EOF
 
 ---
 
-## Step 10 — SSH config
+## Step 9 — SSH config
 
 **Skip if `~/.ssh/config` is not writable** (e.g. provisioning from inside a container). Instead, show the user the SSH command with the full key path.
 
@@ -228,7 +218,7 @@ Host $INSTANCE_NAME
 
 ---
 
-## Step 11 — Shell aliases
+## Step 10 — Shell aliases
 
 **Skip if shell config files are not writable** (e.g. provisioning from inside a container). Instead, include the connect commands in the summary.
 
@@ -247,7 +237,7 @@ Tell the user to run `source ~/.zshrc` (or open a new terminal) to activate.
 
 ---
 
-## Step 12 — Summary
+## Step 11 — Summary
 
 ```
 Provisioning complete!
@@ -262,7 +252,9 @@ Provisioning complete!
     /destroy $INSTANCE_NAME
 ```
 
-If SSH config and aliases were set up (Steps 10-11), also show the short forms (`cc`, `ccc`, `ssh $INSTANCE_NAME`).
+If SSH config and aliases were set up (Steps 9-10), also show the short forms (`cc`, `ccc`, `ssh $INSTANCE_NAME`).
+
+Your first SSH login will trigger guided onboarding (git config, GitHub auth, Claude login) via an interactive Claude session.
 
 ---
 
