@@ -7,10 +7,10 @@ The user may specify an instance name (e.g., `/destroy claude-dev-2`). If they d
 - Arguments: $ARGUMENTS
 - AWS CLI configured: !`aws sts get-caller-identity 2>&1 | head -5`
 - AWS region: !`aws configure get region 2>/dev/null || echo "not set"`
-- Tagged instances: !`aws ec2 describe-instances --filters "Name=tag:Project,Values=always-on-claude" "Name=instance-state-name,Values=running,stopped,pending" --query 'Reservations[].Instances[].[InstanceId,PublicIpAddress,Tags[?Key==\x60Name\x60].Value|[0],InstanceType]' --output text 2>/dev/null || echo "error — check AWS CLI"`
-- Tagged security groups: !`aws ec2 describe-security-groups --filters "Name=tag:Project,Values=always-on-claude" --query 'SecurityGroups[].[GroupId,GroupName]' --output text 2>/dev/null || echo "none"`
-- SSH key pairs: !`aws ec2 describe-key-pairs --query 'KeyPairs[].KeyName' --output text 2>/dev/null || echo "error"`
-- Local .pem files: !`ls ~/.ssh/*.pem ~/*.pem 2>/dev/null || echo "none"`
+- Tagged instances: !`aws ec2 describe-instances --region "$(aws configure get region 2>/dev/null || echo us-east-1)" --filters "Name=tag:Project,Values=always-on-claude" "Name=instance-state-name,Values=running,stopped,pending" --query "Reservations[].Instances[].[InstanceId,PublicIpAddress,Tags[?Key=='Name'].Value|[0],InstanceType]" --output text 2>/dev/null || echo "error — check AWS CLI"`
+- Tagged security groups: !`aws ec2 describe-security-groups --region "$(aws configure get region 2>/dev/null || echo us-east-1)" --filters "Name=tag:Project,Values=always-on-claude" --query "SecurityGroups[].[GroupId,GroupName]" --output text 2>/dev/null || echo "none"`
+- SSH key pairs: !`aws ec2 describe-key-pairs --region "$(aws configure get region 2>/dev/null || echo us-east-1)" --query "KeyPairs[].KeyName" --output text 2>/dev/null || echo "error"`
+- Local .pem files: !`find ~/.ssh ~/ -maxdepth 1 -name "*.pem" 2>/dev/null || echo "none"`
 
 ---
 
@@ -21,6 +21,8 @@ If the AWS CLI context above shows an error, stop and help the user configure it
 ---
 
 ## Step 1 — Determine scope (single instance vs all)
+
+**Filter out non-workspace instances**: Exclude instances with names starting with `ami-builder` or `aoc-ci` — these are transient build/CI instances, not user workspaces.
 
 **If the user provided an instance name** (in $ARGUMENTS): filter by that Name tag. Only that instance will be destroyed. Security groups and key pairs are shared resources — do NOT delete them.
 
@@ -115,7 +117,7 @@ rm -f ~/.ssh/$KEY_NAME.pem ~/$KEY_NAME.pem
 
 **Always** clean up the SSH config entry for the destroyed instance name:
 
-Remove the `Host $INSTANCE_NAME` block from `~/.ssh/config` (the Host line and all indented lines below it).
+Remove the `Host $INSTANCE_NAME` block from `~/.ssh/config` (the Host line and all indented lines below it). Skip if `~/.ssh/config` is not writable.
 
 Remove the per-instance workspace file:
 
@@ -124,6 +126,8 @@ rm -f .env.workspace.$INSTANCE_NAME
 ```
 
 For full teardown (no name filter), remove all workspace files: `rm -f .env.workspace.*`
+
+Check for and clean up instance-specific SSH key files (e.g. `~/$INSTANCE_NAME-key.pem` or `~/.ssh/$INSTANCE_NAME-key.pem`). If found, ask `Remove local key file $FILE? [y/N]` before deleting.
 
 ---
 
