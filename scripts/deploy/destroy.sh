@@ -15,8 +15,11 @@
 set -euo pipefail
 
 # --- Parse arguments ---------------------------------------------------------
+# Only filter by name when explicitly passed as an argument.
+# INSTANCE_NAME may also be set as an env var by load-config.sh (for other
+# scripts), but destroy.sh should only use it when the user explicitly asks.
 
-INSTANCE_NAME="${1:-}"
+DESTROY_NAME="${1:-}"
 
 # --- Config (from .env file, override with env vars) -------------------------
 
@@ -56,8 +59,8 @@ INSTANCE_FILTERS=(
     "Name=tag:Project,Values=$TAG"
     "Name=instance-state-name,Values=running,stopped,pending"
 )
-if [[ -n "$INSTANCE_NAME" ]]; then
-    INSTANCE_FILTERS+=("Name=tag:Name,Values=$INSTANCE_NAME")
+if [[ -n "$DESTROY_NAME" ]]; then
+    INSTANCE_FILTERS+=("Name=tag:Name,Values=$DESTROY_NAME")
 fi
 
 # Find instances
@@ -72,7 +75,7 @@ SG_IDS=""
 KEY_EXISTS="no"
 KEY_FILE="$HOME/.ssh/${KEY_NAME}.pem"
 
-if [[ -z "$INSTANCE_NAME" ]]; then
+if [[ -z "$DESTROY_NAME" ]]; then
     # Find security groups (only when destroying all)
     SG_IDS=$(aws ec2 describe-security-groups \
         --region "$AWS_REGION" \
@@ -89,15 +92,15 @@ fi
 # --- Show what we found -----------------------------------------------------
 
 echo ""
-if [[ -n "$INSTANCE_NAME" ]]; then
-    echo "  Filter:          Name=$INSTANCE_NAME"
+if [[ -n "$DESTROY_NAME" ]]; then
+    echo "  Filter:          Name=$DESTROY_NAME"
 fi
 if [[ -n "$INSTANCE_IDS" ]]; then
     echo "  Instances:       $INSTANCE_IDS"
 else
     echo "  Instances:       none"
 fi
-if [[ -z "$INSTANCE_NAME" ]]; then
+if [[ -z "$DESTROY_NAME" ]]; then
     if [[ -n "$SG_IDS" ]]; then
         echo "  Security groups: $SG_IDS"
     else
@@ -179,24 +182,24 @@ fi
 
 # --- Clean up local files ---------------------------------------------------
 
-if [[ -n "$INSTANCE_NAME" ]]; then
-    info "Cleaning up local files for $INSTANCE_NAME"
+if [[ -n "$DESTROY_NAME" ]]; then
+    info "Cleaning up local files for $DESTROY_NAME"
 
     # Remove SSH config entry for this instance name
     SSH_CONFIG="$HOME/.ssh/config"
-    if [[ -f "$SSH_CONFIG" ]] && grep -q "^Host $INSTANCE_NAME\$" "$SSH_CONFIG"; then
+    if [[ -f "$SSH_CONFIG" ]] && grep -q "^Host $DESTROY_NAME\$" "$SSH_CONFIG"; then
         # Remove the Host block (Host line + all indented lines below it)
-        sed -i "/^Host ${INSTANCE_NAME}$/,/^Host \|^$/{ /^Host ${INSTANCE_NAME}$/d; /^[[:space:]]/d; }" "$SSH_CONFIG"
-        ok "Removed SSH config entry for $INSTANCE_NAME"
+        sed -i "/^Host ${DESTROY_NAME}$/,/^Host \|^$/{ /^Host ${DESTROY_NAME}$/d; /^[[:space:]]/d; }" "$SSH_CONFIG"
+        ok "Removed SSH config entry for $DESTROY_NAME"
     else
-        echo "  No SSH config entry for $INSTANCE_NAME"
+        echo "  No SSH config entry for $DESTROY_NAME"
     fi
 
     # Remove .env.workspace if it references this instance
     if [[ -n "$SCRIPT_DIR" ]]; then
         REPO_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
         WORKSPACE_FILE="$REPO_DIR/.env.workspace"
-        if [[ -f "$WORKSPACE_FILE" ]] && grep -q "INSTANCE_NAME=$INSTANCE_NAME" "$WORKSPACE_FILE"; then
+        if [[ -f "$WORKSPACE_FILE" ]] && grep -q "INSTANCE_NAME=$DESTROY_NAME" "$WORKSPACE_FILE"; then
             rm -f "$WORKSPACE_FILE"
             ok "Removed $WORKSPACE_FILE"
         fi
