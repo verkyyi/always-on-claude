@@ -1,0 +1,53 @@
+name: Auto Release
+
+on:
+  schedule:
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+
+jobs:
+  check-and-tag:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check commit threshold and tag
+        run: |
+          # Find the most recent tag
+          LAST_TAG=$(git tag --sort=-v:refname | head -1 || echo "")
+          if [[ -z "$LAST_TAG" ]]; then
+            echo "No previous tags found, counting all commits"
+            RANGE="HEAD"
+          else
+            echo "Last tag: $LAST_TAG"
+            RANGE="${LAST_TAG}..HEAD"
+          fi
+
+          # Count non-merge commits since last tag
+          COUNT=$(git rev-list --count --no-merges "$RANGE")
+          echo "Commits since last tag: $COUNT"
+
+          if [[ "$COUNT" -lt 10 ]]; then
+            echo "Below threshold (10), skipping release"
+            exit 0
+          fi
+
+          # Generate calendar-based tag
+          TAG="v$(date -u +%Y.%m.%d)"
+          echo "Proposed tag: $TAG"
+
+          # Skip if tag already exists
+          if git rev-parse "$TAG" &>/dev/null; then
+            echo "Tag $TAG already exists, skipping"
+            exit 0
+          fi
+
+          # Create and push tag
+          git tag "$TAG"
+          git push origin "$TAG"
+          echo "Created and pushed tag: $TAG"
