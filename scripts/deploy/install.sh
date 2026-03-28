@@ -515,6 +515,7 @@ Type=oneshot
 RemainAfterExit=yes
 Environment=HOME=/home/dev
 WorkingDirectory=$DEV_ENV
+ExecStartPre=/usr/bin/git -C $DEV_ENV pull --ff-only
 ExecStart=/usr/bin/docker compose up -d --force-recreate
 ExecStop=/usr/bin/docker compose stop
 
