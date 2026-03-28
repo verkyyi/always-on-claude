@@ -260,6 +260,64 @@ compute_default() {
     fi
 }
 
+# --- Compact menu rendering ---
+show_menu() {
+    local prev_repo=""
+    local idx=1
+
+    echo ""
+
+    if [[ ${#entries[@]} -eq 0 ]]; then
+        echo "  (no repos — press m to clone)"
+    else
+        for i in "${!entries[@]}"; do
+            IFS='|' read -r repo_name branch path state activity <<< "${entries[$i]}"
+
+            # Print repo header when repo changes
+            if [[ "$repo_name" != "$prev_repo" ]]; then
+                [[ -n "$prev_repo" ]] && echo ""
+                echo "  ${repo_name}"
+                prev_repo="$repo_name"
+            fi
+
+            # Branch line with optional session marker
+            local marker=""
+            if [[ "$state" == "idle" ]]; then
+                marker="  ← active (idle)"
+            elif [[ "$state" == "attached" ]]; then
+                marker="  ← active (attached)"
+            fi
+
+            echo "  [${idx}] ${branch}${marker}"
+            ((idx++))
+        done
+    fi
+
+    # Orphaned sessions
+    if [[ ${#orphaned_sessions[@]} -gt 0 ]]; then
+        echo ""
+        echo "  sessions"
+        for os in "${orphaned_sessions[@]}"; do
+            IFS='|' read -r sname sstate _ <<< "$os"
+            local omarker=""
+            [[ "$sstate" == "attached" ]] && omarker="  ← active (attached)"
+            [[ "$sstate" == "idle" ]] && omarker="  ← active (idle)"
+            echo "  [${idx}] ${sname}${omarker}"
+            ((idx++))
+        done
+    fi
+
+    # Footer
+    echo ""
+    if [[ ${#entries[@]} -eq 0 ]]; then
+        echo "  Enter=m  m=manage  h=host  c=container"
+    else
+        local default_display=$(( default_idx + 1 ))
+        echo "  Enter=${default_display}  m=manage  h=host  c=container"
+    fi
+    echo ""
+}
+
 # --- Layer 1: Pick a repo ---
 show_repos() {
     # Collect active claude-* and shell-* tmux sessions

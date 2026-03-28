@@ -340,3 +340,94 @@ test_compute_default_skips_attached() {
     compute_default
     assert_eq "1" "$default_idx" "should prefer idle over attached even if attached is newer"
 }
+
+test_show_menu_repo_header_and_branch() {
+    entries=("myrepo|main|/path/myrepo|none|0")
+    orphaned_sessions=()
+    default_idx=0
+    _source_v2
+
+    local output
+    output=$(show_menu)
+    assert_contains "$output" "myrepo" "should show repo name as header"
+    assert_contains "$output" "[1] main" "should show branch as numbered item"
+}
+
+test_show_menu_active_marker() {
+    entries=("myrepo|main|/path/myrepo|idle|1711612800")
+    orphaned_sessions=()
+    default_idx=0
+    _source_v2
+
+    local output
+    output=$(show_menu)
+    assert_contains "$output" "active (idle)" "should show active marker"
+}
+
+test_show_menu_attached_marker() {
+    entries=("myrepo|main|/path/myrepo|attached|1711612800")
+    orphaned_sessions=()
+    default_idx=0
+    _source_v2
+
+    local output
+    output=$(show_menu)
+    assert_contains "$output" "active (attached)" "should show attached marker"
+}
+
+test_show_menu_footer_default() {
+    entries=("myrepo|main|/path/myrepo|none|0")
+    orphaned_sessions=()
+    default_idx=0
+    _source_v2
+
+    local output
+    output=$(show_menu)
+    assert_contains "$output" "Enter=1" "should show default in footer"
+    assert_contains "$output" "m=manage" "should show manage option"
+    assert_contains "$output" "h=host" "should show host option"
+    assert_contains "$output" "c=container" "should show container option"
+}
+
+test_show_menu_no_repos() {
+    entries=()
+    orphaned_sessions=()
+    default_idx=0
+    _source_v2
+
+    local output
+    output=$(show_menu)
+    assert_contains "$output" "no repos"
+    assert_contains "$output" "Enter=m" "should default to manage when no repos"
+}
+
+test_show_menu_multiple_repos_grouped() {
+    entries=(
+        "app-one|main|/path/app-one|none|0"
+        "app-one|feature-x|/path/app-one--feature-x|none|0"
+        "app-two|dev|/path/app-two|none|0"
+    )
+    orphaned_sessions=()
+    default_idx=0
+    _source_v2
+
+    local output
+    output=$(show_menu)
+    assert_contains "$output" "app-one" "should show first repo header"
+    assert_contains "$output" "[1] main" "should show first branch"
+    assert_contains "$output" "[2] feature-x" "should show worktree branch"
+    assert_contains "$output" "app-two" "should show second repo header"
+    assert_contains "$output" "[3] dev" "should show second repo branch"
+}
+
+test_show_menu_orphaned_sessions() {
+    entries=("myrepo|main|/path/myrepo|none|0")
+    orphaned_sessions=("claude-deleted-repo|idle|0")
+    default_idx=0
+    _source_v2
+
+    local output
+    output=$(show_menu)
+    assert_contains "$output" "sessions" "should show orphaned sessions header"
+    assert_contains "$output" "claude-deleted-repo" "should show orphaned session name"
+}
