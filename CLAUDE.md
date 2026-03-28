@@ -74,7 +74,7 @@ All deployment parameters live in a single `.env` file at the repo root. Scripts
 2. `.env` file
 3. Environment variables at runtime
 
-This means `INSTANCE_TYPE=t3.medium bash provision.sh` overrides whatever is in `.env`. See [deployment.md](docs/deployment.md) for the full variable reference.
+This means setting `INSTANCE_TYPE=t3.medium` before running `/provision` overrides whatever is in `.env`. See [deployment.md](docs/deployment.md) for the full variable reference.
 
 ## Critical gotchas
 

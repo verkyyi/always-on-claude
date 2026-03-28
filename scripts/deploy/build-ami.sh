@@ -11,7 +11,7 @@
 #   4. Makes the AMI public
 #   5. Terminates the temporary instance
 #
-# The resulting AMI is tagged and can be found by provision.sh automatically.
+# The resulting AMI is tagged and can be found by /provision automatically.
 # Run this whenever you update the Docker image or tools.
 #
 # Override defaults with env vars:
@@ -53,7 +53,7 @@ command -v aws &>/dev/null || die "AWS CLI not found"
 aws sts get-caller-identity &>/dev/null || die "AWS credentials not configured"
 
 KEY_FILE="$HOME/.ssh/${KEY_NAME}.pem"
-[[ -f "$KEY_FILE" ]] || die "SSH key not found at $KEY_FILE — run provision.sh first to create it"
+[[ -f "$KEY_FILE" ]] || die "SSH key not found at $KEY_FILE — run /provision first to create it"
 aws ec2 describe-key-pairs --key-names "$KEY_NAME" --region "$AWS_REGION" &>/dev/null 2>&1 \
     || die "Key pair '$KEY_NAME' not found in AWS"
 
@@ -281,7 +281,7 @@ echo "  Name:    $AMI_NAME"
 echo "  Region:  $AWS_REGION"
 echo "  Public:  yes"
 echo ""
-echo "  provision.sh will automatically find and use this AMI."
+echo "  /provision will automatically find and use this AMI."
 echo ""
 echo "  To copy to another region:"
 echo "    aws ec2 copy-image --source-region $AWS_REGION --source-image-id $AMI_ID \\"
