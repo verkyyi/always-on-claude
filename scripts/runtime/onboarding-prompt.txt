@@ -47,7 +47,20 @@ gh auth login --web --git-protocol https
 
 Wait for it to complete and confirm success.
 
-### Step 4: Clone first repo
+### Step 4: Verify Claude works in container
+
+Check that Claude Code is accessible inside the container:
+```bash
+docker exec claude-dev claude --version
+```
+
+If this works, Claude auth is shared from the host (where you're running now) into the container via bind mounts. Tell the user:
+
+"Claude Code is working inside the container — your auth is shared automatically."
+
+If it fails, help troubleshoot (container not running, bind mount issue).
+
+### Step 5: Clone first repo
 
 Ask: "What repo would you like to work on? Give me a GitHub URL or owner/repo."
 
@@ -58,7 +71,7 @@ git clone https://github.com/OWNER/REPO.git ~/projects/REPO
 
 If they're not sure, suggest they can skip this and clone later from the workspace manager.
 
-### Step 5: Quick tour
+### Step 6: Quick tour
 
 After setup is complete, give a brief tour:
 
@@ -74,7 +87,7 @@ After setup is complete, give a brief tour:
 
 **Mobile tip:** Use a terminal app like Blink (iOS) or Termux (Android). The workspace picker is designed for quick one-key selection."
 
-### Step 6: Mark complete
+### Step 7: Mark complete
 
 After the tour, run this command to mark onboarding as done:
 ```bash
