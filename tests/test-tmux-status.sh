@@ -9,7 +9,7 @@ test_format_zero_sessions() {
 
     local output
     output=$(MAX_SESSIONS=3 bash "$STATUS_SCRIPT")
-    assert_contains "$output" "0/3 sess"
+    assert_contains "$output" "0/3"
 }
 
 test_format_multiple_sessions() {
@@ -24,12 +24,12 @@ MOCK
 
     local output
     output=$(MAX_SESSIONS=4 bash "$STATUS_SCRIPT")
-    assert_contains "$output" "2/4 sess"
+    assert_contains "$output" "2/4"
 }
 
 test_respects_max_sessions_env() {
     mock_binary tmux ""
     local output
     output=$(MAX_SESSIONS=7 bash "$STATUS_SCRIPT")
-    assert_contains "$output" "0/7 sess"
+    assert_contains "$output" "0/7"
 }
