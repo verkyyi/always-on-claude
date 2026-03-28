@@ -167,7 +167,7 @@ ssh -i $KEY dev@$IP "docker ps --format {{.Names}} | grep -q claude-dev"
 ## Step 8 — Interactive auth
 
 ```bash
-ssh -t -i $KEY dev@$IP "docker cp ~/dev-env/scripts/deploy/setup-auth.sh claude-dev:/tmp/setup-auth.sh && docker exec -it claude-dev bash /tmp/setup-auth.sh"
+ssh -t -i $KEY dev@$IP "docker exec -it claude-dev bash /home/dev/dev-env/scripts/deploy/setup-auth.sh"
 ```
 
 Tell the user what to expect before running it (git config, GitHub CLI, Claude login — each requires browser auth).

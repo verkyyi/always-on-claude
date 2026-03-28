@@ -60,6 +60,7 @@ gl  → git log --oneline -20
 | `~/projects` | `/home/dev/projects` | Code repos |
 | `~/.gitconfig.d` | `/home/dev/.gitconfig.d` | Git config |
 | `~/.config/gh` | `/home/dev/.config/gh` | GitHub CLI auth |
+| `~/dev-env` | `/home/dev/dev-env` | Dev-env repo scripts/configs (read-only) |
 | `~/.ssh` | `/home/dev/.ssh` | SSH keys (read-only) |
 | `~/.ssh/known_hosts` | `/home/dev/.ssh/known_hosts` | Writable override for host fingerprints |
 

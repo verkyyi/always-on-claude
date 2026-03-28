@@ -24,6 +24,9 @@ services:
       # GitHub CLI config/auth (shared between host and container)
       - ~/.config/gh:/home/dev/.config/gh
 
+      # Dev-env repo (scripts, configs — read-only, managed on host)
+      - ~/dev-env:/home/dev/dev-env:ro
+
       # SSH keys for GitHub (read-only)
       - ~/.ssh:/home/dev/.ssh:ro
 

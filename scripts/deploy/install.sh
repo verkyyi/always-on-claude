@@ -36,8 +36,10 @@ if [[ -f "$_SCRIPT_DIR/load-config.sh" ]]; then
 else
     # Fallback defaults when running via curl pipe before repo exists
     : "${DOCKER_IMAGE:=ghcr.io/verkyyi/always-on-claude:latest}"
-    : "${DEV_ENV:=$HOME/dev-env}"
-    : "${PROJECTS_DIR:=$HOME/projects}"
+    # Use dev user's home, not $HOME (which is /root when run via sudo)
+    _DEV_HOME=$(eval echo "~dev")
+    : "${DEV_ENV:=$_DEV_HOME/dev-env}"
+    : "${PROJECTS_DIR:=$_DEV_HOME/projects}"
     : "${CONTAINER_NAME:=claude-dev}"
     IMAGE="$DOCKER_IMAGE"
 fi
@@ -95,6 +97,14 @@ if id dev &>/dev/null 2>&1; then
     ok "User dev exists"
 else
     die "Expected 'dev' user to exist. Ensure cloud-config user-data creates it before running install.sh."
+fi
+
+# When running as root (e.g. CI's "sudo bash install.sh"), $HOME is /root.
+# Set it to the dev user's home so all ~ expansions and $HOME references
+# throughout this script create files in the right place.
+if [[ $EUID -eq 0 ]]; then
+    export HOME=$(eval echo "~dev")
+    export USER=dev
 fi
 
 # --- System packages --------------------------------------------------------
