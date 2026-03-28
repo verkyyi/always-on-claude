@@ -58,6 +58,11 @@ ENV PATH="/home/dev/.bun/bin:${PATH}"
 # uv — Python package manager, provides uvx for running MCP servers
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
+# Pre-cache MCP server packages so first Claude Code launch is fast
+# (without this, npx/uvx download on first run, delaying the theme selector)
+RUN npx -y @upstash/context7-mcp --help >/dev/null 2>&1 || true
+RUN /home/dev/.local/bin/uvx mcp-server-fetch --help >/dev/null 2>&1 || true
+
 # Shell aliases
 RUN printf '\nalias cc="claude --dangerously-skip-permissions"\nalias gs="git status"\nalias gl="git log --oneline -20"\n' >> /home/dev/.bashrc
 

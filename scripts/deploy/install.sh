@@ -167,6 +167,19 @@ else
     skip "GitHub CLI (host)"
 fi
 
+# AWS CLI v2 on host (for workspace management scripts, backups, CloudWatch)
+if ! command -v aws &>/dev/null; then
+    step="AWS CLI v2 install (host)"
+    sudo apt-get install -y -qq unzip
+    curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o /tmp/awscliv2.zip
+    unzip -qo /tmp/awscliv2.zip -d /tmp
+    sudo /tmp/aws/install
+    rm -rf /tmp/aws /tmp/awscliv2.zip
+    ok "AWS CLI v2 installed on host"
+else
+    skip "AWS CLI v2 (host)"
+fi
+
 # Claude Code on host (for orchestrating updates, setup, container management)
 if ! command -v claude &>/dev/null; then
     step="Claude Code install (host)"
@@ -566,11 +579,12 @@ fi
 run_docker docker compose up -d
 ok "Container running"
 
-# Fix container permissions (volumes mount as root)
-step="fix container permissions"
+# Fix permissions (volumes mount as root, aws cli may create ~/.aws as root)
+step="fix permissions"
 run_docker docker compose exec -T -u root dev bash -c \
     "chown dev:dev /home/dev/projects /home/dev/.claude" 2>/dev/null || true
-ok "Fixed container permissions"
+[[ -d "$HOME/.aws" ]] && sudo chown -R "$(id -u dev):$(id -g dev)" "$HOME/.aws" 2>/dev/null || true
+ok "Fixed permissions"
 
 echo ""
 echo "============================================"
