@@ -102,11 +102,25 @@ jobs:
 
       - name: Launch build instance
         run: |
+          # Create dev user directly via cloud-init instead of default ubuntu
+          BUILD_USER_DATA=$(cat <<'USERDATA'
+          #cloud-config
+          system_info:
+            default_user:
+              name: dev
+              shell: /bin/bash
+              sudo: ALL=(ALL) NOPASSWD:ALL
+              groups: [sudo]
+              homedir: /home/dev
+          USERDATA
+          )
+
           INSTANCE_ID=$(aws ec2 run-instances \
             --image-id "$BASE_AMI" \
             --instance-type "${{ matrix.instance_type }}" \
             --key-name "$KEY_NAME" \
             --security-group-ids "$SG_ID" \
+            --user-data "$BUILD_USER_DATA" \
             --block-device-mappings 'DeviceName=/dev/sda1,Ebs={VolumeSize=20,VolumeType=gp3,DeleteOnTermination=true}' \
             --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=ami-builder-${{ matrix.arch }}},{Key=Project,Value=${{ env.PROJECT_TAG }}}]" \
             --query 'Instances[0].InstanceId' --output text)
@@ -126,7 +140,7 @@ jobs:
           echo "Waiting for SSH..."
           for i in $(seq 1 30); do
             if ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -o BatchMode=yes \
-              -i /tmp/build-key.pem "ubuntu@${PUBLIC_IP}" "echo ok" 2>&1; then
+              -i /tmp/build-key.pem "dev@${PUBLIC_IP}" "echo ok" 2>&1; then
               echo "SSH ready"
               break
             fi
@@ -138,22 +152,20 @@ jobs:
         run: |
           echo "Copying install.sh to build instance..."
           scp -o StrictHostKeyChecking=no -i /tmp/build-key.pem \
-            scripts/deploy/install.sh "ubuntu@${PUBLIC_IP}:/tmp/install.sh"
+            scripts/deploy/install.sh "dev@${PUBLIC_IP}:/tmp/install.sh"
           echo "Running install.sh..."
           ssh -o StrictHostKeyChecking=no -o BatchMode=yes -i /tmp/build-key.pem \
-            "ubuntu@${PUBLIC_IP}" \
+            "dev@${PUBLIC_IP}" \
             "sudo NON_INTERACTIVE=1 bash /tmp/install.sh"
 
       - name: Clean instance for snapshot
         run: |
-          # install.sh renames ubuntu → dev, so use dev@ for post-install commands.
-          # cloud-init clean causes User Data to re-run on boot — install.sh detects
-          # the pre-baked AMI via .provisioned marker and takes a fast path.
+          # cloud-init clean resets state so it re-runs on boot — this is how
+          # the new instance's EC2 SSH key gets injected into the dev user.
           ssh -o StrictHostKeyChecking=no -o BatchMode=yes -i /tmp/build-key.pem \
             "dev@${PUBLIC_IP}" bash <<'EOF'
           sudo rm -f /etc/ssh/ssh_host_*
           sudo cloud-init clean --logs
-          sudo userdel -r ubuntu 2>/dev/null || true
           rm -f ~/.bash_history
           cd ~/dev-env && sudo docker compose stop 2>/dev/null || true
           EOF

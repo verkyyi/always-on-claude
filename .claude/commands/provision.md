@@ -90,18 +90,43 @@ aws ec2 describe-images --owners 099720109477 --region "$REGION" \
 
 **If using a pre-built AMI**: launch WITHOUT `--user-data`. The AMI has a systemd service that starts the container on boot, and cloud-init injects the SSH key to the `dev` user automatically.
 
-**If using stock Ubuntu**: launch WITH `--user-data` to run install.sh:
+**If using stock Ubuntu**: launch WITH `--user-data` using multipart MIME to create the `dev` user via cloud-config and run install.sh:
 
 ```bash
+USER_DATA=$(cat <<'USERDATA'
+Content-Type: multipart/mixed; boundary="==BOUNDARY=="
+MIME-Version: 1.0
+
+--==BOUNDARY==
+Content-Type: text/cloud-config; charset="us-ascii"
+MIME-Version: 1.0
+
+system_info:
+  default_user:
+    name: dev
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    groups: [sudo]
+    homedir: /home/dev
+
+--==BOUNDARY==
+Content-Type: text/x-shellscript; charset="us-ascii"
+MIME-Version: 1.0
+
+#!/bin/bash
+exec > /var/log/install.log 2>&1
+su - dev -c "NON_INTERACTIVE=1 bash -c 'curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/scripts/deploy/install.sh | bash'"
+--==BOUNDARY==--
+USERDATA
+)
+
 aws ec2 run-instances \
     --region "$REGION" \
     --image-id "$AMI_ID" \
     --instance-type "$INSTANCE_TYPE" \
     --key-name "$KEY_NAME" \
     --security-group-ids "$SG_ID" \
-    --user-data '#!/bin/bash
-exec > /var/log/install.log 2>&1
-su - ubuntu -c "NON_INTERACTIVE=1 bash -c '\''curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/scripts/deploy/install.sh | bash'\''"' \
+    --user-data "$USER_DATA" \
     --block-device-mappings 'DeviceName=/dev/sda1,Ebs={VolumeSize=20,VolumeType=gp3,DeleteOnTermination=true}' \
     --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=claude-dev},{Key=Project,Value=always-on-claude}]' \
     --query 'Instances[0].InstanceId' --output text
@@ -134,7 +159,7 @@ ssh -t -i $KEY dev@$IP "cloud-init status --wait >/dev/null 2>&1"
 
 Verify container is running:
 ```bash
-ssh -i $KEY dev@$IP "sg docker -c 'docker ps --format {{.Names}}' | grep -q claude-dev"
+ssh -i $KEY dev@$IP "docker ps --format {{.Names}} | grep -q claude-dev"
 ```
 
 ---
@@ -142,7 +167,7 @@ ssh -i $KEY dev@$IP "sg docker -c 'docker ps --format {{.Names}}' | grep -q clau
 ## Step 8 — Interactive auth
 
 ```bash
-ssh -t -i $KEY dev@$IP "sg docker -c 'docker cp ~/dev-env/scripts/deploy/setup-auth.sh claude-dev:/tmp/setup-auth.sh && docker exec -it claude-dev bash /tmp/setup-auth.sh'"
+ssh -t -i $KEY dev@$IP "docker cp ~/dev-env/scripts/deploy/setup-auth.sh claude-dev:/tmp/setup-auth.sh && docker exec -it claude-dev bash /tmp/setup-auth.sh"
 ```
 
 Tell the user what to expect before running it (git config, GitHub CLI, Claude login — each requires browser auth).

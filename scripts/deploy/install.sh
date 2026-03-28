@@ -83,36 +83,18 @@ fi
 
 ok "Running as $USER ($(if [[ $EUID -eq 0 ]]; then echo "root"; else echo "non-root, using sudo"; fi)) on $(hostname)"
 
-# --- Rename ubuntu user to dev (matches container user) ---------------------
+# --- Verify dev user exists --------------------------------------------------
+# The dev user is created by cloud-init via user-data (cloud-config) before
+# install.sh runs. Both build-ami.sh and provision.sh pass system_info config
+# that creates dev instead of the default ubuntu user.
 
 info "System user"
-step="rename user"
+step="verify dev user"
 
-if id ubuntu &>/dev/null 2>&1 && ! id dev &>/dev/null 2>&1; then
-    # Fix sudoers FIRST — after /etc/passwd rename, sudo won't recognize
-    # the current user as "ubuntu" so it must already reference "dev"
-    if [[ -f /etc/sudoers.d/90-cloud-init-users ]]; then
-        sudo sed -i 's/ubuntu/dev/g' /etc/sudoers.d/90-cloud-init-users
-    fi
-
-    # Direct file edit avoids usermod's "user is currently logged in" check
-    sudo sed -i '/^ubuntu:/ { s/^ubuntu:/dev:/; s|:/home/ubuntu:|:/home/dev:| }' /etc/passwd
-    sudo sed -i 's/^ubuntu:/dev:/' /etc/shadow /etc/group /etc/gshadow /etc/subuid /etc/subgid 2>/dev/null || true
-
-    # Move home dir — cd out first so CWD doesn't block the move
-    cd /
-    sudo mv /home/ubuntu /home/dev
-
-    # Update current session
-    export USER=dev
-    export HOME=/home/dev
-    cd "$HOME"
-
-    ok "Renamed system user ubuntu → dev"
-elif id dev &>/dev/null 2>&1; then
-    skip "User is already dev"
+if id dev &>/dev/null 2>&1; then
+    ok "User dev exists"
 else
-    skip "User is $(id -un) (no rename needed)"
+    die "Expected 'dev' user to exist. Ensure cloud-config user-data creates it before running install.sh."
 fi
 
 # --- System packages --------------------------------------------------------
@@ -153,10 +135,10 @@ else
     skip "Docker Compose plugin"
 fi
 
-# Ensure current user is in docker group (root doesn't need this)
-if [[ $EUID -ne 0 ]] && ! id -nG "$USER" | grep -qw docker; then
-    sudo usermod -aG docker "$USER"
-    ok "Added $USER to docker group (active after re-login)"
+# Ensure dev user is in docker group
+if ! id -nG dev 2>/dev/null | grep -qw docker; then
+    sudo usermod -aG docker dev
+    ok "Added dev to docker group"
 else
     skip "Docker group membership"
 fi
@@ -492,6 +474,13 @@ step="cloud-init config"
 CLOUDINIT_CFG="/etc/cloud/cloud.cfg.d/99-always-on-claude.cfg"
 if [[ ! -f "$CLOUDINIT_CFG" ]]; then
     cat <<'CLOUDINIT' | sudo tee "$CLOUDINIT_CFG" > /dev/null
+# Top-level groups: ensures dev gets added to docker/sudo on pre-baked AMI
+# boots. cloud-init's add_user() skips groups for existing users, but
+# create_group() always runs usermod -a -G for listed members.
+groups:
+  - docker: [dev]
+  - sudo: [dev]
+
 system_info:
   default_user:
     name: dev

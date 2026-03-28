@@ -124,12 +124,28 @@ fi
 
 info "Launching build instance"
 
+# Create dev user directly via cloud-init instead of the default ubuntu user.
+# This avoids the fragile sed-based rename in install.sh and ensures clean
+# group membership from the start.
+BUILD_USER_DATA=$(cat <<'USERDATA'
+#cloud-config
+system_info:
+  default_user:
+    name: dev
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    groups: [sudo]
+    homedir: /home/dev
+USERDATA
+)
+
 INSTANCE_ID=$(aws ec2 run-instances \
     --region "$AWS_REGION" \
     --image-id "$BASE_AMI" \
     --instance-type "$INSTANCE_TYPE" \
     --key-name "$KEY_NAME" \
     --security-group-ids "$SG_ID" \
+    --user-data "$BUILD_USER_DATA" \
     --block-device-mappings "DeviceName=/dev/sda1,Ebs={VolumeSize=$AMI_BUILD_VOLUME_SIZE,VolumeType=gp3,DeleteOnTermination=true}" \
     --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=ami-builder},{Key=Project,Value=$TAG}]" \
     --query 'Instances[0].InstanceId' \
@@ -154,7 +170,7 @@ ok "Running: $PUBLIC_IP"
 echo "  Waiting for SSH..."
 for i in $(seq 1 30); do
     if ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -o BatchMode=yes \
-        -i "$KEY_FILE" "ubuntu@${PUBLIC_IP}" "echo ok" &>/dev/null 2>&1; then
+        -i "$KEY_FILE" "dev@${PUBLIC_IP}" "echo ok" &>/dev/null 2>&1; then
         ok "SSH is ready"
         break
     fi
@@ -169,7 +185,7 @@ info "Running install.sh"
 echo "  Installing Docker, Claude Code, pulling image..."
 echo "  This takes 2-3 minutes..."
 
-ssh -o StrictHostKeyChecking=no -o BatchMode=yes -i "$KEY_FILE" "ubuntu@${PUBLIC_IP}" \
+ssh -o StrictHostKeyChecking=no -o BatchMode=yes -i "$KEY_FILE" "dev@${PUBLIC_IP}" \
     "NON_INTERACTIVE=1 bash -c 'curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/scripts/deploy/install.sh | bash'" \
     2>&1 | while IFS= read -r line; do echo "  $line"; done
 
@@ -180,9 +196,8 @@ ok "Install complete"
 info "Preparing instance for snapshot"
 
 # Remove host-specific state that shouldn't be baked into the AMI.
-# cloud-init clean causes cloud-init to re-run User Data (install.sh) on boot.
-# install.sh detects the pre-baked AMI via .provisioned marker and takes a fast
-# path: remove stale ubuntu user, re-clone repo if needed, start container.
+# cloud-init clean resets cloud-init state so it re-runs on boot — this is
+# how the new instance's EC2 SSH key gets injected into the dev user.
 ssh -o StrictHostKeyChecking=no -o BatchMode=yes -i "$KEY_FILE" "dev@${PUBLIC_IP}" bash <<'CLEANUP'
 # Remove SSH host keys (regenerated on boot)
 sudo rm -f /etc/ssh/ssh_host_*
@@ -190,15 +205,11 @@ sudo rm -f /etc/ssh/ssh_host_*
 # Clear cloud-init state so it runs fresh on new instances
 sudo cloud-init clean --logs
 
-# Remove cloud-init's ubuntu user if it exists (will be recreated on boot,
-# then removed by install.sh fast path)
-sudo userdel -r ubuntu 2>/dev/null || true
-
 # Remove bash history
 rm -f ~/.bash_history
 history -c
 
-# Stop the container (will be started via User Data on new instances)
+# Stop the container (will be started by systemd on boot)
 cd ~/dev-env && sudo docker compose stop 2>/dev/null || true
 CLEANUP
 
