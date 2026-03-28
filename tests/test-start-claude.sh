@@ -241,6 +241,7 @@ MOCK
     _source_v2
 
     get_sessions
+    assert_eq "1" "${#session_names[@]}"
     assert_eq "attached" "${session_states[0]}"
 }
 
@@ -272,6 +273,7 @@ test_match_sessions_annotates_entry() {
     IFS='|' read -r _ _ _ state activity <<< "${entries[0]}"
     assert_eq "idle" "$state"
     assert_eq "1711612800" "$activity"
+    assert_eq "0" "${#orphaned_sessions[@]}" "matching session should not be orphaned"
 }
 
 test_match_sessions_detects_orphaned() {

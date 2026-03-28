@@ -220,9 +220,9 @@ match_sessions() {
 
         for ei in "${!entries[@]}"; do
             IFS='|' read -r repo_name branch path _state _activity <<< "${entries[$ei]}"
-            local dirname
-            dirname=$(basename "$path" | tr './:' '-')
-            local expected_session="claude-${dirname}"
+            local dir_base
+            dir_base=$(basename "$path" | tr './:' '-')
+            local expected_session="claude-${dir_base}"
 
             if [[ "$sname" == "$expected_session" ]]; then
                 entries[$ei]="${repo_name}|${branch}|${path}|${sstate}|${sactivity}"
