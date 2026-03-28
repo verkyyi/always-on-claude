@@ -35,10 +35,9 @@ _defaults() {
     : "${CONTAINER_NAME:=claude-dev}"
     : "${CONTAINER_HOSTNAME:=claude-dev}"
 
-    # Paths — use dev user's home, not $HOME (which is /root when run as root)
-    _DEV_HOME=$(getent passwd "${SSH_USER}" 2>/dev/null | cut -d: -f6 || echo "$HOME")
-    : "${DEV_ENV:=${_DEV_HOME:-$HOME}/dev-env}"
-    : "${PROJECTS_DIR:=${_DEV_HOME:-$HOME}/projects}"
+    # Paths
+    : "${DEV_ENV:=$HOME/dev-env}"
+    : "${PROJECTS_DIR:=$HOME/projects}"
 
     # AMI build
     : "${AMI_BUILD_INSTANCE_TYPE:=t3.medium}"
