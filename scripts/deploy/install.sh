@@ -167,6 +167,19 @@ else
     skip "GitHub CLI (host)"
 fi
 
+# AWS CLI v2 on host (for workspace management scripts, backups, CloudWatch)
+if ! command -v aws &>/dev/null; then
+    step="AWS CLI v2 install (host)"
+    sudo apt-get install -y -qq unzip
+    curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o /tmp/awscliv2.zip
+    unzip -qo /tmp/awscliv2.zip -d /tmp
+    sudo /tmp/aws/install
+    rm -rf /tmp/aws /tmp/awscliv2.zip
+    ok "AWS CLI v2 installed on host"
+else
+    skip "AWS CLI v2 (host)"
+fi
+
 # Claude Code on host (for orchestrating updates, setup, container management)
 if ! command -v claude &>/dev/null; then
     step="Claude Code install (host)"
