@@ -54,7 +54,7 @@ I found this instance:
   Security groups: skipped (shared)
   Key pair:        skipped (shared)
 
-Delete this instance? [y/N]
+Type "claude-dev-2" to confirm deletion:
 ```
 
 For **all resources** (full teardown):
@@ -65,8 +65,10 @@ I found these resources:
   Security groups: sg-xxx (claude-dev-sg)
   Key pair:        claude-dev-key (in AWS + local file)
 
-Delete all of these? [y/N]
+Type "destroy all" to confirm deletion:
 ```
+
+**Do NOT proceed unless the user types the exact confirmation text.** A simple "y" or "yes" is not sufficient.
 
 If nothing is found, say so and exit.
 
@@ -98,7 +100,7 @@ If deletion fails (still in use from terminating instance), wait a moment and re
 Skip this step if destroying a specific named instance.
 
 ```
-Also delete the SSH key pair "claude-dev-key"? [y/N]
+Also delete the SSH key pair? Type "delete claude-dev-key" to confirm:
 ```
 
 If yes:
