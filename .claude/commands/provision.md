@@ -153,16 +153,26 @@ ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -o BatchMode=yes -i ~/.ssh/$
 
 ---
 
-## Step 7 — Wait for setup
+## Step 7 — Wait for setup and verify
 
 ```bash
 ssh -t -i $KEY dev@$IP "cloud-init status --wait >/dev/null 2>&1"
 ```
 
-Verify container is running:
+Wait for container to be running (systemd starts it after boot, may take a few seconds):
 ```bash
-ssh -i $KEY dev@$IP "docker ps --format {{.Names}} | grep -q claude-dev"
+for i in $(seq 1 30); do
+    ssh -i $KEY dev@$IP "docker ps --format {{.Names}} | grep -q claude-dev" 2>/dev/null && break
+    sleep 2
+done
 ```
+
+Run a quick health check and report results:
+```bash
+ssh -i $KEY dev@$IP "echo '=== groups ===' && id -nG && echo '=== container ===' && docker ps --format '{{.Names}} ({{.Status}})' && echo '=== dev-env ===' && docker exec claude-dev test -d /home/dev/dev-env && echo 'mounted' || echo 'MISSING'"
+```
+
+Expected: `dev` in docker+sudo groups, container `claude-dev` running, dev-env mounted.
 
 ---
 
