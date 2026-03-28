@@ -339,6 +339,7 @@ launch() {
     container_path=$(to_container_path "$selected")
 
     # Create unique tmux session name
+    local session_name
     session_name="claude-$(basename "$selected" | tr './:' '-')"
 
     # Check session limit (allows re-attach, blocks new if at limit)
@@ -346,7 +347,7 @@ launch() {
         return 1
     fi
 
-    echo "  -> $selected"
+    echo "  -> $session_name"
     echo ""
 
     exec tmux new-session -A -s "$session_name" \
