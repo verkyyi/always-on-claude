@@ -4,8 +4,8 @@ You are orchestrating the provisioning of an always-on Claude Code workspace on 
 
 - AWS CLI configured: !`aws sts get-caller-identity 2>&1 | head -5`
 - AWS region: !`aws configure get region 2>/dev/null || echo "not set"`
-- Existing SSH keys: !`ls ~/.ssh/*.pem ~/*.pem 2>/dev/null || echo "none"`
-- Existing instances: !`aws ec2 describe-instances --filters "Name=tag:Project,Values=always-on-claude" "Name=instance-state-name,Values=running,pending" --query 'Reservations[].Instances[].[InstanceId,PublicIpAddress,Tags[?Key==\x60Name\x60].Value|[0]]' --output text 2>/dev/null || echo "error — check AWS CLI"`
+- Existing SSH keys: !`find ~/.ssh ~/ -maxdepth 1 -name "*.pem" 2>/dev/null || echo "none"`
+- Existing instances: !`aws ec2 describe-instances --region "$(aws configure get region 2>/dev/null || echo us-east-1)" --filters "Name=tag:Project,Values=always-on-claude" "Name=instance-state-name,Values=running,pending" --query "Reservations[].Instances[].[InstanceId,PublicIpAddress,Tags[?Key=='Name'].Value|[0]]" --output text 2>/dev/null || echo "error — check AWS CLI"`
 
 ---
 
