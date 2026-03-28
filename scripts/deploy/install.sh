@@ -583,54 +583,5 @@ commit=$(git -C "$DEV_ENV" rev-parse --short HEAD 2>/dev/null || echo "unknown")
 EOF
 ok "Wrote provisioned marker"
 
-if [[ "$NON_INTERACTIVE" == "1" ]]; then
-    echo ""
-    echo "  NON_INTERACTIVE mode — skipping auth setup."
-    echo "  Run setup-auth.sh manually after SSHing in."
-    exit 0
-fi
-
-# ============================================================================
-# Phase 2: Interactive (browser auth needed)
-# ============================================================================
-
 echo ""
-echo "Phase 2: Interactive setup (needs browser)"
-echo ""
-
-# --- In-container auth ------------------------------------------------------
-
-info "Container authentication"
-step="container auth"
-
-echo ""
-echo "  Now we'll set up git, GitHub CLI, and Claude Code inside the container."
-echo ""
-read -rp "  Press Enter to continue... "
-
-run_docker docker compose exec -it dev bash /home/dev/dev-env/scripts/deploy/setup-auth.sh </dev/tty
-
-# --- Final verification -----------------------------------------------------
-
-info "Verification"
-step="verification"
-
-echo ""
-
-# Check container
-if run_docker docker ps --format '{{.Names}}' | grep -qx "$CONTAINER_NAME"; then
-    ok "Container '$CONTAINER_NAME' is running"
-else
-    echo "  WARN: Container not running"
-fi
-
-echo ""
-echo "============================================"
-echo "  Setup complete!"
-echo "============================================"
-echo ""
-echo "  Next steps:"
-echo "    1. Log out: exit"
-echo "    2. SSH back in: ssh $USER@$(hostname)"
-echo "    3. The workspace picker will appear — select a repo to start"
-echo ""
+echo "  Connect via SSH to complete setup — Claude will guide you through auth."
