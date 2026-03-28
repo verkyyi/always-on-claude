@@ -22,7 +22,8 @@ _REPO_ROOT="$(cd "$_LOAD_CONFIG_DIR/../.." && pwd)"
 _defaults() {
     # AWS / EC2
     : "${INSTANCE_TYPE:=t4g.small}"
-    : "${AWS_REGION:=$(aws configure get region 2>/dev/null || echo "us-east-1")}"
+    : "${AWS_REGION:=$(sed -n 's/^[[:space:]]*region[[:space:]]*=[[:space:]]*//p' ~/.aws/config 2>/dev/null | head -1)}"
+    : "${AWS_REGION:=us-east-1}"
     : "${VOLUME_SIZE:=20}"
     : "${INSTANCE_NAME:=claude-dev}"
     : "${KEY_NAME:=claude-dev-key}"
