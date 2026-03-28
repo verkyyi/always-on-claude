@@ -19,19 +19,21 @@ If `$ARGUMENTS` is provided, parse it for preferences (e.g. region, instance typ
 
 ---
 
-## Step 1 — Collect preferences
+## Step 1 — Determine settings and proceed
 
-Ask the user ONE question with sensible defaults:
+Use sensible defaults. If `$ARGUMENTS` specifies preferences (region, instance type, name), use those. Otherwise use defaults. If an existing instance with the default name exists, auto-increment (e.g. `claude-dev-2`).
+
+Show the settings and ask the user to confirm or adjust:
 
 ```
-I'll provision an always-on Claude Code server:
+Provisioning an always-on Claude Code server:
 
   Region:        us-east-1
   Instance type: t4g.small
-  Instance name: claude-dev
-  SSH key:       claude-dev-key
+  Instance name: claude-dev-2
+  SSH key:       claude-dev-2-key
 
-Press Enter to proceed, or tell me what to change.
+Say "go" to proceed, or tell me what to change.
 ```
 
 Adjust defaults based on context (e.g. if AWS region is already configured, use that).
