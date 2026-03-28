@@ -4,15 +4,14 @@
 UPDATE_SCRIPT="$REPO_ROOT/scripts/runtime/update.sh"
 
 setup() {
-    git init -q --bare "$TEST_DIR/remote.git"
+    git init -q --bare --initial-branch=main "$TEST_DIR/remote.git"
     git clone -q "$TEST_DIR/remote.git" "$HOME/dev-env"
     git -C "$HOME/dev-env" config user.name "Test"
     git -C "$HOME/dev-env" config user.email "test@test.com"
     touch "$HOME/dev-env/README.md"
     git -C "$HOME/dev-env" add .
     git -C "$HOME/dev-env" commit -q -m "Initial commit"
-    git -C "$HOME/dev-env" push -q origin main 2>/dev/null || \
-        git -C "$HOME/dev-env" push -q origin master 2>/dev/null || true
+    git -C "$HOME/dev-env" push -q origin main
 }
 
 _push_upstream_commit() {
