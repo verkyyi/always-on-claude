@@ -135,17 +135,13 @@ Stop the instance when not in use to save money. No additional fees — you brin
 
 ## Script Fallbacks
 
-If you prefer running scripts directly instead of slash commands:
+Destroy has a script fallback for automation:
 
 ```bash
-# Provision EC2
-bash <(curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/scripts/deploy/provision.sh)
-
-# Destroy EC2
 bash <(curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/scripts/deploy/destroy.sh)
 ```
 
-For script details, see [Deployment](docs/deployment.md).
+For details, see [Deployment](docs/deployment.md).
 
 ---
 

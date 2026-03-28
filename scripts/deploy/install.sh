@@ -85,7 +85,7 @@ ok "Running as $USER ($(if [[ $EUID -eq 0 ]]; then echo "root"; else echo "non-r
 
 # --- Verify dev user exists --------------------------------------------------
 # The dev user is created by cloud-init via user-data (cloud-config) before
-# install.sh runs. Both build-ami.sh and provision.sh pass system_info config
+# install.sh runs. Both build-ami.sh and /provision pass system_info config
 # that creates dev instead of the default ubuntu user.
 
 info "System user"

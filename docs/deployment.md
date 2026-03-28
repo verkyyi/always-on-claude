@@ -4,7 +4,7 @@
 
 | Action | Slash command | Script fallback |
 |---|---|---|
-| Provision (AWS) | `/provision` | `scripts/deploy/provision.sh` |
+| Provision (AWS) | `/provision` | — |
 | Provision (Mac) | `/provision-local` | — |
 | Install on server | — | `scripts/deploy/install.sh` |
 | Auth setup | Claude walks through it | `scripts/deploy/setup-auth.sh` |
@@ -28,7 +28,7 @@ vim .env
 2. **`.env` file** — in repo root
 3. **Environment variables** — set at runtime
 
-This means `INSTANCE_TYPE=t3.medium bash provision.sh` overrides whatever is in `.env`. If no `.env` exists, all defaults match `.env.example`.
+This means `INSTANCE_TYPE=t3.medium /provision` overrides whatever is in `.env`. If no `.env` exists, all defaults match `.env.example`.
 
 The override mechanism preserves env vars set before sourcing `.env` — env vars always win over file values.
 
@@ -100,29 +100,6 @@ The override mechanism preserves env vars set before sourcing `.env` — env var
 ```
 
 Claude walks through the entire setup — SSH keys, security groups, instance launch — and connects you in ~40 seconds with a pre-built AMI.
-
-### Via script
-
-```bash
-bash scripts/deploy/provision.sh
-```
-
-**Flow:**
-
-1. Checks for existing instance tagged `Project=always-on-claude` (reuses if found)
-2. Creates or reuses SSH key pair (saves `.pem` to `~/.ssh/`)
-3. Creates or reuses security group (port 22 open)
-4. Finds pre-built AMI matching instance architecture:
-   - `*g.*` patterns (t4g, m7g, c7g) → arm64
-   - Otherwise → x86_64
-   - Falls back to stock Ubuntu 24.04 if no pre-built AMI found
-5. Launches instance with User Data (runs install.sh non-interactively)
-6. Generates `.env.workspace` with instance details
-7. Configures `~/.ssh/config` with Host entry
-8. Waits for SSH + container to be running
-9. Prints connection details
-
-With a pre-built AMI, the instance is ready in ~40 seconds. Without one (stock Ubuntu), it takes 3-5 minutes as install.sh runs.
 
 ## Installation (install.sh)
 
