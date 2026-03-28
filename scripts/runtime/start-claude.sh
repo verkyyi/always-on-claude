@@ -108,12 +108,29 @@ ensure_container_bg() {
 
 wait_for_container() {
     if [[ -n "$container_pid" ]]; then
+        local bg_ok=true
         if ! wait "$container_pid" 2>/dev/null; then
-            echo "  Container failed to start."
-            return 1
+            bg_ok=false
         fi
-        container_pid=""
+        container_pid=""  # Always clear — prevents cascading failures
     fi
+
+    # Verify container is actually running (handles races and bg failures)
+    if docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
+        return 0
+    fi
+
+    # Container not running — try to start it synchronously
+    echo "  Starting container..."
+    if cd "$COMPOSE_DIR" && "${COMPOSE_CMD[@]}" up -d 2>&1 | tail -1; then
+        sleep 2
+        "${COMPOSE_CMD[@]}" exec -u root dev bash -c \
+            "chown -R dev:dev /home/dev/projects" 2>/dev/null || true
+        return 0
+    fi
+
+    echo "  Container failed to start."
+    return 1
 }
 
 # --- Translate host path to container path ---
@@ -388,28 +405,33 @@ launch_shell_container() {
 # --- Main ---
 ensure_container_bg
 discover_entries
-get_sessions
-match_sessions
-compute_default
 
 while true; do
+    # Refresh session state each iteration (sessions may have changed)
+    get_sessions
+    match_sessions
+    compute_default
     show_menu
 
     read -r -p "  > " choice || true
 
     if [[ "$choice" == "m" ]]; then
         wait_for_container || continue
-        launch_host "$COMPOSE_DIR" || continue
+        launch_host "$COMPOSE_DIR" || true
+        continue
     elif [[ "$choice" == "h" ]]; then
         launch_shell_host
+        continue
     elif [[ "$choice" == "c" ]]; then
         wait_for_container || continue
         launch_shell_container
+        continue
     elif [[ -z "$choice" ]]; then
         # Smart default
         if [[ ${#entries[@]} -eq 0 ]]; then
             wait_for_container || continue
-            launch_host "$COMPOSE_DIR" || continue
+            launch_host "$COMPOSE_DIR" || true
+            continue
         else
             select_entry "$default_idx" || continue
         fi
