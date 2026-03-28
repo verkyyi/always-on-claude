@@ -27,6 +27,9 @@ services:
       # Dev-env repo (scripts, configs — read-only, managed on host)
       - ~/dev-env:/home/dev/dev-env:ro
 
+      # AWS CLI config/credentials (shared between host and container)
+      - ~/.aws:/home/dev/.aws
+
       # SSH keys for GitHub (read-only)
       - ~/.ssh:/home/dev/.ssh:ro
 
