@@ -114,7 +114,11 @@ if [[ "$EXISTING_ID" != "None" && -n "$EXISTING_ID" ]]; then
         --instance-ids "$EXISTING_ID" \
         --query 'Reservations[0].Instances[0].PublicIpAddress' \
         --output text)
-    KEY_FILE="$HOME/.ssh/${KEY_NAME}.pem"
+    if [[ -f "$HOME/.ssh/${KEY_NAME}.pem" ]]; then
+        KEY_FILE="$HOME/.ssh/${KEY_NAME}.pem"
+    else
+        KEY_FILE="$HOME/${KEY_NAME}.pem"
+    fi
     ok "Instance '$INSTANCE_NAME' already running: $EXISTING_ID ($PUBLIC_IP)"
     echo ""
     echo "  Connect: ssh -i $KEY_FILE ${SSH_USER}@$PUBLIC_IP"
@@ -128,20 +132,31 @@ ok "No existing instance found — creating new one"
 
 info "SSH key pair"
 
-KEY_FILE="$HOME/.ssh/${KEY_NAME}.pem"
+# Save to ~/.ssh if writable, otherwise ~/
+if [[ -w "$HOME/.ssh" ]]; then
+    KEY_DIR="$HOME/.ssh"
+else
+    KEY_DIR="$HOME"
+fi
+KEY_FILE="$KEY_DIR/${KEY_NAME}.pem"
 
 if aws ec2 describe-key-pairs --key-names "$KEY_NAME" --region "$AWS_REGION" &>/dev/null 2>&1; then
-    if [[ -f "$KEY_FILE" ]]; then
+    # Check both possible locations for existing key file
+    if [[ -f "$HOME/.ssh/${KEY_NAME}.pem" ]]; then
+        KEY_FILE="$HOME/.ssh/${KEY_NAME}.pem"
+        ok "Key pair '$KEY_NAME' exists (local file: $KEY_FILE)"
+    elif [[ -f "$HOME/${KEY_NAME}.pem" ]]; then
+        KEY_FILE="$HOME/${KEY_NAME}.pem"
         ok "Key pair '$KEY_NAME' exists (local file: $KEY_FILE)"
     else
-        echo "  Key pair '$KEY_NAME' exists in AWS but local file not found at $KEY_FILE"
-        echo "  If you have the .pem file elsewhere, copy it to $KEY_FILE"
+        echo "  Key pair '$KEY_NAME' exists in AWS but local file not found"
+        echo "  Checked: $HOME/.ssh/${KEY_NAME}.pem and $HOME/${KEY_NAME}.pem"
         echo "  Or delete the key pair and re-run: aws ec2 delete-key-pair --key-name $KEY_NAME --region $AWS_REGION"
         exit 1
     fi
 else
     echo "  Creating key pair '$KEY_NAME'..."
-    mkdir -p ~/.ssh
+    [[ -w "$HOME/.ssh" ]] && mkdir -p "$HOME/.ssh"
     aws ec2 create-key-pair \
         --key-name "$KEY_NAME" \
         --key-type ed25519 \
@@ -353,7 +368,7 @@ done
 if [[ -n "$SCRIPT_DIR" ]]; then
     REPO_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-    cat > "$REPO_DIR/.env.workspace" <<EOF
+    cat > "$REPO_DIR/.env.workspace.${INSTANCE_NAME}" <<EOF
 # Provisioned $(date +%Y-%m-%d)
 INSTANCE_ID=$INSTANCE_ID
 PUBLIC_IP=$PUBLIC_IP
