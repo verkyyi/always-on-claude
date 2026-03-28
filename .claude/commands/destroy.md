@@ -65,10 +65,10 @@ I found these resources:
   Security groups: sg-xxx (claude-dev-sg)
   Key pair:        claude-dev-key (in AWS + local file)
 
-Type "destroy all" to confirm deletion:
+Type "claude-dev" to confirm deletion:
 ```
 
-**Do NOT proceed unless the user types the exact confirmation text.** A simple "y" or "yes" is not sufficient.
+**Do NOT proceed unless the user types the exact instance name.** A simple "y" or "yes" is not sufficient.
 
 If nothing is found, say so and exit.
 
@@ -100,7 +100,7 @@ If deletion fails (still in use from terminating instance), wait a moment and re
 Skip this step if destroying a specific named instance.
 
 ```
-Also delete the SSH key pair? Type "delete claude-dev-key" to confirm:
+Also delete the SSH key pair "claude-dev-key"? [y/N]
 ```
 
 If yes:
