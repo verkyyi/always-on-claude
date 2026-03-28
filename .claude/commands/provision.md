@@ -13,7 +13,7 @@ You are orchestrating the provisioning of an always-on Claude Code workspace on 
 
 If the AWS CLI context above shows an error or is not configured, stop and help the user set it up before proceeding. They need `aws configure` with a valid access key, secret, and region.
 
-If an existing instance is found, ask if they want to reuse it (skip to auth) or destroy and recreate.
+If an existing instance is found, ask if they want to reuse it (skip to auth) or destroy and recreate. **Always confirm before terminating** — termination is irreversible and data on the root volume will be lost.
 
 If `$ARGUMENTS` is provided, parse it for preferences (e.g. region, instance type, name). Anything not specified uses defaults.
 
