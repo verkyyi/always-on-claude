@@ -4,7 +4,7 @@ You are orchestrating the provisioning of an always-on Claude Code workspace on 
 
 - AWS CLI configured: !`aws sts get-caller-identity 2>&1 | head -5`
 - AWS region: !`aws configure get region 2>/dev/null || echo "not set"`
-- Existing SSH keys: !`ls ~/.ssh/*.pem 2>/dev/null || echo "none"`
+- Existing SSH keys: !`ls ~/.ssh/*.pem ~/*.pem 2>/dev/null || echo "none"`
 - Existing instances: !`aws ec2 describe-instances --filters "Name=tag:Project,Values=always-on-claude" "Name=instance-state-name,Values=running,pending" --query 'Reservations[].Instances[].[InstanceId,PublicIpAddress,Tags[?Key==\x60Name\x60].Value|[0]]' --output text 2>/dev/null || echo "error — check AWS CLI"`
 
 ---
@@ -46,11 +46,13 @@ aws ec2 describe-key-pairs --key-names "$KEY_NAME" --region "$REGION" 2>/dev/nul
 
 - **Exists + local .pem file found**: skip
 - **Exists but no local file**: stop — tell user to find the .pem or delete the key pair
-- **Doesn't exist**: create it:
+- **Doesn't exist**: create it. Save to `~/.ssh/` if writable, otherwise `~/`:
 
 ```bash
-aws ec2 create-key-pair --key-name "$KEY_NAME" --region "$REGION" --query 'KeyMaterial' --output text > ~/.ssh/$KEY_NAME.pem
-chmod 600 ~/.ssh/$KEY_NAME.pem
+KEY_DIR=~/.ssh
+[[ -w "$KEY_DIR" ]] || KEY_DIR=~
+aws ec2 create-key-pair --key-name "$KEY_NAME" --region "$REGION" --query 'KeyMaterial' --output text > "$KEY_DIR/$KEY_NAME.pem"
+chmod 600 "$KEY_DIR/$KEY_NAME.pem"
 ```
 
 ---
@@ -176,17 +178,17 @@ Tell the user what to expect before running it (git config, GitHub CLI, Claude l
 
 ## Step 9 — Save workspace info
 
-Write provisioning details to `.env.workspace` (already gitignored via `.env.*` pattern):
+Write provisioning details to `.env.workspace.$INSTANCE_NAME` (gitignored via `.env.*` pattern):
 
 ```bash
-cat > .env.workspace << EOF
+cat > .env.workspace.$INSTANCE_NAME << EOF
 # Provisioned $(date +%Y-%m-%d)
 INSTANCE_ID=$INSTANCE_ID
 PUBLIC_IP=$IP
 REGION=$REGION
 INSTANCE_TYPE=$INSTANCE_TYPE
 INSTANCE_NAME=$INSTANCE_NAME
-SSH_KEY=~/.ssh/$KEY_NAME.pem
+SSH_KEY=$KEY_DIR/$KEY_NAME.pem
 SG_ID=$SG_ID
 EOF
 ```
@@ -195,7 +197,9 @@ EOF
 
 ## Step 10 — SSH config
 
-Add (or update) an SSH config entry so the user can connect with just `ssh $INSTANCE_NAME`:
+**Skip if `~/.ssh/config` is not writable** (e.g. provisioning from inside a container). Instead, show the user the SSH command with the full key path.
+
+If writable, add (or update) an SSH config entry so the user can connect with just `ssh $INSTANCE_NAME`:
 
 - If `~/.ssh/config` already has a `Host $INSTANCE_NAME` block, update the `HostName` to the new IP
 - Otherwise, prepend a new block before the `Host *` wildcard entry:
@@ -204,14 +208,16 @@ Add (or update) an SSH config entry so the user can connect with just `ssh $INST
 Host $INSTANCE_NAME
     HostName $IP
     User dev
-    IdentityFile ~/.ssh/$KEY_NAME.pem
+    IdentityFile $KEY_DIR/$KEY_NAME.pem
 ```
 
 ---
 
 ## Step 11 — Shell aliases
 
-Add `cc` and `ccc` aliases to the user's shell config (`~/.zshrc` on macOS, `~/.bashrc` on Linux):
+**Skip if shell config files are not writable** (e.g. provisioning from inside a container). Instead, include the connect commands in the summary.
+
+If writable, add `cc` and `ccc` aliases to the user's shell config (`~/.zshrc` on macOS, `~/.bashrc` on Linux):
 
 - If aliases already exist, update them
 - Otherwise, append:
@@ -235,12 +241,13 @@ Provisioning complete!
   Public IP: $IP
 
   Connect:
-    cc   — workspace picker
-    ccc  — host shell
+    ssh -t -i $KEY_DIR/$KEY_NAME.pem dev@$IP 'bash ~/dev-env/scripts/runtime/start-claude.sh'
 
   To tear down:
-    /destroy
+    /destroy $INSTANCE_NAME
 ```
+
+If SSH config and aliases were set up (Steps 10-11), also show the short forms (`cc`, `ccc`, `ssh $INSTANCE_NAME`).
 
 ---
 
