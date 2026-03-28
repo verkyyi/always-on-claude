@@ -10,7 +10,7 @@ The user may specify an instance name (e.g., `/destroy claude-dev-2`). If they d
 - Tagged instances: !`aws ec2 describe-instances --filters "Name=tag:Project,Values=always-on-claude" "Name=instance-state-name,Values=running,stopped,pending" --query 'Reservations[].Instances[].[InstanceId,PublicIpAddress,Tags[?Key==\x60Name\x60].Value|[0],InstanceType]' --output text 2>/dev/null || echo "error — check AWS CLI"`
 - Tagged security groups: !`aws ec2 describe-security-groups --filters "Name=tag:Project,Values=always-on-claude" --query 'SecurityGroups[].[GroupId,GroupName]' --output text 2>/dev/null || echo "none"`
 - SSH key pairs: !`aws ec2 describe-key-pairs --query 'KeyPairs[].KeyName' --output text 2>/dev/null || echo "error"`
-- Local .pem files: !`ls ~/.ssh/*.pem 2>/dev/null || echo "none"`
+- Local .pem files: !`ls ~/.ssh/*.pem ~/*.pem 2>/dev/null || echo "none"`
 
 ---
 
@@ -104,7 +104,7 @@ Also delete the SSH key pair "claude-dev-key"? [y/N]
 If yes:
 ```bash
 aws ec2 delete-key-pair --region "$REGION" --key-name "$KEY_NAME"
-rm -f ~/.ssh/$KEY_NAME.pem
+rm -f ~/.ssh/$KEY_NAME.pem ~/$KEY_NAME.pem
 ```
 
 ---
@@ -115,14 +115,13 @@ rm -f ~/.ssh/$KEY_NAME.pem
 
 Remove the `Host $INSTANCE_NAME` block from `~/.ssh/config` (the Host line and all indented lines below it).
 
-Remove `.env.workspace` only if it references the destroyed instance:
+Remove the per-instance workspace file:
 
 ```bash
-# Check if .env.workspace references this instance before deleting
-grep -q "INSTANCE_NAME=$INSTANCE_NAME" .env.workspace 2>/dev/null && rm -f .env.workspace
+rm -f .env.workspace.$INSTANCE_NAME
 ```
 
-For full teardown (no name filter), always remove `.env.workspace`.
+For full teardown (no name filter), remove all workspace files: `rm -f .env.workspace.*`
 
 ---
 
@@ -135,7 +134,7 @@ Teardown complete.
   Deleted:
     - Instance: i-xxx (claude-dev-2)
     - SSH config entry: claude-dev-2
-    [- .env.workspace (referenced this instance)]
+    [- .env.workspace.$INSTANCE_NAME]
 
   Security groups and key pair were kept (shared resources).
 
@@ -151,7 +150,7 @@ Teardown complete.
     - Instance: i-xxx
     - Security group: sg-xxx
     [- Key pair: claude-dev-key]
-    - .env.workspace
+    - .env.workspace.*
 
   To re-provision:
     /provision
