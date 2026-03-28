@@ -121,7 +121,7 @@ jobs:
             --key-name "$KEY_NAME" \
             --security-group-ids "$SG_ID" \
             --user-data "$BUILD_USER_DATA" \
-            --block-device-mappings 'DeviceName=/dev/sda1,Ebs={VolumeSize=20,VolumeType=gp3,DeleteOnTermination=true}' \
+            --block-device-mappings 'DeviceName=/dev/sda1,Ebs={VolumeSize=10,VolumeType=gp3,DeleteOnTermination=true}' \
             --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=ami-builder-${{ matrix.arch }}},{Key=Project,Value=${{ env.PROJECT_TAG }}}]" \
             --query 'Instances[0].InstanceId' --output text)
           echo "INSTANCE_ID=$INSTANCE_ID" >> "$GITHUB_ENV"
@@ -166,6 +166,10 @@ jobs:
             "dev@${PUBLIC_IP}" bash <<'EOF'
           sudo rm -f /etc/ssh/ssh_host_*
           sudo cloud-init clean --logs
+          sudo apt-get clean
+          sudo rm -rf /var/cache/apt/archives/* /var/lib/apt/lists/*
+          sudo journalctl --vacuum-size=1M 2>/dev/null || true
+          sudo rm -rf /tmp/* /var/tmp/*
           rm -f ~/.bash_history
           cd ~/dev-env && sudo docker compose stop 2>/dev/null || true
           EOF

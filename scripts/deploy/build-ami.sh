@@ -205,6 +205,12 @@ sudo rm -f /etc/ssh/ssh_host_*
 # Clear cloud-init state so it runs fresh on new instances
 sudo cloud-init clean --logs
 
+# Shrink disk: remove caches and logs to minimize snapshot size
+sudo apt-get clean
+sudo rm -rf /var/cache/apt/archives/* /var/lib/apt/lists/*
+sudo journalctl --vacuum-size=1M 2>/dev/null || true
+sudo rm -rf /tmp/* /var/tmp/*
+
 # Remove bash history
 rm -f ~/.bash_history
 history -c
