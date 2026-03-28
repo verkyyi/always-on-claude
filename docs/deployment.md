@@ -134,7 +134,7 @@ curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/scrip
 
 ### Phase 1: Automated (no interaction)
 
-1. **System user**: Renames `ubuntu` → `dev` (matches container user UID 1000)
+1. **System user**: Verifies `dev` user exists (created by cloud-init via user-data)
 2. **System packages**: Docker, Docker Compose, tmux, jq, Node.js 22, GitHub CLI, Claude Code
 3. **Swap**: 2GB swapfile, swappiness=10
 4. **earlyoom**: OOM killer — 5% RAM / 10% swap thresholds. Protects SSH/systemd, prefers killing node/claude

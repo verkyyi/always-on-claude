@@ -239,10 +239,30 @@ LAUNCH_ARGS=(
 if [[ "$USE_CUSTOM_AMI" == "0" ]]; then
     # Stock Ubuntu: full install via User Data
     USER_DATA=$(cat <<'USERDATA'
+Content-Type: multipart/mixed; boundary="==BOUNDARY=="
+MIME-Version: 1.0
+
+--==BOUNDARY==
+Content-Type: text/cloud-config; charset="us-ascii"
+MIME-Version: 1.0
+
+# Create dev user directly instead of default ubuntu user
+system_info:
+  default_user:
+    name: dev
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    groups: [sudo]
+    homedir: /home/dev
+
+--==BOUNDARY==
+Content-Type: text/x-shellscript; charset="us-ascii"
+MIME-Version: 1.0
+
 #!/bin/bash
 exec > /var/log/install.log 2>&1
-su - ubuntu -c "NON_INTERACTIVE=1 bash -c 'curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/scripts/deploy/install.sh | bash'"
-# install.sh renames ubuntu → dev; subsequent logins use dev
+su - dev -c "NON_INTERACTIVE=1 bash -c 'curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/scripts/deploy/install.sh | bash'"
+--==BOUNDARY==--
 USERDATA
 )
     LAUNCH_ARGS+=(--user-data "$USER_DATA")
