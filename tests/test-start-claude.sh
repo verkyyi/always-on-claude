@@ -6,14 +6,12 @@ START_SCRIPT="$REPO_ROOT/scripts/runtime/start-claude.sh"
 _source_functions() {
     export COMPOSE_DIR="$HOME/dev-env"
     export CONTAINER_NAME="claude-dev"
-    export WORKTREE_HELPER="$COMPOSE_DIR/scripts/runtime/worktree-helper.sh"
     export CONTAINER_PROJECTS="/home/dev/projects"
 
     eval "$(sed -n '/^count_sessions()/,/^}/p' "$START_SCRIPT")"
     eval "$(sed -n '/^get_max_sessions()/,/^}/p' "$START_SCRIPT")"
     eval "$(sed -n '/^check_session_limit()/,/^}/p' "$START_SCRIPT")"
     eval "$(sed -n '/^to_container_path()/,/^}/p' "$START_SCRIPT")"
-    eval "$(sed -n '/^discover()/,/^}/p' "$START_SCRIPT")"
 }
 
 _source_v2() {
@@ -130,22 +128,6 @@ test_to_container_path() {
     assert_eq "/home/dev/projects/myrepo" "$result"
 }
 
-test_discover_finds_repos() {
-    mkdir -p "$HOME/dev-env/scripts/runtime"
-    cat > "$HOME/dev-env/scripts/runtime/worktree-helper.sh" <<'MOCK'
-#!/bin/bash
-if [[ "$1" == "list-repos" ]]; then
-    echo "REPO|/home/dev/projects/myrepo|main"
-    echo "WORKTREE|/home/dev/projects/myrepo--feature|feature"
-fi
-MOCK
-    chmod +x "$HOME/dev-env/scripts/runtime/worktree-helper.sh"
-    WORKTREE_HELPER="$HOME/dev-env/scripts/runtime/worktree-helper.sh"
-
-    discover
-    assert_eq "1" "${#repos[@]}" "should find 1 repo"
-    assert_contains "${repos[0]}" "/home/dev/projects/myrepo"
-}
 
 test_check_session_limit_allows_reattach() {
     cat > "$TEST_DIR/bin/tmux" <<'MOCK'
