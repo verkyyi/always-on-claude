@@ -143,13 +143,17 @@ discover_entries() {
 
     [[ ${#repo_dirs[@]} -eq 0 ]] && return
 
-    # Parallel git branch queries
+    # Parallel git queries: branch + worktree discovery in one pass per repo
     local tmpdir
     tmpdir=$(mktemp -d)
     for i in "${!repo_dirs[@]}"; do
         local dir
         dir=$(dirname "${repo_dirs[$i]}")
-        ( git -C "$dir" branch --show-current 2>/dev/null || echo "unknown" ) > "$tmpdir/$i" &
+        (
+            branch=$(git -C "$dir" branch --show-current 2>/dev/null || echo "unknown")
+            echo "$branch" > "$tmpdir/${i}.branch"
+            git -C "$dir" worktree list --porcelain 2>/dev/null > "$tmpdir/${i}.worktrees" || true
+        ) &
     done
     wait
 
@@ -157,14 +161,14 @@ discover_entries() {
         local dir
         dir=$(dirname "${repo_dirs[$i]}")
         local branch
-        branch=$(cat "$tmpdir/$i")
+        branch=$(cat "$tmpdir/${i}.branch")
         local repo_name
         repo_name=$(basename "$dir")
 
         # Add main repo entry: repo_name|branch|path|session_state|session_activity
         entries+=("${repo_name}|${branch}|${dir}|none|0")
 
-        # Discover worktrees for this repo
+        # Parse worktrees from parallel results
         local wt_path="" wt_branch=""
         while IFS= read -r line; do
             if [[ "$line" == "worktree "* ]]; then
@@ -179,7 +183,7 @@ discover_entries() {
                 wt_path=""
                 wt_branch=""
             fi
-        done < <(git -C "$dir" worktree list --porcelain 2>/dev/null; echo)
+        done < <(cat "$tmpdir/${i}.worktrees"; echo)
     done
 
     rm -rf "$tmpdir"
