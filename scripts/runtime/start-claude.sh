@@ -405,10 +405,10 @@ launch_shell_container() {
 
 # --- Main ---
 ensure_container_bg
-discover_entries
 
 while true; do
-    # Refresh session state each iteration (sessions may have changed)
+    # Refresh repos and session state each iteration
+    discover_entries
     get_sessions
     match_sessions
     compute_default
