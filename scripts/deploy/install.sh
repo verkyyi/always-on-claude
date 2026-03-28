@@ -6,7 +6,7 @@
 #
 # Options (env vars):
 #   LOCAL_BUILD=1      — build Docker image locally instead of pulling from GHCR
-#   NON_INTERACTIVE=1  — skip Phase 2 (interactive auth), for use in user data scripts
+#   NON_INTERACTIVE=1  — (no longer used, kept for backward compatibility with callers)
 #   AOC_SSH_PASSWORD=x  — enable password SSH auth and set password to x
 #   AOC_HEARTBEAT_URL=x — configure Claude Code heartbeat hooks (requires AOC_HEARTBEAT_TOKEN)
 #   AOC_HEARTBEAT_TOKEN=x — bearer token for heartbeat hooks (requires AOC_HEARTBEAT_URL)

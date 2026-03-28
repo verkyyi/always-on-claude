@@ -86,7 +86,7 @@ The override mechanism preserves env vars set before sourcing `.env` — env var
 | Variable | Default | Purpose |
 |---|---|---|
 | `LOCAL_BUILD` | `0` | Build Docker image locally instead of pulling from GHCR |
-| `NON_INTERACTIVE` | `0` | Skip Phase 2 (interactive auth), for User Data scripts |
+| `NON_INTERACTIVE` | `0` | No longer used (kept for backward compatibility with callers) |
 | `AOC_SSH_PASSWORD` | — | Enable password SSH auth and set password |
 | `AOC_HEARTBEAT_URL` | — | Claude Code heartbeat webhook URL (requires TOKEN) |
 | `AOC_HEARTBEAT_TOKEN` | — | Bearer token for heartbeat webhooks (requires URL) |
@@ -128,15 +128,9 @@ curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/scrip
 15. **Docker**: Pulls image, starts container, fixes permissions
 16. **Provisioned marker**: Writes `~/dev-env/.provisioned` with timestamp and commit
 
-### Phase 2: Interactive (browser auth)
+### Auth setup (first SSH login)
 
-Runs `setup-auth.sh` inside the container:
-
-1. **Git config**: `user.name` and `user.email`
-2. **GitHub CLI**: `gh auth login` (browser flow)
-3. **Claude Code**: `claude login` (browser flow for subscription auth)
-
-All steps are idempotent — skips what's already configured.
+Auth is handled by the onboarding flow on first SSH login — Claude walks the user through git config, GitHub auth, and Claude verification interactively. See `scripts/runtime/onboarding-prompt.txt`.
 
 ## Auto-updater
 
