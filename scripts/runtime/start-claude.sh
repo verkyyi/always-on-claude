@@ -1,10 +1,7 @@
 #!/bin/bash
 # start-claude.sh — Auto-starts the dev container if needed,
-# then presents a two-layer workspace picker and launches Claude Code
+# then presents a workspace picker and launches Claude Code
 # inside a named tmux session.
-#
-# Layer 1: Pick a repo (or manage workspaces)
-# Layer 2: Pick a branch/worktree within that repo (skipped if no worktrees)
 #
 # Called automatically from ssh-login.sh on SSH login.
 
@@ -21,7 +18,6 @@ fi
 : "${CONTAINER_NAME:=claude-dev}"
 : "${PROJECTS_DIR:=$HOME/projects}"
 
-WORKTREE_HELPER="$COMPOSE_DIR/scripts/runtime/worktree-helper.sh"
 MANAGER_PROMPT="$COMPOSE_DIR/scripts/runtime/manager-prompt.txt"
 CONTAINER_PROJECTS="/home/dev/projects"
 
@@ -93,40 +89,31 @@ check_session_limit() {
     return 0
 }
 
-# Start container if not running
-if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
-    echo "Container not running. Starting..."
-    cd "$COMPOSE_DIR" && "${COMPOSE_CMD[@]}" up -d
-    sleep 2
-    "${COMPOSE_CMD[@]}" exec -u root dev bash -c \
-        "chown -R dev:dev /home/dev/projects" 2>/dev/null || true
-fi
+# --- Background container check ---
+container_pid=""
 
-# --- Discover repos and worktrees ---
-discover() {
-    entries=()
-    while IFS= read -r line; do
-        [[ -n "$line" ]] && entries+=("$line")
-    done < <(bash "$WORKTREE_HELPER" list-repos 2>/dev/null | sort)
-
-    repos=()
-    repo_paths=()
-    for entry in ${entries[@]+"${entries[@]}"}; do
-        IFS='|' read -r kind path branch <<< "$entry"
-        if [[ "$kind" == "REPO" ]]; then
-            repos+=("$path|$branch")
-            repo_paths+=("$path")
+ensure_container_bg() {
+    (
+        if docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
+            exit 0
+        else
+            cd "$COMPOSE_DIR" && "${COMPOSE_CMD[@]}" up -d >/dev/null 2>&1
+            sleep 2
+            "${COMPOSE_CMD[@]}" exec -u root dev bash -c \
+                "chown -R dev:dev /home/dev/projects" 2>/dev/null || true
         fi
-    done
+    ) &
+    container_pid=$!
 }
 
-# --- Get worktrees for a specific repo ---
-get_worktrees() {
-    local repo_path="$1"
-    worktrees=()
-    while IFS= read -r line; do
-        [[ -n "$line" ]] && worktrees+=("$line")
-    done < <(bash "$WORKTREE_HELPER" list-worktrees "$repo_path" 2>/dev/null)
+wait_for_container() {
+    if [[ -n "$container_pid" ]]; then
+        if ! wait "$container_pid" 2>/dev/null; then
+            echo "  Container failed to start."
+            return 1
+        fi
+        container_pid=""
+    fi
 }
 
 # --- Translate host path to container path ---
@@ -318,64 +305,31 @@ show_menu() {
     echo ""
 }
 
-# --- Layer 1: Pick a repo ---
-show_repos() {
-    # Collect active claude-* and shell-* tmux sessions
-    # Note: all_sessions is intentionally global — read by reattach_session()
-    all_sessions=()
-    while IFS= read -r line; do
-        [[ -n "$line" ]] && all_sessions+=("$line")
-    done < <(tmux list-sessions -F '#{session_name} #{?session_attached,(attached),(idle)}' 2>/dev/null \
-        | grep -E '^(claude-|shell-)' || true)
+# --- Entry selection (unified: re-attach or new session) ---
+select_entry() {
+    local idx="$1"
 
-    if [[ ${#all_sessions[@]} -gt 0 ]]; then
+    if [[ $idx -lt ${#entries[@]} ]]; then
+        IFS='|' read -r _ _ path state _ <<< "${entries[$idx]}"
+        local session_name
+        session_name="claude-$(basename "$path" | tr './:' '-')"
+
+        if [[ "$state" == "idle" || "$state" == "attached" ]]; then
+            echo "  -> $session_name"
+            echo ""
+            exec tmux attach-session -t "$session_name"
+        else
+            wait_for_container || return 1
+            launch "$path" || return 1
+        fi
+    else
+        # Orphaned session
+        local oi=$(( idx - ${#entries[@]} ))
+        IFS='|' read -r sname _ _ <<< "${orphaned_sessions[$oi]}"
+        echo "  -> $sname"
         echo ""
-        echo "  === Active sessions ($(count_sessions)/$(get_max_sessions)) ==="
-        local ai=1
-        for s in "${all_sessions[@]}"; do
-            echo "  [a${ai}] $s"
-            ((ai++))
-        done
+        exec tmux attach-session -t "$sname"
     fi
-
-    echo ""
-    echo "  === Repositories ==="
-    local i=1
-    for item in "${repos[@]+"${repos[@]}"}"; do
-        IFS='|' read -r path branch <<< "$item"
-        local short_path="${path#$HOME/}"
-        echo "  [$i] ${short_path} (${branch})"
-        ((i++))
-    done
-
-    if [[ ${#repos[@]} -eq 0 ]]; then
-        echo "  (no repos found — press [m] to clone your first repo)"
-    fi
-
-    echo "  [m] Manage workspaces"
-    echo "  [h] Host shell"
-    echo "  [c] Container shell"
-    echo ""
-}
-
-# --- Layer 2: Pick a branch/worktree within a repo ---
-show_branches() {
-    local repo_path="$1" repo_branch="$2"
-    local short_path="${repo_path#$HOME/}"
-
-    echo ""
-    echo "  === ${short_path} ==="
-    echo "  [1] ${repo_branch} (repo)"
-
-    local i=2
-    for wt in "${worktrees[@]+"${worktrees[@]}"}"; do
-        IFS='|' read -r _wt_path wt_branch <<< "$wt"
-        echo "  [$i] ${wt_branch} (worktree)"
-        ((i++))
-    done
-
-    echo "  [b] ← Back"
-    echo ""
 }
 
 # --- Launch Claude Code in selected workspace (inside container) ---
@@ -430,73 +384,39 @@ launch_shell_container() {
         "docker exec -it ${CONTAINER_NAME} bash -l"
 }
 
-# --- Reattach to an active session by index ---
-# Note: all_sessions is intentionally global — populated by show_repos(), read here
-reattach_session() {
-    local idx="$1"
-    if [[ $idx -ge 1 && $idx -le ${#all_sessions[@]} ]]; then
-        local session_line="${all_sessions[$((idx - 1))]}"
-        local session_name="${session_line%% *}"
-        echo "  -> reattach $session_name"
-        echo ""
-        exec tmux attach-session -t "$session_name"
-    fi
-    return 1
-}
-
 # --- Main ---
-discover
+ensure_container_bg
+discover_entries
+get_sessions
+match_sessions
+compute_default
 
-# Layer 1 loop
 while true; do
-    show_repos
+    show_menu
 
     read -r -p "  > " choice || true
 
     if [[ "$choice" == "m" ]]; then
-        # Launch Claude on the host for workspace management and updates
+        wait_for_container || continue
         launch_host "$COMPOSE_DIR" || continue
     elif [[ "$choice" == "h" ]]; then
         launch_shell_host
     elif [[ "$choice" == "c" ]]; then
+        wait_for_container || continue
         launch_shell_container
-    elif [[ "$choice" =~ ^a([0-9]+)$ ]]; then
-        reattach_session "${BASH_REMATCH[1]}" || continue
-    elif [[ "$choice" =~ ^[0-9]+$ && "$choice" -ge 1 && "$choice" -le "${#repos[@]}" ]]; then
-        IFS='|' read -r selected_path selected_branch <<< "${repos[$((choice - 1))]}"
     elif [[ -z "$choice" ]]; then
-        # Default: first repo, or home if none
-        if [[ ${#repos[@]} -gt 0 ]]; then
-            IFS='|' read -r selected_path selected_branch <<< "${repos[0]}"
+        # Smart default
+        if [[ ${#entries[@]} -eq 0 ]]; then
+            wait_for_container || continue
+            launch_host "$COMPOSE_DIR" || continue
         else
-            launch "$HOME/projects" || continue
+            select_entry "$default_idx" || continue
         fi
-    else
-        continue
-    fi
-
-    # Check for worktrees
-    get_worktrees "$selected_path"
-
-    # If no worktrees, skip Layer 2 and launch directly
-    if [[ ${#worktrees[@]} -eq 0 ]]; then
-        launch "$selected_path" || continue
-    fi
-
-    # Layer 2 loop
-    while true; do
-        show_branches "$selected_path" "$selected_branch"
-
-        read -r -p "  > " choice2 || true
-
-        if [[ "$choice2" == "b" ]]; then
-            break  # Back to Layer 1
-        elif [[ "$choice2" == "1" || -z "$choice2" ]]; then
-            # Main repo
-            launch "$selected_path" || continue
-        elif [[ "$choice2" =~ ^[0-9]+$ && "$choice2" -ge 2 && "$choice2" -le $(( ${#worktrees[@]} + 1 )) ]]; then
-            IFS='|' read -r wt_selected _ <<< "${worktrees[$((choice2 - 2))]}"
-            launch "$wt_selected" || continue
+    elif [[ "$choice" =~ ^[0-9]+$ ]]; then
+        idx=$(( choice - 1 ))
+        total=$(( ${#entries[@]} + ${#orphaned_sessions[@]} ))
+        if [[ $idx -ge 0 && $idx -lt $total ]]; then
+            select_entry "$idx" || continue
         fi
-    done
+    fi
 done
