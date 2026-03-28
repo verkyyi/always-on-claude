@@ -1,13 +1,13 @@
 #!/bin/bash
 # tmux-status.sh — Right side of the tmux status bar
 #
-# Shows: 2/3 sess
+# Shows: 1/3  62%
 
-BLUE="#[fg=#7aa2f7]"
+DIM="#[fg=#565f89]"
 
+# Session count
 sessions=$(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep -c '^claude-' || echo 0)
 
-# Calculate max sessions (same formula as start-claude.sh)
 if [[ -n "${MAX_SESSIONS:-}" ]]; then
     max=$MAX_SESSIONS
 else
@@ -25,4 +25,13 @@ else
     [[ $max -lt 1 ]] && max=1
 fi
 
-printf " ${BLUE}%s/%s sess " "$sessions" "$max"
+# Memory usage
+if [[ -f /proc/meminfo ]]; then
+    mem_pct=$(awk '/MemTotal/{t=$2} /MemAvailable/{a=$2} END{printf "%.0f", (t-a)/t*100}' /proc/meminfo)
+elif command -v vm_stat &>/dev/null; then
+    mem_pct=$(vm_stat | awk '/Pages active/{a=$3} /Pages wired/{w=$4} /Pages free/{f=$3} /Pages speculative/{s=$3} END{gsub(/\./,"",a); gsub(/\./,"",w); gsub(/\./,"",f); gsub(/\./,"",s); printf "%.0f", (a+w)/(a+w+f+s)*100}')
+else
+    mem_pct="?"
+fi
+
+printf "${DIM}%s/%s  %s%% " "$sessions" "$max" "$mem_pct"
