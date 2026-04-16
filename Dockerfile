@@ -67,6 +67,10 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 # (without this, npx/uvx download on first run, delaying the theme selector)
 RUN npx -y @upstash/context7-mcp --help >/dev/null 2>&1 || true
 RUN /home/dev/.local/bin/uvx mcp-server-fetch --help >/dev/null 2>&1 || true
+RUN npx -y @playwright/mcp --help >/dev/null 2>&1 || true
+
+# Pre-install Playwright + Chromium browser — avoids ~150MB download on first use
+RUN npx -y playwright install chromium
 
 # Shell aliases
 RUN printf '\nalias cc="claude --dangerously-skip-permissions"\nalias gs="git status"\nalias gl="git log --oneline -20"\n' >> /home/dev/.bashrc
