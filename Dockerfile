@@ -20,10 +20,12 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-# Playwright/Chromium deps — fonts + shared libs in one shot
-RUN apt-get update \
-    && npx -y playwright install-deps chromium \
+# Playwright — installed globally so require('playwright') works without per-project install
+RUN npm install -g playwright \
+    && apt-get update \
+    && playwright install-deps chromium \
     && rm -rf /var/lib/apt/lists/*
+ENV NODE_PATH=/usr/lib/node_modules
 
 # AWS CLI v2
 RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o "awscliv2.zip" \
@@ -69,8 +71,8 @@ RUN npx -y @upstash/context7-mcp --help >/dev/null 2>&1 || true
 RUN /home/dev/.local/bin/uvx mcp-server-fetch --help >/dev/null 2>&1 || true
 RUN npx -y @playwright/mcp --help >/dev/null 2>&1 || true
 
-# Pre-install Playwright + Chromium browser — avoids ~150MB download on first use
-RUN npx -y playwright install chromium
+# Pre-download Chromium browser — avoids ~150MB download on first use
+RUN playwright install chromium
 
 # Shell aliases
 RUN printf '\nalias cc="claude --dangerously-skip-permissions"\nalias gs="git status"\nalias gl="git log --oneline -20"\n' >> /home/dev/.bashrc
