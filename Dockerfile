@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Font rendering for Playwright/Chromium — rendering libs + font files + cache refresh
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libfontconfig1 libfreetype6 \
+    fontconfig libfreetype6 \
     fonts-liberation fonts-noto-core fonts-noto-cjk fonts-noto-color-emoji \
     && fc-cache -f \
     && rm -rf /var/lib/apt/lists/*
