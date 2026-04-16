@@ -3,3 +3,7 @@ ignored:
   - DL3008
   # Don't pin pip package versions
   - DL3013
+  # Don't pin npm package versions — same reasoning as apt/pip
+  - DL3016
+  # Allow consecutive RUN instructions — intentional for cache-layer granularity
+  - DL3059
