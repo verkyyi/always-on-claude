@@ -15,16 +15,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ripgrep fzf zsh \
     && rm -rf /var/lib/apt/lists/*
 
-# Font rendering for Playwright/Chromium — rendering libs + font files + cache refresh
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    fontconfig libfreetype6 \
-    fonts-liberation fonts-noto-core fonts-noto-cjk fonts-noto-color-emoji \
-    && fc-cache -f \
-    && rm -rf /var/lib/apt/lists/*
-
 # Node.js 22.x LTS
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# Playwright/Chromium deps — fonts + shared libs in one shot
+RUN apt-get update \
+    && npx -y playwright install-deps chromium \
     && rm -rf /var/lib/apt/lists/*
 
 # AWS CLI v2
