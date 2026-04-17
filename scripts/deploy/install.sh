@@ -371,6 +371,17 @@ if [[ -f "$DEV_ENV/scripts/runtime/statusline-command.sh" ]]; then
     fi
 fi
 
+# Global CLAUDE.md — user-scope instructions shared across all projects.
+# Install once if missing; leave user edits alone on re-runs.
+if [[ -f "$DEV_ENV/scripts/runtime/claude-global.md" ]]; then
+    if [[ -f ~/.claude/CLAUDE.md ]]; then
+        skip "~/.claude/CLAUDE.md"
+    else
+        cp "$DEV_ENV/scripts/runtime/claude-global.md" ~/.claude/CLAUDE.md
+        ok "Installed ~/.claude/CLAUDE.md"
+    fi
+fi
+
 # tmux config — host-side status bar with workspace identity, resource usage
 if [[ -f "$DEV_ENV/scripts/runtime/tmux.conf" ]]; then
     cp "$DEV_ENV/scripts/runtime/tmux.conf" ~/.tmux.conf
