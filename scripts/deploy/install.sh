@@ -300,6 +300,7 @@ mkdir -p ~/.claude/debug
 mkdir -p ~/.config/gh
 mkdir -p "$PROJECTS_DIR"
 mkdir -p ~/.gitconfig.d
+mkdir -p ~/.aws
 
 # Critical: must exist as a FILE with valid JSON before compose up
 # (Docker would create it as a directory if missing)
