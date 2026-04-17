@@ -187,8 +187,25 @@ jobs:
           echo "AMI_NAME=$AMI_NAME" >> "$GITHUB_ENV"
           echo "AMI: $NEW_AMI (${{ matrix.arch }})"
 
-          echo "Waiting for AMI to be available..."
-          aws ec2 wait image-available --image-ids "$NEW_AMI"
+          echo "Waiting for AMI to be available (up to 30 min)..."
+          # AWS default waiter caps at ~10 min, which is not enough for larger
+          # images. Poll explicitly so we can wait longer and fail fast on
+          # terminal bad states.
+          deadline=$((SECONDS + 1800))
+          while (( SECONDS < deadline )); do
+            state=$(aws ec2 describe-images --image-ids "$NEW_AMI" \
+              --query 'Images[0].State' --output text 2>/dev/null || echo "pending")
+            case "$state" in
+              available) echo "AMI available after ${SECONDS}s"; break ;;
+              failed|error|invalid|deregistered)
+                echo "AMI entered terminal state: $state" >&2; exit 1 ;;
+            esac
+            sleep 15
+          done
+          if [[ "$state" != "available" ]]; then
+            echo "AMI did not become available within 30 min (last state: $state)" >&2
+            exit 1
+          fi
 
       - name: Deregister old AMIs
         run: |
