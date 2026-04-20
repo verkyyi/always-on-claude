@@ -46,6 +46,24 @@ MOCK
     assert_contains "$(_stderr)" "GitHub MCP inactive"
 }
 
+test_gh_authed_but_token_empty_no_export_with_hint() {
+    # gh auth status succeeds but gh auth token prints nothing
+    cat > "$TEST_DIR/bin/gh" <<'MOCK'
+#!/bin/bash
+case "$1 $2" in
+    "auth status") exit 0 ;;
+    "auth token") exit 0 ;;  # No output, clean exit
+    *) exit 0 ;;
+esac
+MOCK
+    chmod +x "$TEST_DIR/bin/gh"
+
+    local result
+    result=$(_run_env_script)
+    assert_eq "UNSET" "$result"
+    assert_contains "$(_stderr)" "returned nothing"
+}
+
 test_gh_authed_exports_token_silently() {
     # gh is authed and `gh auth token` prints a token
     cat > "$TEST_DIR/bin/gh" <<'MOCK'
