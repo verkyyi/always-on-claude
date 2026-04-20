@@ -155,7 +155,7 @@ launch() {
 
     # Run Claude Code directly — we are already inside the container
     exec tmux new-session -A -s "$session_name" \
-        "bash -lc 'cd \"$selected\" && exec claude'"
+        "bash -lc 'cd \"$selected\" && source ~/.claude/gh-mcp-env.sh && exec claude'"
 }
 
 # --- Launch Claude Code for workspace management ---
@@ -167,7 +167,7 @@ launch_manager() {
     echo ""
 
     exec tmux new-session -A -s "claude-manager" \
-        "bash -lc 'cd \"$dir\" && exec claude --append-system-prompt-file \"$MANAGER_PROMPT\" \"Greet me and show what you can help with.\"'"
+        "bash -lc 'cd \"$dir\" && source ~/.claude/gh-mcp-env.sh && exec claude --append-system-prompt-file \"$MANAGER_PROMPT\" \"Greet me and show what you can help with.\"'"
 }
 
 # --- Launch a shell in tmux ---
