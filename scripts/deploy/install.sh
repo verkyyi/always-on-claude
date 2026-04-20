@@ -342,6 +342,14 @@ if [[ -f "$DEV_ENV/scripts/runtime/statusline-command.sh" ]]; then
     chmod +x ~/.claude/statusline-command.sh
     ok "Installed statusline-command.sh"
 
+    # GitHub MCP auth bridge — sourced by start-claude*.sh to export
+    # GITHUB_PERSONAL_ACCESS_TOKEN from gh CLI auth state.
+    if [[ -f "$DEV_ENV/scripts/runtime/gh-mcp-env.sh" ]]; then
+        cp "$DEV_ENV/scripts/runtime/gh-mcp-env.sh" ~/.claude/gh-mcp-env.sh
+        chmod +x ~/.claude/gh-mcp-env.sh
+        ok "Installed gh-mcp-env.sh"
+    fi
+
     # Build desired user-scope settings
     desired='{"permissions":{"defaultMode":"bypassPermissions"},"statusLine":{"type":"command","command":"bash /home/dev/.claude/statusline-command.sh"},"mcpServers":{"context7":{"command":"npx","args":["-y","@upstash/context7-mcp"]},"fetch":{"command":"uvx","args":["mcp-server-fetch"]}}}'
 
