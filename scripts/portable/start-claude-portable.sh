@@ -92,6 +92,90 @@ toggle_code_agent() {
     echo ""
 }
 
+all_code_agent_session_pattern() {
+    echo '^(claude|codex)-'
+}
+
+cgroup_memory_limit_mb() {
+    local path limit
+    for path in /sys/fs/cgroup/memory.max /sys/fs/cgroup/memory/memory.limit_in_bytes; do
+        [[ -r "$path" ]] || continue
+        limit=$(cat "$path" 2>/dev/null || true)
+        [[ "$limit" =~ ^[0-9]+$ ]] || continue
+        # Treat huge cgroup v1 sentinel values as unlimited.
+        [[ "$limit" -gt 0 && "$limit" -lt 9000000000000000000 ]] || continue
+        echo $((limit / 1024 / 1024))
+        return 0
+    done
+    return 1
+}
+
+total_memory_mb() {
+    if cgroup_memory_limit_mb; then
+        return
+    fi
+
+    if [[ -f /proc/meminfo ]]; then
+        awk '/MemTotal/ {printf "%.0f\n", $2/1024}' /proc/meminfo
+    elif command -v sysctl &>/dev/null; then
+        sysctl -n hw.memsize 2>/dev/null | awk '{printf "%.0f\n", $1/1024/1024}'
+    else
+        echo 4096
+    fi
+}
+
+count_sessions() {
+    tmux list-sessions -F '#{session_name}' 2>/dev/null \
+        | grep -Ec "$(all_code_agent_session_pattern)" || true
+}
+
+get_max_sessions() {
+    if [[ -n "${MAX_SESSIONS:-}" ]]; then
+        echo "$MAX_SESSIONS"
+        return
+    fi
+
+    local total_mem_mb cpus mem_based max
+    total_mem_mb=$(total_memory_mb)
+    cpus=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 2)
+    mem_based=$(( (total_mem_mb - 512) / 650 ))
+    [[ $mem_based -lt 1 ]] && mem_based=1
+
+    max=$(( mem_based < cpus ? mem_based : cpus ))
+    [[ $max -lt 1 ]] && max=1
+    echo "$max"
+}
+
+tmux_detach_hint() {
+    local prefix pretty
+    prefix=$(tmux show-option -gv prefix 2>/dev/null || echo "C-b")
+    pretty=$(echo "$prefix" | sed 's/C-/Ctrl-/')
+    echo "${pretty} d"
+}
+
+check_session_limit() {
+    local session_name="$1"
+    if tmux has-session -t "$session_name" 2>/dev/null; then
+        return 0
+    fi
+
+    local current max
+    current=$(count_sessions)
+    max=$(get_max_sessions)
+    if [[ $current -ge $max ]]; then
+        echo ""
+        echo "  Session limit reached ($current/$max)."
+        echo "  Each coding session uses ~650 MB — more sessions risk OOM."
+        echo ""
+        echo "  Options:"
+        echo "    - Re-attach to an existing session (select it from the menu)"
+        echo "    - Exit a running session ($(tmux_detach_hint) to detach, then /exit inside it)"
+        echo ""
+        return 1
+    fi
+    return 0
+}
+
 claude_authenticated() {
     [[ -n "${ANTHROPIC_API_KEY:-}" ]] && return 0
     [[ -d "$HOME/.claude" ]] \
@@ -257,6 +341,10 @@ launch() {
     # Create unique tmux session name
     session_name="${CODE_AGENT}-$(basename "$selected" | tr './:' '-')"
 
+    if ! check_session_limit "$session_name"; then
+        return 1
+    fi
+
     exec tmux new-session -A -s "$session_name" \
         "bash -lc 'exec bash \"$RUNNER\" --agent \"$CODE_AGENT\" --cwd \"$selected\"'"
 }
@@ -265,11 +353,16 @@ launch() {
 
 launch_manager() {
     local dir="$1"
+    local session_name="claude-manager"
+
+    if ! check_session_limit "$session_name"; then
+        return 1
+    fi
 
     echo "  -> workspace manager"
     echo ""
 
-    exec tmux new-session -A -s "claude-manager" \
+    exec tmux new-session -A -s "$session_name" \
         "bash -lc 'exec bash \"$RUNNER\" --agent claude --cwd \"$dir\" --prompt-file \"$MANAGER_PROMPT\" --message \"Greet me and show what you can help with.\"'"
 }
 
