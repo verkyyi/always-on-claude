@@ -357,9 +357,9 @@ if [[ -x "$DEV_ENV/scripts/runtime/sync-codex-personalization.sh" ]]; then
 elif [[ -x "$DEV_ENV/scripts/runtime/sync-codex-config.sh" ]]; then
     codex_config_status=$("$DEV_ENV/scripts/runtime/sync-codex-config.sh")
     if [[ "$codex_config_status" == "updated" ]]; then
-        ok "Updated ~/.codex/config.toml"
+        ok "Updated $HOME/.codex/config.toml"
     else
-        skip "~/.codex/config.toml"
+        skip "$HOME/.codex/config.toml"
     fi
 fi
 
@@ -417,6 +417,14 @@ if [[ -x "$DEV_ENV/scripts/runtime/sync-claude-personalization.sh" ]]; then
     else
         skip "Claude home state"
     fi
+fi
+
+# GitHub MCP auth bridge — sourced by start-claude*.sh to export
+# GITHUB_PERSONAL_ACCESS_TOKEN from gh CLI auth state.
+if [[ -f "$DEV_ENV/scripts/runtime/gh-mcp-env.sh" ]]; then
+    cp "$DEV_ENV/scripts/runtime/gh-mcp-env.sh" ~/.claude/gh-mcp-env.sh
+    chmod +x ~/.claude/gh-mcp-env.sh
+    ok "Installed gh-mcp-env.sh"
 fi
 
 # Global CLAUDE.md — user-scope instructions shared across all projects.

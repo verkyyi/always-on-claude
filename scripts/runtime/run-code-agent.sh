@@ -63,6 +63,11 @@ fi
 command -v "$agent" >/dev/null 2>&1 || die "$agent is not installed"
 
 if [[ "$agent" == "claude" ]]; then
+    if [[ -f "$HOME/.claude/gh-mcp-env.sh" ]]; then
+        # shellcheck source=/dev/null
+        source "$HOME/.claude/gh-mcp-env.sh"
+    fi
+
     args=()
     if [[ -n "$prompt_file" ]]; then
         [[ -f "$prompt_file" ]] || die "Prompt file not found: $prompt_file"
