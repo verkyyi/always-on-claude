@@ -53,6 +53,17 @@ AOC_IMAGE_REVISION="$revision" AOC_IMAGE_CREATED="$created" \
   "$DOCKER" compose -f "$COMPOSE_FILE" up -d --force-recreate dev
 ok "Container recreated"
 
+info "Host services"
+if [ -x "$REPO/scripts/runtime/install-macmini-services.sh" ]; then
+  AOC_REPO="$REPO" \
+  AOC_DOCKER="$DOCKER" \
+  AOC_DOCKER_COMPOSE_FILE="$COMPOSE_FILE" \
+    bash "$REPO/scripts/runtime/install-macmini-services.sh"
+  ok "Mac mini host services installed"
+else
+  ok "No Mac mini host service installer found"
+fi
+
 info "Verify"
 "$DOCKER" inspect "$CONTAINER" --format \
   '  Image={{.Image}} Started={{.State.StartedAt}}'

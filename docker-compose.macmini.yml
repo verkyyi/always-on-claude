@@ -4,7 +4,7 @@
 # Mac mini through the host's existing Tailscale SSH, then use docker exec.
 #
 # Usage on the Mac mini:
-#   mkdir -p ~/aoc-data/{claude,codex,gitconfig,gh,aws,overnight,public} ~/projects
+#   mkdir -p ~/aoc-data/{claude,codex,gitconfig,gh,aws,overnight,public} ~/.always-on-claude/schedule/{inbox,status,logs} ~/projects
 #   docker compose -f docker-compose.macmini.yml up -d
 #   docker exec -it claude-dev bash -lc 'bash ~/dev-env/scripts/portable/start-claude-portable.sh'
 
@@ -33,6 +33,9 @@ services:
       - ${HOME}/projects:/home/dev/projects
       - ${HOME}/always-on-claude:/home/dev/dev-env:ro
       - ${HOME}/.ssh:/home/dev/.ssh:ro
+      - ${HOME}/.always-on-claude/schedule/inbox:/home/dev/.aoc/schedule/inbox
+      - ${HOME}/.always-on-claude/schedule/status:/home/dev/.aoc/schedule/status:ro
+      - ${HOME}/.always-on-claude/schedule/logs:/home/dev/.aoc/schedule/logs:ro
 
     environment:
       - NODE_ENV=development
