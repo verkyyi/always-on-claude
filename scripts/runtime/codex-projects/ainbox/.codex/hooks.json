@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -lc 'echo \"## Git State\"; git branch --show-current; git status --short | head -10; echo; echo \"## Recent Commits\"; git log --oneline -5'",
+            "statusMessage": "Loading ainbox session context"
+          }
+        ]
+      }
+    ]
+  }
+}

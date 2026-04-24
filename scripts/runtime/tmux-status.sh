@@ -6,7 +6,7 @@
 DIM="#[fg=#565f89]"
 
 # Session count
-sessions=$(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep -c '^claude-' || echo 0)
+sessions=$(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep -Ec '^(claude|codex)-' || true)
 
 if [[ -n "${MAX_SESSIONS:-}" ]]; then
     max=$MAX_SESSIONS

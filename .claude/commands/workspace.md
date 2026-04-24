@@ -41,3 +41,4 @@ You are helping the user manage git workspaces. This runs on the **host** — `~
 
    > Your new repo will appear in the login menu next time you SSH in.
    > To switch now: detach from tmux (prefix + d), then reconnect via SSH.
+   > Repo selections launch the workspace's default coding assistant (Claude Code or Codex).

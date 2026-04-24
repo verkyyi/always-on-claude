@@ -20,7 +20,7 @@
 FROM ghcr.io/verkyyi/always-on-claude:latest
 
 LABEL org.opencontainers.image.source="https://github.com/verkyyi/always-on-claude"
-LABEL org.opencontainers.image.description="Always-on Claude Code workspace (portable) — single container, docker run and go"
+LABEL org.opencontainers.image.description="Always-on AI coding workspace (portable) — single container, docker run and go"
 
 # hadolint ignore=DL3002
 USER root

@@ -9,6 +9,9 @@ services:
       # Claude Code config/auth/history (bind mount to persist through down/up)
       - ~/.claude:/home/dev/.claude
 
+      # Codex config/auth/history
+      - ~/.codex:/home/dev/.codex
+
       # Claude Code onboarding state — lives OUTSIDE ~/.claude/
       # Without this, every down/up triggers full re-onboarding
       # IMPORTANT: run `touch ~/.claude.json` on host before first start

@@ -17,7 +17,7 @@ test_format_multiple_sessions() {
 #!/bin/bash
 if [[ "$1" == "list-sessions" ]]; then
     echo "claude-repo1"
-    echo "claude-repo2"
+    echo "codex-repo2"
 fi
 MOCK
     chmod +x "$TEST_DIR/bin/tmux"

@@ -1,7 +1,7 @@
 FROM ubuntu:24.04
 
 LABEL org.opencontainers.image.source="https://github.com/verkyyi/always-on-claude"
-LABEL org.opencontainers.image.description="Always-on Claude Code workspace — Ubuntu 24.04 + Node 22 + dev tools"
+LABEL org.opencontainers.image.description="Always-on AI coding workspace — Ubuntu 24.04 + Claude Code + Codex + dev tools"
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PATH="/home/dev/.local/bin:${PATH}"
@@ -20,8 +20,8 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-# Playwright — installed globally so require('playwright') works without per-project install
-RUN npm install -g playwright \
+# Playwright + Codex
+RUN npm install -g playwright @openai/codex \
     && apt-get update \
     && playwright install-deps chromium \
     && rm -rf /var/lib/apt/lists/*
@@ -49,11 +49,12 @@ USER dev
 RUN curl -fsSL https://claude.ai/install.sh | bash
 USER root
 
-# Pre-create .claude dirs — Docker volumes mount as root and can
+# Pre-create runtime dirs — Docker volumes mount as root and can
 # overwrite ownership, causing ENOENT crashes without these
 RUN mkdir -p /home/dev/.claude/debug \
+    && mkdir -p /home/dev/.codex \
     && touch /home/dev/.claude/remote-settings.json \
-    && chown -R dev:dev /home/dev/.claude
+    && chown -R dev:dev /home/dev/.claude /home/dev/.codex
 
 USER dev
 WORKDIR /home/dev
@@ -75,6 +76,6 @@ RUN npx -y @playwright/mcp --help >/dev/null 2>&1 || true
 RUN playwright install chromium
 
 # Shell aliases
-RUN printf '\nalias cc="claude --dangerously-skip-permissions"\nalias gs="git status"\nalias gl="git log --oneline -20"\n' >> /home/dev/.bashrc
+RUN printf '\nalias cc="claude --dangerously-skip-permissions"\nalias cx="codex --dangerously-bypass-approvals-and-sandbox"\nalias gs="git status"\nalias gl="git log --oneline -20"\n' >> /home/dev/.bashrc
 
 CMD ["bash"]

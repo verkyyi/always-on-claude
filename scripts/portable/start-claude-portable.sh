@@ -2,7 +2,7 @@
 # start-claude-portable.sh — Workspace picker for portable (single-container) mode.
 #
 # Unlike the host-mode start-claude.sh, this runs INSIDE the container.
-# No docker exec — launches Claude Code directly in tmux.
+# No docker exec — launches the preferred coding assistant directly in tmux.
 #
 # Layer 1: Pick a repo (or manage workspaces)
 # Layer 2: Pick a branch/worktree within that repo (skipped if no worktrees)
@@ -11,9 +11,98 @@
 
 set -euo pipefail
 
-DEV_ENV="$HOME/dev-env"
+CONFIG_ROOT="${DEV_ENV:-$HOME/dev-env}"
+
+if [[ -f "$CONFIG_ROOT/scripts/deploy/load-config.sh" ]]; then
+    # shellcheck disable=SC1091
+    source "$CONFIG_ROOT/scripts/deploy/load-config.sh"
+fi
+
+DEV_ENV="${DEV_ENV:-$CONFIG_ROOT}"
 WORKTREE_HELPER="$DEV_ENV/scripts/runtime/worktree-helper.sh"
 MANAGER_PROMPT="$DEV_ENV/scripts/runtime/manager-prompt.txt"
+RUNNER="$DEV_ENV/scripts/runtime/run-code-agent.sh"
+
+normalize_code_agent() {
+    case "${1:-}" in
+        codex) echo "codex" ;;
+        claude|"") echo "claude" ;;
+        *) echo "claude" ;;
+    esac
+}
+
+CODE_AGENT=$(normalize_code_agent "${DEFAULT_CODE_AGENT:-claude}")
+
+next_code_agent() {
+    local agent
+    agent=$(normalize_code_agent "${1:-${CODE_AGENT:-${DEFAULT_CODE_AGENT:-claude}}}")
+    if [[ "$agent" == "codex" ]]; then
+        echo "claude"
+    else
+        echo "codex"
+    fi
+}
+
+persist_default_code_agent() {
+    local agent profile tmp
+    agent=$(normalize_code_agent "${1:-claude}")
+    profile="$HOME/.bash_profile"
+
+    touch "$profile"
+
+    tmp=$(mktemp)
+    awk -v agent="$agent" '
+        BEGIN {
+            updated = 0
+            comment = "# Default coding assistant for the workspace picker"
+            export_line = "export DEFAULT_CODE_AGENT=\"" agent "\""
+        }
+        /^export DEFAULT_CODE_AGENT=/ {
+            if (!updated) {
+                print export_line
+                updated = 1
+            }
+            next
+        }
+        { print }
+        END {
+            if (!updated) {
+                if (NR > 0) {
+                    print ""
+                }
+                print comment
+                print export_line
+            }
+        }
+    ' "$profile" > "$tmp"
+    cat "$tmp" > "$profile"
+    rm -f "$tmp"
+
+    DEFAULT_CODE_AGENT="$agent"
+    CODE_AGENT="$agent"
+    export DEFAULT_CODE_AGENT CODE_AGENT
+}
+
+toggle_code_agent() {
+    local next_agent
+    next_agent=$(next_code_agent "${CODE_AGENT:-${DEFAULT_CODE_AGENT:-claude}}")
+    persist_default_code_agent "$next_agent"
+    echo ""
+    echo "  Default agent set to: $CODE_AGENT"
+    echo ""
+}
+
+claude_authenticated() {
+    [[ -n "${ANTHROPIC_API_KEY:-}" ]] && return 0
+    [[ -d "$HOME/.claude" ]] \
+        && ls "$HOME/.claude/"*.json &>/dev/null 2>&1 \
+        && grep -qr --exclude-dir=debug "oauth" "$HOME/.claude/" 2>/dev/null
+}
+
+codex_authenticated() {
+    [[ -n "${OPENAI_API_KEY:-}" ]] && return 0
+    command -v codex &>/dev/null && codex login status &>/dev/null
+}
 
 # --- First-run check: prompt for auth if not configured --------------------
 
@@ -28,11 +117,17 @@ first_run_check() {
         needs_setup=1
     fi
 
+    if [[ "$CODE_AGENT" == "codex" ]]; then
+        codex_authenticated || needs_setup=1
+    else
+        claude_authenticated || needs_setup=1
+    fi
+
     if [[ $needs_setup -eq 1 ]]; then
         echo ""
         echo "  First run detected — some auth is not configured."
         echo ""
-        echo "  [1] Run setup (git + GitHub CLI + Claude Code)"
+        echo "  [1] Run setup (git + GitHub CLI + preferred code agent)"
         echo "  [2] Skip for now"
         echo ""
         read -rn 1 -p "  > " setup_choice || true
@@ -46,7 +141,11 @@ first_run_check() {
                 echo "    git config --global user.name 'Your Name'"
                 echo "    git config --global user.email 'you@example.com'"
                 echo "    gh auth login"
-                echo "    claude login"
+                if [[ "$CODE_AGENT" == "codex" ]]; then
+                    echo "    codex --login    # choose Sign in with ChatGPT for subscription access"
+                else
+                    echo "    claude login"
+                fi
             fi
         fi
     fi
@@ -84,13 +183,16 @@ get_worktrees() {
 # --- Layer 1: Pick a repo ---
 
 show_repos() {
-    # Collect active claude-* and shell-* tmux sessions
+    local next_agent
+    next_agent=$(next_code_agent "${CODE_AGENT:-${DEFAULT_CODE_AGENT:-claude}}")
+
+    # Collect active code-agent and shell tmux sessions
     # Note: all_sessions is intentionally global — read by reattach_session()
     all_sessions=()
     while IFS= read -r line; do
         [[ -n "$line" ]] && all_sessions+=("$line")
     done < <(tmux list-sessions -F '#{session_name} #{?session_attached,(attached),(idle)}' 2>/dev/null \
-        | grep -E '^(claude-|shell-)' || true)
+        | grep -E '^((claude|codex)-|shell-)' || true)
 
     if [[ ${#all_sessions[@]} -gt 0 ]]; then
         echo ""
@@ -116,6 +218,8 @@ show_repos() {
         echo "  (no repos found — press [m] to clone your first repo)"
     fi
 
+    echo "  Default agent: $CODE_AGENT"
+    echo "  [t] Toggle default -> $next_agent"
     echo "  [m] Manage workspaces"
     echo "  [h] Shell"
     echo ""
@@ -142,7 +246,7 @@ show_branches() {
     echo ""
 }
 
-# --- Launch Claude Code directly in tmux (no docker exec) ---
+# --- Launch the preferred code agent directly in tmux (no docker exec) ---
 
 launch() {
     local selected="$1"
@@ -151,14 +255,13 @@ launch() {
     echo ""
 
     # Create unique tmux session name
-    session_name="claude-$(basename "$selected" | tr './:' '-')"
+    session_name="${CODE_AGENT}-$(basename "$selected" | tr './:' '-')"
 
-    # Run Claude Code directly — we are already inside the container
     exec tmux new-session -A -s "$session_name" \
-        "bash -lc 'cd \"$selected\" && exec claude'"
+        "bash -lc 'exec bash \"$RUNNER\" --agent \"$CODE_AGENT\" --cwd \"$selected\"'"
 }
 
-# --- Launch Claude Code for workspace management ---
+# --- Launch Claude for workspace management ---
 
 launch_manager() {
     local dir="$1"
@@ -167,7 +270,7 @@ launch_manager() {
     echo ""
 
     exec tmux new-session -A -s "claude-manager" \
-        "bash -lc 'cd \"$dir\" && exec claude --append-system-prompt-file \"$MANAGER_PROMPT\" \"Greet me and show what you can help with.\"'"
+        "bash -lc 'exec bash \"$RUNNER\" --agent claude --cwd \"$dir\" --prompt-file \"$MANAGER_PROMPT\" --message \"Greet me and show what you can help with.\"'"
 }
 
 # --- Launch a shell in tmux ---
@@ -204,6 +307,9 @@ while true; do
 
     if [[ "$choice" == "m" ]]; then
         launch_manager "$DEV_ENV"
+    elif [[ "$choice" == "t" ]]; then
+        toggle_code_agent
+        continue
     elif [[ "$choice" == "h" ]]; then
         launch_shell
     elif [[ "$choice" =~ ^a([0-9]+)$ ]]; then

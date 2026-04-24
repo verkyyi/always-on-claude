@@ -1,6 +1,6 @@
 #!/bin/bash
 # ssh-login-portable.sh — Source this from .bash_profile inside the portable container.
-# Launches Claude Code workspace picker on login (Tailscale SSH or docker exec).
+# Launches the workspace picker on login (Tailscale SSH or docker exec).
 #
 # Unlike the host-mode ssh-login.sh, this runs INSIDE the container —
 # no docker exec needed.
@@ -26,6 +26,6 @@ fi
 if [[ -x ~/dev-env/scripts/portable/start-claude-portable.sh ]]; then
     exec bash ~/dev-env/scripts/portable/start-claude-portable.sh
 else
-    echo "  start-claude-portable.sh not found — launching claude directly"
-    exec claude
+    echo "  start-claude-portable.sh not found — launching the default code agent directly"
+    exec bash ~/dev-env/scripts/runtime/run-code-agent.sh
 fi

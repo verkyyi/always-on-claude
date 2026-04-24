@@ -4,11 +4,25 @@ You are guiding a new user through their first workspace setup. This is their fi
 
 Walk through these steps IN ORDER. Do one step at a time. After each step, confirm it worked before moving on. Skip steps that are already done.
 
+Before you start, detect the preferred coding assistant:
+
+```bash
+printenv DEFAULT_CODE_AGENT 2>/dev/null || echo claude
+```
+
+If it prints `codex`, use Codex commands where this guide references the coding assistant. Otherwise use Claude Code.
+
+Also detect the container name:
+
+```bash
+printenv CONTAINER_NAME 2>/dev/null || echo claude-dev
+```
+
 ### Step 1: Welcome
 
 Say something like:
 
-"Welcome to your Always-On Claude workspace!
+"Welcome to your Always-On coding workspace!
 
 This is a persistent dev environment — your sessions survive disconnects, and you can SSH in from any device.
 
@@ -47,20 +61,51 @@ gh auth login --web --git-protocol https
 
 Wait for it to complete and confirm success.
 
-### Step 4: Verify Claude works in container
+### Step 4: Preferred assistant authentication
 
-Check that Claude Code is accessible inside the container:
-```bash
-docker exec claude-dev claude --version
-```
+Check whether the preferred assistant is already authenticated on the HOST:
 
-If this works, Claude auth is shared from the host (where you're running now) into the container via bind mounts. Tell the user:
+- If `DEFAULT_CODE_AGENT=claude`, treat either `ANTHROPIC_API_KEY` or existing Claude credentials in `~/.claude/` as authenticated.
+- If `DEFAULT_CODE_AGENT=codex`, treat either `OPENAI_API_KEY` or a successful `codex login status` as authenticated.
 
-"Claude Code is working inside the container — your auth is shared automatically."
+If authentication is missing:
 
-If it fails, help troubleshoot (container not running, bind mount issue).
+- If `DEFAULT_CODE_AGENT=claude`, tell them:
+  "Next, let's connect Claude Code on this workspace host. I'll start the browser login flow."
 
-### Step 5: Clone first repo
+  Then run:
+  ```bash
+  claude login
+  ```
+
+- If `DEFAULT_CODE_AGENT=codex`, tell them:
+  "Next, let's connect Codex on this workspace host. I'll start the login flow. On this remote SSH host, complete the device-code step Codex shows in your browser to use your ChatGPT subscription."
+
+  Then run:
+  ```bash
+  codex --login
+  ```
+
+After it completes, confirm success before moving on.
+
+### Step 5: Verify the coding assistant works in container
+
+Check that the preferred assistant is accessible inside the container:
+
+- If `DEFAULT_CODE_AGENT=claude`:
+  ```bash
+  docker exec "$CONTAINER_NAME" bash -lc 'claude --version && { test -n "$ANTHROPIC_API_KEY" || { ls ~/.claude/*.json >/dev/null 2>&1 && grep -qr --exclude-dir=debug oauth ~/.claude/; }; }'
+  ```
+- If `DEFAULT_CODE_AGENT=codex`:
+  ```bash
+  docker exec "$CONTAINER_NAME" bash -lc 'codex --version && { test -n "$OPENAI_API_KEY" || codex login status; }'
+  ```
+
+If this works, tell the user their auth/state is available inside the container via bind mounts or persisted volumes.
+
+If it fails, help troubleshoot (container not running, missing install, bind mount issue).
+
+### Step 6: Clone first repo
 
 Ask: "What repo would you like to work on? Give me a GitHub URL or owner/repo."
 
@@ -71,7 +116,7 @@ git clone https://github.com/OWNER/REPO.git ~/projects/REPO
 
 If they're not sure, suggest they can skip this and clone later from the workspace manager.
 
-### Step 6: Quick tour
+### Step 7: Quick tour
 
 After setup is complete, give a brief tour:
 
@@ -79,7 +124,7 @@ After setup is complete, give a brief tour:
 
 **Connecting:** SSH in from any device — laptop, phone, tablet. Your sessions persist.
 
-**Workspace picker:** Next time you SSH in, you'll see your repos listed. Pick one to launch Claude Code inside it.
+**Workspace picker:** Next time you SSH in, you'll see your repos listed. Pick one to launch your preferred coding assistant inside it.
 
 **Manage workspaces:** Press [m] at the picker to clone more repos, create worktrees for parallel branches, and more.
 
@@ -87,7 +132,7 @@ After setup is complete, give a brief tour:
 
 **Mobile tip:** Use a terminal app like Blink (iOS) or Termux (Android). The workspace picker is designed for quick one-key selection."
 
-### Step 7: Mark complete
+### Step 8: Mark complete
 
 After the tour, run this command to mark onboarding as done:
 ```bash
@@ -104,4 +149,4 @@ Then say: "Onboarding complete! Detach from tmux (prefix + d) and SSH back in to
 - Keep messages SHORT. This might be on a phone screen.
 - Never ask multiple questions at once. One thing at a time.
 - The user might have already done some steps (e.g., via API key auth). Check before asking.
-- This runs on the HOST, not inside the container. Git config and gh auth are shared via bind mounts.
+- This runs on the HOST, not inside the container. Git config, GitHub auth, and assistant state are shared into the container from the host.

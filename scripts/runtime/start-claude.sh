@@ -1,7 +1,7 @@
 #!/bin/bash
 # start-claude.sh — Auto-starts the dev container if needed,
-# then presents a workspace picker and launches Claude Code
-# inside a named tmux session.
+# then presents a workspace picker and launches the preferred
+# coding assistant inside a named tmux session.
 #
 # Called automatically from ssh-login.sh on SSH login.
 
@@ -15,13 +15,167 @@ if [[ -f "$COMPOSE_DIR/scripts/deploy/load-config.sh" ]]; then
     source "$COMPOSE_DIR/scripts/deploy/load-config.sh"
 fi
 
+COMPOSE_DIR="${DEV_ENV:-$COMPOSE_DIR}"
 : "${CONTAINER_NAME:=claude-dev}"
 : "${PROJECTS_DIR:=$HOME/projects}"
 
 MANAGER_PROMPT="$COMPOSE_DIR/scripts/runtime/manager-prompt.txt"
 CONTAINER_PROJECTS="/home/dev/projects"
+RUNNER_HOST="$COMPOSE_DIR/scripts/runtime/run-code-agent.sh"
+RUNNER_CONTAINER="/home/dev/dev-env/scripts/runtime/run-code-agent.sh"
 
 COMPOSE_CMD=(sudo --preserve-env=HOME docker compose)
+
+normalize_code_agent() {
+    case "${1:-}" in
+        codex) echo "codex" ;;
+        claude|"") echo "claude" ;;
+        *) echo "claude" ;;
+    esac
+}
+
+CODE_AGENT=$(normalize_code_agent "${DEFAULT_CODE_AGENT:-claude}")
+
+all_code_agent_session_pattern() {
+    echo '^(claude|codex)-'
+}
+
+file_sha256() {
+    local path="$1"
+    [[ -f "$path" ]] || return 0
+
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$path" | awk '{print $1}'
+    else
+        shasum -a 256 "$path" | awk '{print $1}'
+    fi
+}
+
+container_file_sha256() {
+    local path="$1"
+    docker exec "$CONTAINER_NAME" bash -lc "
+        if [[ -f \"$path\" ]]; then
+            if command -v sha256sum >/dev/null 2>&1; then
+                sha256sum \"$path\" | awk '{print \\\$1}'
+            else
+                shasum -a 256 \"$path\" | awk '{print \\\$1}'
+            fi
+        fi
+    " 2>/dev/null || true
+}
+
+refresh_container_after_recreate() {
+    sleep 2
+    "${COMPOSE_CMD[@]}" exec -u root dev bash -c \
+        "chown -R dev:dev /home/dev/projects /home/dev/.claude /home/dev/.codex" 2>/dev/null || true
+}
+
+ensure_claude_state_mount_current() {
+    local host_state="$HOME/.claude.json"
+    local container_state="/home/dev/.claude.json"
+    local host_sum container_sum
+
+    [[ "${CODE_AGENT:-${DEFAULT_CODE_AGENT:-claude}}" == "claude" ]] || return 0
+    [[ -f "$host_state" ]] || return 0
+    docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$" || return 0
+
+    host_sum=$(file_sha256 "$host_state")
+    container_sum=$(container_file_sha256 "$container_state")
+
+    if [[ -z "$host_sum" || -z "$container_sum" || "$host_sum" == "$container_sum" ]]; then
+        return 0
+    fi
+
+    if [[ "$(count_sessions)" -gt 0 ]]; then
+        echo ""
+        echo "  Claude state on the host changed after the container was created."
+        echo "  Exit active coding sessions, then retry so the container can be recreated."
+        echo ""
+        return 1
+    fi
+
+    echo "  Refreshing container to sync Claude state..."
+    if ! (cd "$COMPOSE_DIR" && "${COMPOSE_CMD[@]}" up -d --force-recreate >/dev/null 2>&1); then
+        echo "  Failed to recreate container."
+        return 1
+    fi
+
+    refresh_container_after_recreate
+
+    container_sum=$(container_file_sha256 "$container_state")
+    if [[ -n "$host_sum" && -n "$container_sum" && "$host_sum" != "$container_sum" ]]; then
+        echo "  Container Claude state is still stale after recreate."
+        return 1
+    fi
+
+    return 0
+}
+
+next_code_agent() {
+    local agent
+    agent=$(normalize_code_agent "${1:-${CODE_AGENT:-${DEFAULT_CODE_AGENT:-claude}}}")
+    if [[ "$agent" == "codex" ]]; then
+        echo "claude"
+    else
+        echo "codex"
+    fi
+}
+
+persist_default_code_agent() {
+    local agent profile tmp
+    agent=$(normalize_code_agent "${1:-claude}")
+    profile="$HOME/.bash_profile"
+
+    touch "$profile"
+
+    tmp=$(mktemp)
+    awk -v agent="$agent" '
+        BEGIN {
+            updated = 0
+            comment = "# Default coding assistant for the workspace picker"
+            export_line = "export DEFAULT_CODE_AGENT=\"" agent "\""
+        }
+        /^export DEFAULT_CODE_AGENT=/ {
+            if (!updated) {
+                print export_line
+                updated = 1
+            }
+            next
+        }
+        { print }
+        END {
+            if (!updated) {
+                if (NR > 0) {
+                    print ""
+                }
+                print comment
+                print export_line
+            }
+        }
+    ' "$profile" > "$tmp"
+    cat "$tmp" > "$profile"
+    rm -f "$tmp"
+
+    DEFAULT_CODE_AGENT="$agent"
+    CODE_AGENT="$agent"
+    export DEFAULT_CODE_AGENT CODE_AGENT
+}
+
+toggle_code_agent() {
+    local next_agent
+    next_agent=$(next_code_agent "${CODE_AGENT:-${DEFAULT_CODE_AGENT:-claude}}")
+    persist_default_code_agent "$next_agent"
+    echo ""
+    echo "  Default agent set to: $CODE_AGENT"
+    echo ""
+}
+
+code_agent_session_name() {
+    local path="$1"
+    local agent
+    agent=$(normalize_code_agent "${CODE_AGENT:-${DEFAULT_CODE_AGENT:-claude}}")
+    echo "${agent}-$(basename "$path" | tr './:' '-')"
+}
 
 # --- tmux prefix detection ---
 tmux_detach_hint() {
@@ -35,7 +189,7 @@ tmux_detach_hint() {
 # --- Session limit helpers ---
 count_sessions() {
     tmux list-sessions -F '#{session_name}' 2>/dev/null \
-        | grep -c '^claude-' || echo 0
+        | grep -Ec "$(all_code_agent_session_pattern)" || true
 }
 
 get_max_sessions() {
@@ -46,7 +200,7 @@ get_max_sessions() {
     fi
 
     # Auto-calculate: min(memory_based, cpu_count), minimum 1
-    # Reserve 512MB for OS (Docker + SSH + earlyoom), ~650MB per Claude session
+    # Reserve 512MB for OS (Docker + SSH + earlyoom), ~650MB per coding session
     local total_mem_mb cpus mem_based max
     if [[ -f /proc/meminfo ]]; then
         total_mem_mb=$(awk '/MemTotal/ {printf "%.0f", $2/1024}' /proc/meminfo)
@@ -78,7 +232,7 @@ check_session_limit() {
     if [[ $current -ge $max ]]; then
         echo ""
         echo "  Session limit reached ($current/$max)."
-        echo "  Each Claude session uses ~650 MB — more sessions risk OOM."
+        echo "  Each coding session uses ~650 MB — more sessions risk OOM."
         echo ""
         echo "  Options:"
         echo "    - Re-attach to an existing session (select it from the menu)"
@@ -100,7 +254,7 @@ ensure_container_bg() {
             cd "$COMPOSE_DIR" && "${COMPOSE_CMD[@]}" up -d >/dev/null 2>&1
             sleep 2
             "${COMPOSE_CMD[@]}" exec -u root dev bash -c \
-                "chown -R dev:dev /home/dev/projects" 2>/dev/null || true
+                "chown -R dev:dev /home/dev/projects /home/dev/.claude /home/dev/.codex" 2>/dev/null || true
         fi
     ) &
     container_pid=$!
@@ -120,9 +274,7 @@ wait_for_container() {
     # Container not running — try to start it synchronously
     echo "  Starting container..."
     if cd "$COMPOSE_DIR" && "${COMPOSE_CMD[@]}" up -d 2>&1 | tail -1; then
-        sleep 2
-        "${COMPOSE_CMD[@]}" exec -u root dev bash -c \
-            "chown -R dev:dev /home/dev/projects" 2>/dev/null || true
+        refresh_container_after_recreate
         return 0
     fi
 
@@ -135,11 +287,27 @@ to_container_path() {
     echo "${1/$HOME\/projects/$CONTAINER_PROJECTS}"
 }
 
+normalize_discovered_path() {
+    local path="$1"
+    if [[ "$path" == /private/* && -e "${path#/private}" ]]; then
+        echo "${path#/private}"
+    else
+        echo "$path"
+    fi
+}
+
 # --- Inline discovery (flat: repos + worktrees in one pass) ---
 discover_entries() {
     entries=()
     local repo_dirs=()
-    mapfile -t repo_dirs < <(find "$PROJECTS_DIR" -maxdepth 3 -name ".git" -type d 2>/dev/null | sort)
+    if command -v mapfile >/dev/null 2>&1; then
+        mapfile -t repo_dirs < <(find "$PROJECTS_DIR" -maxdepth 3 -name ".git" -type d 2>/dev/null | sort)
+    else
+        local repo_dir
+        while IFS= read -r repo_dir; do
+            [[ -n "$repo_dir" ]] && repo_dirs+=("$repo_dir")
+        done < <(find "$PROJECTS_DIR" -maxdepth 3 -name ".git" -type d 2>/dev/null | sort)
+    fi
 
     [[ ${#repo_dirs[@]} -eq 0 ]] && return
 
@@ -148,7 +316,7 @@ discover_entries() {
     tmpdir=$(mktemp -d)
     for i in "${!repo_dirs[@]}"; do
         local dir
-        dir=$(dirname "${repo_dirs[$i]}")
+        dir=$(normalize_discovered_path "$(dirname "${repo_dirs[$i]}")")
         (
             branch=$(git -C "$dir" branch --show-current 2>/dev/null || echo "unknown")
             echo "$branch" > "$tmpdir/${i}.branch"
@@ -159,7 +327,7 @@ discover_entries() {
 
     for i in "${!repo_dirs[@]}"; do
         local dir
-        dir=$(dirname "${repo_dirs[$i]}")
+        dir=$(normalize_discovered_path "$(dirname "${repo_dirs[$i]}")")
         local branch
         branch=$(cat "$tmpdir/${i}.branch")
         local repo_name
@@ -172,7 +340,7 @@ discover_entries() {
         local wt_path="" wt_branch=""
         while IFS= read -r line; do
             if [[ "$line" == "worktree "* ]]; then
-                wt_path="${line#worktree }"
+                wt_path=$(normalize_discovered_path "${line#worktree }")
                 wt_branch=""
             elif [[ "$line" == "branch "* ]]; then
                 wt_branch="${line#branch refs/heads/}"
@@ -201,8 +369,8 @@ get_sessions() {
         local name attached activity
         read -r name attached activity <<< "$line"
 
-        # Only track claude-* sessions
-        [[ "$name" == claude-* ]] || continue
+        # Only track coding assistant sessions
+        [[ "$name" =~ ^(claude|codex)- ]] || continue
 
         session_names+=("$name")
         if [[ "$attached" -gt 0 ]]; then
@@ -225,9 +393,8 @@ match_sessions() {
 
         for ei in "${!entries[@]}"; do
             IFS='|' read -r repo_name branch path _state _activity <<< "${entries[$ei]}"
-            local dir_base
-            dir_base=$(basename "$path" | tr './:' '-')
-            local expected_session="claude-${dir_base}"
+            local expected_session
+            expected_session=$(code_agent_session_name "$path")
 
             if [[ "$sname" == "$expected_session" ]]; then
                 entries[$ei]="${repo_name}|${branch}|${path}|${sstate}|${sactivity}"
@@ -269,6 +436,8 @@ compute_default() {
 show_menu() {
     local prev_repo=""
     local idx=1
+    local next_agent
+    next_agent=$(next_code_agent "${CODE_AGENT:-${DEFAULT_CODE_AGENT:-claude}}")
 
     echo ""
 
@@ -315,10 +484,10 @@ show_menu() {
     # Footer
     echo ""
     if [[ ${#entries[@]} -eq 0 ]]; then
-        echo "  Enter=m  m=manage  h=host  c=container"
+        echo "  Enter=m  agent=${CODE_AGENT}  t=toggle->${next_agent}  m=manage  h=host  c=container"
     else
         local default_display=$(( default_idx + 1 ))
-        echo "  Enter=${default_display}  m=manage  h=host  c=container"
+        echo "  Enter=${default_display}  agent=${CODE_AGENT}  t=toggle->${next_agent}  m=manage  h=host  c=container"
     fi
     echo ""
 }
@@ -330,7 +499,7 @@ select_entry() {
     if [[ $idx -lt ${#entries[@]} ]]; then
         IFS='|' read -r _ _ path state _ <<< "${entries[$idx]}"
         local session_name
-        session_name="claude-$(basename "$path" | tr './:' '-')"
+        session_name=$(code_agent_session_name "$path")
 
         if [[ "$state" == "idle" || "$state" == "attached" ]]; then
             echo "  -> $session_name"
@@ -358,10 +527,14 @@ launch() {
 
     # Create unique tmux session name
     local session_name
-    session_name="claude-$(basename "$selected" | tr './:' '-')"
+    session_name=$(code_agent_session_name "$selected")
 
     # Check session limit (allows re-attach, blocks new if at limit)
     if ! check_session_limit "$session_name"; then
+        return 1
+    fi
+
+    if ! ensure_claude_state_mount_current; then
         return 1
     fi
 
@@ -369,23 +542,24 @@ launch() {
     echo ""
 
     tmux new-session -A -s "$session_name" \
-        "docker exec -it -e CLAUDE_MOBILE=\"${CLAUDE_MOBILE:-}\" -w '$container_path' ${CONTAINER_NAME} bash -lc 'exec claude'"
+        "docker exec -it -e CLAUDE_MOBILE=\"${CLAUDE_MOBILE:-}\" -e OPENAI_API_KEY=\"${OPENAI_API_KEY:-}\" -e ANTHROPIC_API_KEY=\"${ANTHROPIC_API_KEY:-}\" -e DEFAULT_CODE_AGENT=\"$CODE_AGENT\" -w '$container_path' ${CONTAINER_NAME} bash -lc 'exec bash \"$RUNNER_CONTAINER\" --agent \"$CODE_AGENT\"'"
 }
 
-# --- Launch Claude Code on the host (for workspace management / updates) ---
+# --- Launch Claude on the host (for workspace management / updates) ---
 launch_host() {
     local dir="$1"
+    local session_name="claude-manager"
 
     # Check session limit (allows re-attach, blocks new if at limit)
-    if ! check_session_limit "claude-manager"; then
+    if ! check_session_limit "$session_name"; then
         return 1
     fi
 
     echo "  -> $dir (host)"
     echo ""
 
-    tmux new-session -A -s "claude-manager" \
-        "bash -lc 'cd \"$dir\" && exec claude --append-system-prompt-file \"$MANAGER_PROMPT\" \"Greet me and show what you can help with.\"'"
+    tmux new-session -A -s "$session_name" \
+        "bash -lc 'exec bash \"$RUNNER_HOST\" --agent claude --cwd \"$dir\" --prompt-file \"$MANAGER_PROMPT\" --message \"Greet me and show what you can help with.\"'"
 }
 
 # --- Launch a host shell in tmux ---
@@ -419,6 +593,9 @@ while true; do
     if [[ "$choice" == "m" ]]; then
         wait_for_container || continue
         launch_host "$COMPOSE_DIR" || true
+        continue
+    elif [[ "$choice" == "t" ]]; then
+        toggle_code_agent
         continue
     elif [[ "$choice" == "h" ]]; then
         launch_shell_host

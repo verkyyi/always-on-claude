@@ -1,0 +1,7 @@
+interface:
+  display_name: "Deploy Proxy"
+  short_description: "Deploy the AgentFolio proxy worker"
+  default_prompt: "Use $deploy-proxy to deploy the AgentFolio Cloudflare Worker proxy from the current branch."
+
+policy:
+  allow_implicit_invocation: true

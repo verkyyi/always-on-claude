@@ -25,7 +25,8 @@ EC2 is the primary target. Portable mode is self-contained — no host setup scr
 | Tool | Purpose |
 |---|---|
 | Claude Code | AI coding assistant (native installer) |
-| Node.js 22 | Claude Code runtime + JS development |
+| Codex | OpenAI coding assistant CLI |
+| Node.js 22 | Claude Code + Codex runtime + JS development |
 | Bun | Fast JS runtime/package manager |
 | Git, GitHub CLI | Version control, PR workflows |
 | AWS CLI v2 | Cloud operations |
@@ -39,6 +40,7 @@ EC2 is the primary target. Portable mode is self-contained — no host setup scr
 
 ```
 cc  → claude --dangerously-skip-permissions
+cx  → codex --dangerously-bypass-approvals-and-sandbox
 gs  → git status
 gl  → git log --oneline -20
 ```
@@ -56,6 +58,7 @@ gl  → git log --oneline -20
 | Host path | Container path | Purpose |
 |---|---|---|
 | `~/.claude` | `/home/dev/.claude` | Auth tokens, settings, history, status line script |
+| `~/.codex` | `/home/dev/.codex` | Codex auth tokens, config, session state |
 | `~/.claude.json` | `/home/dev/.claude.json` | Onboarding state (separate from .claude/) |
 | `~/projects` | `/home/dev/projects` | Code repos |
 | `~/.gitconfig.d` | `/home/dev/.gitconfig.d` | Git config |
@@ -69,6 +72,7 @@ gl  → git log --oneline -20
 | Volume | Mount | Purpose |
 |---|---|---|
 | `claude-data` | `/home/dev/.claude` | Auth, settings, onboarding state (via symlink) |
+| `codex-data` | `/home/dev/.codex` | Codex auth, config, session state |
 | `projects` | `/home/dev/projects` | Code repos |
 | `gitconfig` | `/home/dev/.config/git` | Git config (XDG path) |
 | `gh-config` | `/home/dev/.config/gh` | GitHub CLI auth |
@@ -102,7 +106,7 @@ memswap_limit: 4g    # 3GB RAM + 1GB swap burst
 
 ### Session limits
 
-Claude Code sessions are memory-intensive (~650 MB each). The system auto-calculates the maximum:
+Coding assistant sessions are memory-intensive (~650 MB each). The system auto-calculates the maximum:
 
 ```
 OS reserve:    512 MB (Docker + SSH + earlyoom)
@@ -128,12 +132,14 @@ Each workspace gets its own named tmux session:
 | Session name | Purpose |
 |---|---|
 | `claude-<repo>-<branch>` | Claude Code in a specific repo/worktree |
+| `codex-<repo>-<branch>` | Codex in a specific repo/worktree |
 | `claude-manager` | Workspace management (clone, worktree, updates) |
-| `claude-onboarding` | First-run guided setup |
+| `claude-onboarding` / `codex-onboarding` | First-run guided setup |
 | `shell-host` | Host bash shell |
 | `shell-container` | Container bash shell |
 
-Sessions run on the **host** (not inside the container), so they survive container restarts. Claude Code runs inside the container via `docker exec`.
+Sessions run on the **host** (not inside the container), so they survive container restarts. The selected coding assistant runs inside the container via `docker exec`.
+The workspace manager remains Claude-based because lifecycle commands still live in `.claude/commands/`.
 
 ### Login flow
 
@@ -144,7 +150,7 @@ SSH connect
     → Mobile detection: terminal width < 60 → sets CLAUDE_MOBILE=1
     → Update notification: ~/.update-pending exists?
     → First run: ~/.workspace-initialized missing?
-      → Yes: onboarding.sh (guided setup via Claude)
+      → Yes: onboarding.sh (guided setup via the preferred assistant)
       → No: start-claude.sh (workspace picker)
 ```
 
@@ -155,7 +161,7 @@ Two-layer menu:
 **Layer 1 — Repository selection:**
 ```
   === Active sessions (1/2) ===
-  [a1] claude-myproject-main (idle)
+  [a1] codex-myproject-main (idle)
 
   === Repositories ===
   [1] projects/myproject (main)
@@ -177,7 +183,7 @@ Repos are discovered via `find ~/projects -maxdepth 3 -name ".git"`. Repos neste
 
 ## Worktree system
 
-Git worktrees enable parallel Claude sessions on different branches of the same repo. Managed by `worktree-helper.sh`:
+Git worktrees enable parallel Claude Code or Codex sessions on different branches of the same repo. Managed by `worktree-helper.sh`:
 
 | Command | What it does |
 |---|---|
@@ -215,7 +221,7 @@ Triggered by `/update` slash command or running `self-update.sh` directly. Four 
 
 1. **Repo**: `git pull --ff-only` — reports changed files
 2. **Docker image**: Always pulls latest, compares digests. If image changed:
-   - Checks for active Claude sessions
+   - Checks for active Claude or Codex sessions
    - Interactive: prompts before restarting container
    - Non-interactive: sets restart-pending flag
 3. **Host scripts**: Updates statusline-command.sh, tmux.conf, tmux-status.sh if changed

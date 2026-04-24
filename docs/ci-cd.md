@@ -36,9 +36,10 @@ Builds and pushes multi-arch Docker images to GHCR on push to main.
 Run after each image build to verify the published image works:
 
 **Base image checks:**
-- Critical tools present: `claude`, `node`, `git`, `gh`, `rg`, `fzf`, `zsh`, `tmux`, `vim`, `jq`, `aws`, `python3`, `bun`, `curl`
+- Critical tools present: `claude`, `codex`, `node`, `git`, `gh`, `rg`, `fzf`, `zsh`, `tmux`, `vim`, `jq`, `aws`, `python3`, `bun`, `curl`
 - User is `dev` (UID 1000, GID 1000)
 - `~/.claude/debug/` directory exists
+- `~/.codex/` directory exists
 - `~/.claude/remote-settings.json` exists
 
 **Portable image checks** (all base checks plus):
@@ -48,7 +49,7 @@ Run after each image build to verify the published image works:
 
 ## AMI build (`build-ami.yml`)
 
-Builds pre-baked AMIs with Docker + Claude Code pre-installed for ~40-second provisioning.
+Builds pre-baked AMIs with Docker + Claude Code + Codex pre-installed for ~40-second provisioning.
 
 **Triggers:**
 - After Docker image publish completes successfully
