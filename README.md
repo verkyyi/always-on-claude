@@ -89,6 +89,7 @@ All lifecycle operations run from inside a Claude Code session in this repo:
 | `/update` | Apply updates to a running workspace |
 | `/tailscale` | Set up Tailscale for private SSH |
 | `/workspace` | Manage repos and git worktrees |
+| `/host-schedule` | Schedule one-off or recurring container commands through the host |
 
 The lifecycle control plane is still Claude-based for now. Codex is supported inside the provisioned workspace for repo work, onboarding, and SSH-launched coding sessions.
 
@@ -107,6 +108,7 @@ Your Mac / Phone / Tablet
               │    ├── Git, GitHub CLI, AWS CLI
               │    └── Your project repos
               ├── tmux (session persistence)
+              ├── host scheduling bridge (container → atd)
               └── Workspace picker on SSH connect
 ```
 
