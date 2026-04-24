@@ -1,6 +1,6 @@
 #!/bin/bash
 # ssh-login.sh — Source this from .bash_profile.
-# Launches Claude Code workspace picker on SSH login.
+# Launches the workspace picker on SSH login.
 #
 # Skips when:
 #   - Already inside tmux

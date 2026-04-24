@@ -1,6 +1,6 @@
 # Always-On Claude Code
 
-Your own persistent Claude Code workspace on AWS. SSH in from any device, reconnect where you left off.
+Your own persistent AI coding workspace on AWS. SSH in from any device, reconnect where you left off, and run Claude Code or Codex inside the same environment.
 
 **~$14/mo on AWS. One slash command to set up.**
 
@@ -39,8 +39,10 @@ Don't want to manage infrastructure? **[Always-On Claude Hosted](https://aoc.ain
 ### Prerequisites
 
 - Claude Code CLI installed (`npm install -g @anthropic-ai/claude-code`)
-- **Claude auth** — either a subscription (Pro/Max) or an API key (`ANTHROPIC_API_KEY`)
+- **Claude auth** for provisioning slash commands — either a subscription (Pro/Max) or an API key (`ANTHROPIC_API_KEY`)
 - **AWS account** with CLI configured (`brew install awscli && aws configure`)
+
+The runtime workspace itself supports both Claude Code and Codex. Set `DEFAULT_CODE_AGENT=codex` before install/provision (or export it on the workspace host) if you want the SSH workspace picker to launch Codex by default. On provisioned hosts, first-run onboarding now guides Codex users through `codex --login`; on remote SSH hosts that means completing the device-code browser step Codex shows to sign the workspace into ChatGPT for subscription-based access. Codex auth can also use `OPENAI_API_KEY`. Provisioned hosts also set Codex defaults to `approval_policy = "never"` and `sandbox_mode = "danger-full-access"` in `~/.codex/config.toml`, and re-materialize repo-managed Codex home state like `~/.codex/AGENTS.md`, custom skills, MCP wrappers, and selected repo `.codex/` templates from this repo on install/update.
 
 ### 1. Clone and provision
 
@@ -64,7 +66,7 @@ Claude walks you through the entire AWS setup — SSH keys, security groups, ins
 ssh claude-dev
 ```
 
-On first login, Claude walks you through setup — git config, GitHub auth, and cloning your first repo. After that, you'll see a workspace picker to launch Claude Code in any repo.
+On first login, the workspace walks you through setup — git config, GitHub auth, preferred assistant auth, and cloning your first repo. After that, you'll see a workspace picker to launch Claude Code or Codex in any repo. Press `t` in the picker to toggle which assistant is the default for future launches.
 
 ### 3. Tear down when done
 
@@ -87,6 +89,9 @@ All lifecycle operations run from inside a Claude Code session in this repo:
 | `/update` | Apply updates to a running workspace |
 | `/tailscale` | Set up Tailscale for private SSH |
 | `/workspace` | Manage repos and git worktrees |
+| `/host-schedule` | Schedule one-off or recurring container commands through the host |
+
+The lifecycle control plane is still Claude-based for now. Codex is supported inside the provisioned workspace for repo work, onboarding, and SSH-launched coding sessions.
 
 ---
 
@@ -98,15 +103,16 @@ Your Mac / Phone / Tablet
     └── SSH
          └── Ubuntu 24.04 (EC2 t4g.small, 20GB)
               ├── Docker container (claude-dev)
-              │    ├── Claude Code
+              │    ├── Claude Code + Codex
               │    ├── Node.js 22, Bun, npm
               │    ├── Git, GitHub CLI, AWS CLI
               │    └── Your project repos
               ├── tmux (session persistence)
+              ├── host scheduling bridge (container → atd)
               └── Workspace picker on SSH connect
 ```
 
-**Everything persists** — auth, settings, repos, tmux sessions, Claude history — all survive container restarts and reconnects.
+**Everything persists** — auth, settings, repos, tmux sessions, Claude/Codex state — all survive container restarts and reconnects.
 
 ---
 
@@ -114,10 +120,10 @@ Your Mac / Phone / Tablet
 
 | Component | Purpose |
 |---|---|
-| **Pre-built AMI** | Docker + Claude Code pre-installed, arm64 + x86_64 (~40s boot) |
+| **Pre-built AMI** | Docker + Claude Code + Codex pre-installed, arm64 + x86_64 (~40s boot) |
 | **Docker container** | Isolated workspace with dev tools, bind-mounted for persistence |
 | **tmux** | Sessions survive SSH disconnects |
-| **Login menu** | SSH in → choose Claude Code, bash, or host shell |
+| **Login menu** | SSH in → choose your default assistant, bash, or host shell |
 
 ---
 
@@ -129,7 +135,7 @@ Your Mac / Phone / Tablet
 | 20GB gp3 EBS | ~$1.60/mo |
 | **Total** | **~$14/mo** |
 
-Stop the instance when not in use to save money. No additional fees — you bring your own Claude subscription.
+Stop the instance when not in use to save money. No additional fees — you bring your own Claude or OpenAI credentials.
 
 ---
 

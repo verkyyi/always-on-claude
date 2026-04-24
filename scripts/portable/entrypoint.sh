@@ -22,6 +22,7 @@ info "Container init"
 for dir in \
     /home/dev/.claude/debug \
     /home/dev/.claude/commands \
+    /home/dev/.codex \
     /home/dev/.config/gh \
     /home/dev/projects \
     /home/dev/overnight; do
@@ -77,8 +78,16 @@ if [[ -f /home/dev/dev-env/scripts/runtime/tmux-status.sh ]]; then
     chmod +x /home/dev/.tmux-status.sh
 fi
 
+# Repo-managed user-scope assistant state
+if [[ -x /home/dev/dev-env/scripts/runtime/sync-claude-personalization.sh ]]; then
+    HOME=/home/dev /home/dev/dev-env/scripts/runtime/sync-claude-personalization.sh >/dev/null || true
+fi
+if [[ -x /home/dev/dev-env/scripts/runtime/sync-codex-personalization.sh ]]; then
+    HOME=/home/dev /home/dev/dev-env/scripts/runtime/sync-codex-personalization.sh >/dev/null || true
+fi
+
 # Fix ownership on everything
-chown -R dev:dev /home/dev/.claude \
+chown -R dev:dev /home/dev/.claude /home/dev/.codex \
     /home/dev/.config /home/dev/projects /home/dev/overnight \
     /home/dev/.tmux.conf /home/dev/.tmux-status.sh 2>/dev/null || true
 chown -h dev:dev /home/dev/.claude.json 2>/dev/null || true
@@ -99,7 +108,7 @@ export PATH="$HOME/.local/bin:$HOME/.bun/bin:$PATH"
 # Source .bashrc
 [[ -f ~/.bashrc ]] && source ~/.bashrc
 
-# Auto-launch Claude Code on interactive login (portable mode)
+# Auto-launch the workspace picker on interactive login (portable mode)
 # shellcheck source=scripts/portable/ssh-login-portable.sh
 source ~/dev-env/scripts/portable/ssh-login-portable.sh
 PROFILE

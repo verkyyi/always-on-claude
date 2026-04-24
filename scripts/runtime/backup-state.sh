@@ -159,6 +159,7 @@ check_mount() {
 }
 
 check_mount "$HOME/.claude" "Claude config dir"
+check_mount "$HOME/.codex" "Codex config dir"
 check_mount "$HOME/.claude.json" "Claude onboarding state"
 check_mount "$HOME/.config/gh" "GitHub CLI config"
 check_mount "$HOME/projects" "Projects directory"

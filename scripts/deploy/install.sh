@@ -143,7 +143,7 @@ else
     skip "Docker group membership"
 fi
 
-# Node.js (needed for Claude Code on host)
+# Node.js (needed for Claude Code and Codex on host)
 if ! command -v node &>/dev/null; then
     step="Node.js install"
     curl -fsSL https://deb.nodesource.com/setup_22.x | sudo bash -
@@ -187,6 +187,15 @@ if ! command -v claude &>/dev/null; then
     ok "Claude Code installed on host"
 else
     skip "Claude Code (host)"
+fi
+
+# Codex on host (for coding sessions and optional setup flow)
+if ! command -v codex &>/dev/null; then
+    step="Codex install (host)"
+    sudo npm install -g @openai/codex
+    ok "Codex installed on host"
+else
+    skip "Codex (host)"
 fi
 
 # --- Swap -------------------------------------------------------------------
@@ -297,10 +306,23 @@ step="host directories"
 
 mkdir -p ~/.claude/commands
 mkdir -p ~/.claude/debug
+mkdir -p ~/.codex
 mkdir -p ~/.config/gh
 mkdir -p "$PROJECTS_DIR"
 mkdir -p ~/.gitconfig.d
 mkdir -p ~/.aws
+
+# Claude expects this file to exist when ~/.claude is bind-mounted from the host.
+if [[ ! -f ~/.claude/remote-settings.json ]]; then
+    echo '{}' > ~/.claude/remote-settings.json
+    ok "Created ~/.claude/remote-settings.json"
+elif [[ ! -s ~/.claude/remote-settings.json ]]; then
+    echo '{}' > ~/.claude/remote-settings.json
+    ok "Fixed empty ~/.claude/remote-settings.json"
+else
+    # shellcheck disable=SC2088
+    skip "~/.claude/remote-settings.json"
+fi
 
 # Critical: must exist as a FILE with valid JSON before compose up
 # (Docker would create it as a directory if missing)
@@ -323,6 +345,22 @@ if [[ ! -f ~/.ssh/known_hosts ]]; then
 else
     # shellcheck disable=SC2088
     skip "~/.ssh/known_hosts"
+fi
+
+if [[ -x "$DEV_ENV/scripts/runtime/sync-codex-personalization.sh" ]]; then
+    codex_setup_status=$("$DEV_ENV/scripts/runtime/sync-codex-personalization.sh")
+    if [[ "$codex_setup_status" == "updated" ]]; then
+        ok "Updated Codex home state"
+    else
+        skip "Codex home state"
+    fi
+elif [[ -x "$DEV_ENV/scripts/runtime/sync-codex-config.sh" ]]; then
+    codex_config_status=$("$DEV_ENV/scripts/runtime/sync-codex-config.sh")
+    if [[ "$codex_config_status" == "updated" ]]; then
+        ok "Updated $HOME/.codex/config.toml"
+    else
+        skip "$HOME/.codex/config.toml"
+    fi
 fi
 
 # Slash commands now live in .claude/commands/ inside the repo
@@ -368,6 +406,16 @@ if [[ -f "$DEV_ENV/scripts/runtime/statusline-command.sh" ]]; then
     else
         echo "$desired" | jq . > ~/.claude/settings.json
         ok "Created settings.json with default settings"
+    fi
+fi
+
+# Claude user-scope commands managed by this repo.
+if [[ -x "$DEV_ENV/scripts/runtime/sync-claude-personalization.sh" ]]; then
+    claude_setup_status=$("$DEV_ENV/scripts/runtime/sync-claude-personalization.sh")
+    if [[ "$claude_setup_status" == "updated" ]]; then
+        ok "Updated Claude home state"
+    else
+        skip "Claude home state"
     fi
 fi
 
@@ -473,6 +521,23 @@ else
     skip ".bashrc already sourced from .bash_profile"
 fi
 
+case "${DEFAULT_CODE_AGENT:-claude}" in
+    codex) persisted_agent="codex" ;;
+    *) persisted_agent="claude" ;;
+esac
+
+if grep -q '^export DEFAULT_CODE_AGENT=' ~/.bash_profile 2>/dev/null; then
+    sed -i "s/^export DEFAULT_CODE_AGENT=.*/export DEFAULT_CODE_AGENT=\"$persisted_agent\"/" ~/.bash_profile
+    ok "Updated DEFAULT_CODE_AGENT in .bash_profile ($persisted_agent)"
+else
+    {
+        echo ""
+        echo "# Default coding assistant for the workspace picker"
+        echo "export DEFAULT_CODE_AGENT=\"$persisted_agent\""
+    } >> ~/.bash_profile
+    ok "Persisted DEFAULT_CODE_AGENT in .bash_profile ($persisted_agent)"
+fi
+
 if ! grep -q "ssh-login.sh" ~/.bash_profile 2>/dev/null; then
     {
         echo ""
@@ -567,6 +632,13 @@ ok "Systemd service installed and enabled"
 step="chmod scripts"
 chmod +x "$DEV_ENV"/scripts/deploy/*.sh "$DEV_ENV"/scripts/runtime/*.sh 2>/dev/null || true
 
+if [[ -x "$DEV_ENV/scripts/runtime/install-schedule-bridge.sh" ]]; then
+    step="schedule bridge"
+    bash "$DEV_ENV/scripts/runtime/install-schedule-bridge.sh"
+else
+    skip "schedule bridge script not found"
+fi
+
 # --- Docker pull + start ----------------------------------------------------
 
 info "Docker container"
@@ -604,7 +676,7 @@ ok "Container running"
 # Fix permissions (volumes mount as root, aws cli may create ~/.aws as root)
 step="fix permissions"
 run_docker docker compose exec -T -u root dev bash -c \
-    "chown dev:dev /home/dev/projects /home/dev/.claude" 2>/dev/null || true
+    "chown dev:dev /home/dev/projects /home/dev/.claude /home/dev/.codex" 2>/dev/null || true
 [[ -d "$HOME/.aws" ]] && sudo chown -R "$(id -u dev):$(id -g dev)" "$HOME/.aws" 2>/dev/null || true
 ok "Fixed permissions"
 
@@ -621,4 +693,4 @@ EOF
 ok "Wrote provisioned marker"
 
 echo ""
-echo "  Connect via SSH to complete setup — Claude will guide you through auth."
+echo "  Connect via SSH to complete setup — your selected coding assistant will guide you through auth."

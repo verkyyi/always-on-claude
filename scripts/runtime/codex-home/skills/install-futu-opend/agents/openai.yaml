@@ -1,0 +1,7 @@
+interface:
+  display_name: "Install Futu OpenD"
+  short_description: "Install or upgrade Futu OpenD"
+  default_prompt: "Use $install-futu-opend to install or upgrade Futu OpenD and the futu-api SDK."
+
+policy:
+  allow_implicit_invocation: true

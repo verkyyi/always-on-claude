@@ -1,0 +1,7 @@
+interface:
+  display_name: "Release Plugin"
+  short_description: "Cut a new Claude plugin release"
+  default_prompt: "Use $release-plugin to bump, tag, and publish a new Claude Code plugin release."
+
+policy:
+  allow_implicit_invocation: true

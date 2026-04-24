@@ -47,6 +47,12 @@ test_defaults_dev_env_path() {
     assert_eq "$HOME/dev-env" "$result"
 }
 
+test_defaults_code_agent() {
+    local result
+    result=$(_source_config DEFAULT_CODE_AGENT)
+    assert_eq "claude" "$result"
+}
+
 test_env_file_overrides_defaults() {
     cat > "$HOME/dev-env/.env" <<'EOF'
 INSTANCE_TYPE=t3.large
@@ -73,6 +79,12 @@ test_env_var_overrides_defaults() {
     local result
     result=$(VOLUME_SIZE=50 _source_config VOLUME_SIZE)
     assert_eq "50" "$result"
+}
+
+test_env_var_overrides_code_agent() {
+    local result
+    result=$(DEFAULT_CODE_AGENT=codex _source_config DEFAULT_CODE_AGENT)
+    assert_eq "codex" "$result"
 }
 
 test_legacy_tag_compat() {

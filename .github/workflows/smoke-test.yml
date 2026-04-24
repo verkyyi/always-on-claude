@@ -42,7 +42,7 @@ jobs:
 
       - name: Verify critical tools
         run: |
-          for tool in claude node git gh rg fzf zsh tmux vim jq aws python3 bun curl; do
+          for tool in claude codex node git gh rg fzf zsh tmux vim jq aws python3 bun curl; do
             docker exec smoke-test which "$tool" \
               && echo "OK: $tool" \
               || { echo "FAIL: $tool not found"; exit 1; }
@@ -58,6 +58,7 @@ jobs:
       - name: Verify directories
         run: |
           docker exec smoke-test test -d /home/dev/.claude || { echo "FAIL: ~/.claude/ missing"; exit 1; }
+          docker exec smoke-test test -d /home/dev/.codex || { echo "FAIL: ~/.codex/ missing"; exit 1; }
           docker exec smoke-test test -d /home/dev/.claude/debug || { echo "FAIL: ~/.claude/debug/ missing"; exit 1; }
           docker exec smoke-test test -f /home/dev/.claude/remote-settings.json || { echo "FAIL: ~/.claude/remote-settings.json missing"; exit 1; }
           echo "OK: all required directories exist"

@@ -25,6 +25,9 @@ services:
       # Also stores .claude.json (onboarding state) — symlinked by entrypoint
       - claude-data:/home/dev/.claude
 
+      # Codex config/auth/history
+      - codex-data:/home/dev/.codex
+
       # Git config (persists user.name, user.email, etc. across rebuilds)
       # Uses XDG path ~/.config/git/ — git reads ~/.config/git/config natively
       - gitconfig:/home/dev/.config/git
@@ -49,6 +52,10 @@ services:
       # - TS_HOSTNAME=claude-dev
       # Set ANTHROPIC_API_KEY for API key auth (alternative to claude login)
       # - ANTHROPIC_API_KEY=sk-ant-xxx
+      # Set OPENAI_API_KEY for Codex API key auth (alternative to codex login)
+      # - OPENAI_API_KEY=sk-xxx
+      # Select the default agent launched by the picker (claude or codex)
+      # - DEFAULT_CODE_AGENT=codex
 
     # NET_ADMIN needed for Tailscale
     cap_add:
@@ -58,6 +65,7 @@ services:
 
 volumes:
   claude-data:
+  codex-data:
   gitconfig:
   projects:
   overnight:

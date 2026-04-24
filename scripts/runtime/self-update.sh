@@ -218,7 +218,7 @@ fi
 
 # Active sessions warning
 if [[ "$IMAGE_NEEDS_RESTART" == "true" ]]; then
-    active_sessions=$(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep -E '^(claude-|shell-)' || true)
+    active_sessions=$(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep -E '^((claude|codex)-|shell-)' || true)
     if [[ -n "$active_sessions" ]]; then
         echo ""
         warn "Active sessions (will survive restart — tmux runs on host):"
@@ -305,7 +305,7 @@ if [[ "$IMAGE_NEEDS_RESTART" == "true" ]]; then
     docker_cmd pull "$IMAGE" 2>&1
 
     # Check for active sessions — ask about restart timing
-    active_sessions=$(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep -E '^(claude-|shell-)' || true)
+    active_sessions=$(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep -E '^((claude|codex)-|shell-)' || true)
     do_restart=true
 
     if [[ -n "$active_sessions" && "$AUTO_YES" != "true" && -t 0 ]]; then
@@ -322,7 +322,7 @@ if [[ "$IMAGE_NEEDS_RESTART" == "true" ]]; then
         docker_compose up -d 2>&1
         # Fix container permissions after restart
         docker_compose exec -T -u root dev bash -c \
-            "chown -R dev:dev /home/dev/projects /home/dev/.claude" 2>/dev/null || true
+            "chown -R dev:dev /home/dev/projects /home/dev/.claude /home/dev/.codex" 2>/dev/null || true
         # Clean up old images
         docker_cmd image prune -f 2>/dev/null || true
         ok "Container restarted with updated image"
@@ -364,6 +364,33 @@ if [[ -f "$DEV_ENV/scripts/runtime/tmux-status.sh" ]]; then
         ok "Updated ~/.tmux-status.sh"
         host_updated=true
     fi
+fi
+
+if [[ -x "$DEV_ENV/scripts/runtime/sync-codex-personalization.sh" ]]; then
+    codex_setup_status=$("$DEV_ENV/scripts/runtime/sync-codex-personalization.sh")
+    if [[ "$codex_setup_status" == "updated" ]]; then
+        ok "Updated Codex home state"
+        host_updated=true
+    fi
+elif [[ -x "$DEV_ENV/scripts/runtime/sync-codex-config.sh" ]]; then
+    codex_config_status=$("$DEV_ENV/scripts/runtime/sync-codex-config.sh")
+    if [[ "$codex_config_status" == "updated" ]]; then
+        ok "Updated ~/.codex/config.toml"
+        host_updated=true
+    fi
+fi
+
+if [[ -x "$DEV_ENV/scripts/runtime/sync-claude-personalization.sh" ]]; then
+    claude_setup_status=$("$DEV_ENV/scripts/runtime/sync-claude-personalization.sh")
+    if [[ "$claude_setup_status" == "updated" ]]; then
+        ok "Updated Claude home state"
+        host_updated=true
+    fi
+fi
+
+if [[ -x "$DEV_ENV/scripts/runtime/install-schedule-bridge.sh" && -f "$DEV_ENV/.provisioned" ]]; then
+    "$DEV_ENV/scripts/runtime/install-schedule-bridge.sh"
+    host_updated=true
 fi
 
 if [[ "$host_updated" == "true" ]]; then

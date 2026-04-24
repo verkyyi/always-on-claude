@@ -2,17 +2,18 @@
 
 ## First-run onboarding
 
-On first SSH login, `ssh-login.sh` detects the absence of `~/.workspace-initialized` and launches `onboarding.sh` — a guided Claude session that walks through:
+On first SSH login, `ssh-login.sh` detects the absence of `~/.workspace-initialized` and launches `onboarding.sh` — a guided assistant session that walks through:
 
 1. Git config (name, email)
 2. GitHub auth (`gh auth login`)
-3. Claude Code auth (`claude login` or API key)
-4. Cloning the first repo
-5. Quick tour of the workspace
+3. Preferred assistant auth (`claude login`, `codex --login`, or API key)
+4. Verify assistant auth/state inside the container
+5. Cloning the first repo
+6. Quick tour of the workspace
 
-The onboarding session runs in tmux (`claude-onboarding`). When it ends (exit or detach), `~/.workspace-initialized` is created — subsequent logins skip straight to the workspace picker.
+The onboarding session runs in tmux (`claude-onboarding` or `codex-onboarding`). When it ends (exit or detach), `~/.workspace-initialized` is created — subsequent logins skip straight to the workspace picker.
 
-In portable mode, `start-claude-portable.sh` handles a simpler first-run check: if git config or GitHub CLI auth is missing, it offers to run `setup-auth.sh`.
+When `DEFAULT_CODE_AGENT=codex`, onboarding explicitly runs `codex --login` on the provisioned host first. On remote SSH hosts, the practical subscription path is the device-code browser step Codex shows, which still signs the workspace into the user's ChatGPT account. In portable mode, `start-claude-portable.sh` handles a simpler first-run check: if git config or GitHub CLI auth is missing, it offers to run `setup-auth.sh`.
 
 ## SSH login flow
 
@@ -42,15 +43,20 @@ ssh -o SendEnv=NO_CLAUDE claude-dev   # with NO_CLAUDE=1 in local env
 
 Two-layer interactive menu presented on SSH login.
 
+Set `DEFAULT_CODE_AGENT=codex` before install/provision, or export it on the host before launch, if you want repo selections to open Codex sessions by default. You can also press `t` in the workspace picker to toggle the default agent and persist it to `~/.bash_profile`. The manager path (`m`) still opens Claude because it relies on Claude slash commands.
+
+Provisioned hosts also sync `~/.codex/config.toml` so Codex defaults to `approval_policy = "never"` and `sandbox_mode = "danger-full-access"`. That matches the intended trust model for these isolated workspaces and applies on both the host and inside the container via the shared `~/.codex` bind mount. The host additionally re-materializes repo-managed Codex home state directly from `scripts/runtime/codex-home/` and selected repo templates from `scripts/runtime/codex-projects/`, so global AGENTS, custom skills, and MCP wrappers do not depend on local plugin activation.
+
 ### Layer 1: Repository selection
 
 ```
   === Active sessions (1/2) ===
-  [a1] claude-myproject-main (idle)
+  [a1] codex-myproject-main (idle)
 
   === Repositories ===
   [1] projects/myproject (main)
   [2] projects/another-repo (develop)
+  [t] Toggle default -> claude
   [m] Manage workspaces
   [h] Host shell
   [c] Container shell
@@ -60,6 +66,7 @@ Two-layer interactive menu presented on SSH login.
 |---|---|
 | Number | Select a repo → Layer 2 (or launch directly if no worktrees) |
 | `a1`, `a2`... | Reattach to existing tmux session |
+| `t` | Toggle the default agent between Claude and Codex |
 | `m` | Launch workspace manager (Claude with management prompt) |
 | `h` | Host bash shell in tmux |
 | `c` | Container bash shell in tmux |
@@ -82,7 +89,7 @@ New sessions are blocked when at capacity:
 
 ```
   Session limit reached (2/2).
-  Each Claude session uses ~650 MB — more sessions risk OOM.
+  Each coding session uses ~650 MB — more sessions risk OOM.
 
   Options:
     - Re-attach to an existing session (select it from the menu)
@@ -97,7 +104,7 @@ Repos are found via `find ~/projects -maxdepth 3 -name ".git"`. Repos nested dee
 
 ## Worktree management
 
-Git worktrees enable parallel Claude sessions on different branches of the same repo.
+Git worktrees enable parallel Claude Code or Codex sessions on different branches of the same repo.
 
 ### Via slash command
 
@@ -105,7 +112,7 @@ Git worktrees enable parallel Claude sessions on different branches of the same 
 /workspace
 ```
 
-Claude provides an interactive menu for cloning repos, creating/removing worktrees, and cleanup.
+Claude provides the workspace-management menu for cloning repos, creating/removing worktrees, and cleanup.
 
 ### Via script
 
@@ -190,6 +197,7 @@ Run from a Claude session in the always-on-claude repo:
 | `/tailscale` | Set up Tailscale for private SSH access |
 | `/workspace` | Manage repos and git worktrees |
 | `/backup` | EBS snapshot management (create/list/restore/prune) |
+| `/schedule` | Schedule container commands through the host `atd` bridge |
 
 ### Mobile-friendly commands
 
@@ -204,9 +212,24 @@ Short aliases designed for phone typing:
 | `/ship` | Merge PR, deploy, verify health |
 | `/review` | Summarize open PRs, approve/merge |
 
+### Scheduled jobs
+
+Container coding sessions do not get direct host `at` or cron access. Use `/host-schedule` in Claude or the Codex `schedule-host-job` skill to submit jobs through the host bridge. `/schedule` may resolve to Claude's built-in scheduling feature, so `/host-schedule` is the reliable workspace command:
+
+```bash
+/home/dev/dev-env/scripts/runtime/aoc-schedule.sh at "03:00 tomorrow" -- "npm test"
+/home/dev/dev-env/scripts/runtime/aoc-schedule.sh cron "0 3 * * *" -- "npm test"
+/home/dev/dev-env/scripts/runtime/aoc-schedule.sh list
+/home/dev/dev-env/scripts/runtime/aoc-schedule.sh logs <job-id>
+```
+
+The host validates requests, stores status/logs in `~/.always-on-claude/schedule/`, and runs the command inside the container at the requested time. Recurring jobs are stored as managed blocks in the `dev` user's host crontab and can be removed with `aoc-schedule.sh cancel <job-id>`.
+
 ### How slash commands work
 
 Commands live in `.claude/commands/` and are auto-discovered by Claude Code when running in this repo. No manual installation needed — just clone the repo and run `claude`.
+
+Codex support is runtime-level today: SSH-launched repo sessions, onboarding, auth persistence, and interactive coding work. The lifecycle slash-command control plane remains Claude-based.
 
 ### Mobile detection
 

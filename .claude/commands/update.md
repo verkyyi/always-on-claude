@@ -11,7 +11,7 @@ Then stop — do not proceed with any further steps.
 
 ---
 
-You are applying updates to an always-on Claude Code workspace.
+You are applying updates to an always-on coding workspace.
 
 **Important:** The docker compose command is:
 
@@ -99,14 +99,14 @@ If the self-update script fails, or if the user wants to inspect changes manuall
 
      ```bash
      cd ~/dev-env && sudo --preserve-env=HOME docker compose pull
-     tmux list-sessions -F '#{session_name}' 2>/dev/null | grep '^claude-' || echo "No active sessions"
+     tmux list-sessions -F '#{session_name}' 2>/dev/null | grep -E '^(claude|codex)-' || echo "No active sessions"
      ```
 
      If no active sessions, restart:
 
      ```bash
      cd ~/dev-env && sudo --preserve-env=HOME docker compose up -d
-     sudo --preserve-env=HOME docker compose exec -T -u root dev bash -c "chown -R dev:dev /home/dev/projects /home/dev/.claude" 2>/dev/null || true
+     sudo --preserve-env=HOME docker compose exec -T -u root dev bash -c "chown -R dev:dev /home/dev/projects /home/dev/.claude /home/dev/.codex" 2>/dev/null || true
      sudo docker image prune -f
      ```
 
@@ -161,7 +161,7 @@ If the self-update script fails, or if the user wants to inspect changes manuall
 
 ## Important
 
-- Never restart the container without checking for active Claude sessions first
+- Never restart the container without checking for active Claude or Codex sessions first
 - If the user has active sessions and a restart is needed, explain what needs to happen and let them decide when
 - Always back up state before container restarts — update.sh does this automatically for rebuilds, but verify a backup exists
 - After a container restart, always run restore-state.sh to re-install user packages

@@ -7,7 +7,7 @@
 | Provision (AWS) | `/provision` | — |
 | Provision (Mac) | `/provision-local` | — |
 | Install on server | — | `scripts/deploy/install.sh` |
-| Auth setup | Claude walks through it | `scripts/deploy/setup-auth.sh` |
+| Auth setup | Onboarding walks through it | `scripts/deploy/setup-auth.sh` |
 | Destroy (AWS) | `/destroy` | `scripts/deploy/destroy.sh` |
 | Destroy (Mac) | `/destroy-local` | — |
 
@@ -62,11 +62,17 @@ The override mechanism preserves env vars set before sourcing `.env` — env var
 | `DEV_ENV` | `$HOME/dev-env` | Where the repo is cloned on the server |
 | `PROJECTS_DIR` | `$HOME/projects` | Projects directory (bind-mounted into container) |
 
+#### Runtime
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `DEFAULT_CODE_AGENT` | `claude` | Default assistant launched by the SSH workspace picker (`claude` or `codex`) |
+
 #### Sessions
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `MAX_SESSIONS` | auto-detect | Max concurrent Claude sessions. Auto: `min((RAM - 512MB) / 650MB, CPUs)` |
+| `MAX_SESSIONS` | auto-detect | Max concurrent Claude/Codex sessions. Auto: `min((RAM - 512MB) / 650MB, CPUs)` |
 
 #### AMI build
 
@@ -112,25 +118,50 @@ curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/scrip
 ### Phase 1: Automated (no interaction)
 
 1. **System user**: Verifies `dev` user exists (created by cloud-init via user-data)
-2. **System packages**: Docker, Docker Compose, tmux, jq, Node.js 22, GitHub CLI, Claude Code
+2. **System packages**: Docker, Docker Compose, tmux, jq, Node.js 22, GitHub CLI, Claude Code, Codex
 3. **Swap**: 2GB swapfile, swappiness=10
 4. **earlyoom**: OOM killer — 5% RAM / 10% swap thresholds. Protects SSH/systemd, prefers killing node/claude
 5. **OOM score protection**: SSH, Tailscale, SSM agent get score -900
 6. **Repository**: Clones `always-on-claude` to `~/dev-env` (or pulls if exists)
-7. **Host directories**: Creates `~/.claude/`, `~/projects/`, `~/.claude.json`, etc.
+7. **Host directories**: Creates `~/.claude/`, `~/.codex/`, `~/projects/`, `~/.claude.json`, etc.
 8. **Settings**: Generates `~/.claude/settings.json` with permission bypass, status line, MCP servers
 9. **Heartbeat hooks**: If `AOC_HEARTBEAT_URL` + `AOC_HEARTBEAT_TOKEN` set, adds webhook hooks for Notification (idle), Stop, and SessionStart events
 10. **tmux config**: Installs `~/.tmux.conf` and `~/.tmux-status.sh`
-11. **SSH config**: Accepts `NO_CLAUDE` env var. Optional password auth via `AOC_SSH_PASSWORD`
-12. **Shell integration**: Adds `ssh-login.sh` to `.bash_profile`
-13. **Auto-updater**: Installs systemd timer via `install-updater.sh`
-14. **CloudWatch alarms**: Memory warning (>80%) and critical (>90%) alarms via SNS
-15. **Docker**: Pulls image, starts container, fixes permissions
-16. **Provisioned marker**: Writes `~/dev-env/.provisioned` with timestamp and commit
+11. **Schedule bridge**: Installs host `atd`, cron, and a systemd path/service that accepts container schedule requests
+12. **SSH config**: Accepts `NO_CLAUDE` env var. Optional password auth via `AOC_SSH_PASSWORD`
+13. **Shell integration**: Adds `ssh-login.sh` to `.bash_profile`
+14. **Auto-updater**: Installs systemd timer via `install-updater.sh`
+15. **CloudWatch alarms**: Memory warning (>80%) and critical (>90%) alarms via SNS
+16. **Docker**: Pulls image, starts container, fixes permissions
+17. **Provisioned marker**: Writes `~/dev-env/.provisioned` with timestamp and commit
 
 ### Auth setup (first SSH login)
 
-Auth is handled by the onboarding flow on first SSH login — Claude walks the user through git config, GitHub auth, and Claude verification interactively. See `scripts/runtime/onboarding-prompt.txt`.
+Auth is handled by the onboarding flow on first SSH login — the selected assistant walks the user through git config, GitHub auth, host-side assistant login, and container verification interactively. When `DEFAULT_CODE_AGENT=codex`, onboarding uses `codex --login` on the provisioned host; on remote SSH hosts this means completing the device-code browser step Codex shows, which signs the workspace into the user's ChatGPT account for subscription-based Codex access. See `scripts/runtime/onboarding-prompt.txt`.
+
+## Staging verification
+
+Use the staging verifier to test the current local checkout on a disposable EC2 host before deploying to production.
+
+```bash
+bash scripts/deploy/verify-staging.sh
+```
+
+What it verifies:
+
+1. Launches a fresh Ubuntu 24.04 instance with staging-safe names and tags
+2. Uploads the current local repo snapshot instead of pulling `main`
+3. Runs `install.sh` remotely with `LOCAL_BUILD=1` by default
+4. Verifies host tools, persisted config, container runtime, and boot persistence after reboot
+5. If `OPENAI_API_KEY` is set and `DEFAULT_CODE_AGENT=codex`, runs a live `codex exec` check plus a picker-driven `codex-*` tmux session check
+
+Useful overrides:
+
+- `KEEP_ON_FAILURE=1` keeps failed staging resources for debugging
+- `KEEP_ON_SUCCESS=1` keeps successful staging resources
+- `STAGING_VERIFY_REBOOT=0` skips the reboot phase for faster iteration
+- `STAGING_VERIFY_LIVE_AGENT=0` skips live Codex checks
+- `INSTANCE_TYPE=t4g.medium` or `INSTANCE_TYPE=t3.medium` lets you choose the target architecture explicitly
 
 ## Auto-updater
 
@@ -144,7 +175,7 @@ The timer only checks for updates (git fetch). It never applies changes — that
 
 ## AMI builds
 
-Pre-baked AMIs have Docker + Claude Code pre-installed for ~40-second provisioning.
+Pre-baked AMIs have Docker + Claude Code + Codex pre-installed for ~40-second provisioning.
 
 ### Via GitHub Actions
 
@@ -177,6 +208,7 @@ Self-contained single-container deployment. No host setup scripts needed.
 ```bash
 docker run -d --name claude-dev \
   -v claude-data:/home/dev/.claude \
+  -v codex-data:/home/dev/.codex \
   -v claude-projects:/home/dev/projects \
   ghcr.io/verkyyi/always-on-claude:portable
 ```
@@ -186,6 +218,7 @@ docker run -d --name claude-dev \
 ```bash
 docker run -d --cap-add=NET_ADMIN --name claude-dev \
   -v claude-data:/home/dev/.claude \
+  -v codex-data:/home/dev/.codex \
   -v claude-projects:/home/dev/projects \
   -v tailscale-state:/var/lib/tailscale \
   -e TS_AUTHKEY=tskey-auth-xxx \
@@ -202,7 +235,7 @@ docker compose -f docker-compose.portable.yml up -d
 
 Runs as root, then drops privileges:
 
-1. Creates directories (`~/.claude/`, `~/projects/`, `~/overnight/`, etc.)
+1. Creates directories (`~/.claude/`, `~/.codex/`, `~/projects/`, `~/overnight/`, etc.)
 2. Handles `.claude.json` — stores real file at `~/.claude/claude.json`, symlinks from `~/.claude.json`
 3. Creates `remote-settings.json` (Claude crashes without it)
 4. Generates `settings.json` with permission bypass + status line
@@ -220,6 +253,8 @@ Runs as root, then drops privileges:
 | `TS_AUTHKEY` | Tailscale auth key for auto-connect |
 | `TS_HOSTNAME` | Tailscale hostname (default: `claude-dev`) |
 | `ANTHROPIC_API_KEY` | API key auth (alternative to `claude login`) |
+| `OPENAI_API_KEY` | API key auth for Codex (alternative to `codex login`) |
+| `DEFAULT_CODE_AGENT` | Default assistant launched by the picker (`claude` or `codex`) |
 
 ## Tailscale
 

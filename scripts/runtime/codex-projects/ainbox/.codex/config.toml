@@ -1,0 +1,4 @@
+project_doc_fallback_filenames = ["CLAUDE.md"]
+
+[features]
+codex_hooks = true

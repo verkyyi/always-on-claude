@@ -1,0 +1,7 @@
+interface:
+  display_name: "Futu API"
+  short_description: "Trade and quote via Futu OpenAPI"
+  default_prompt: "Use $futuapi to query quotes or place simulated orders with the Futu OpenAPI."
+
+policy:
+  allow_implicit_invocation: true

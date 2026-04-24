@@ -1,0 +1,14 @@
+[mcp_servers.context7]
+command = "npx"
+args = ["-y", "@upstash/context7-mcp"]
+
+[mcp_servers.fetch]
+command = "bash"
+args = ["/home/dev/.codex/bin/fetch-mcp.sh"]
+
+[mcp_servers.playwright]
+command = "bash"
+args = ["/home/dev/.codex/bin/playwright-mcp.sh"]
+
+[mcp_servers.openaiDeveloperDocs]
+url = "https://developers.openai.com/mcp"

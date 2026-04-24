@@ -78,6 +78,7 @@ check_mount() {
 }
 
 check_mount "$HOME/.claude" "Claude config dir" true
+check_mount "$HOME/.codex" "Codex config dir"
 check_mount "$HOME/.config/gh" "GitHub CLI config"
 check_mount "$HOME/projects" "Projects directory" true
 check_mount "$HOME/.gitconfig.d" "Git config dir"
@@ -169,7 +170,7 @@ fi
 info "Fixing container permissions"
 
 docker exec -u root "$CONTAINER_NAME" bash -c \
-    "chown -R dev:dev /home/dev/projects /home/dev/.claude" 2>/dev/null || true
+    "chown -R dev:dev /home/dev/projects /home/dev/.claude /home/dev/.codex" 2>/dev/null || true
 ok "Container permissions fixed"
 
 # --- 6. Check for dirty repos ----------------------------------------------
