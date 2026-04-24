@@ -4,7 +4,7 @@
 # Mac mini through the host's existing Tailscale SSH, then use docker exec.
 #
 # Usage on the Mac mini:
-#   mkdir -p ~/aoc-data/{claude,codex,gitconfig,gh,overnight} ~/projects
+#   mkdir -p ~/aoc-data/{claude,codex,gitconfig,gh,aws,overnight,public} ~/projects
 #   docker compose -f docker-compose.macmini.yml up -d
 #   docker exec -it claude-dev bash -lc 'bash ~/dev-env/scripts/portable/start-claude-portable.sh'
 
@@ -27,17 +27,21 @@ services:
       - ${HOME}/aoc-data/codex:/home/dev/.codex
       - ${HOME}/aoc-data/gitconfig:/home/dev/.config/git
       - ${HOME}/aoc-data/gh:/home/dev/.config/gh
+      - ${HOME}/aoc-data/aws:/home/dev/.aws
       - ${HOME}/aoc-data/overnight:/home/dev/overnight
+      - ${HOME}/aoc-data/public:/srv/public
       - ${HOME}/projects:/home/dev/projects
       - ${HOME}/always-on-claude:/home/dev/dev-env:ro
+      - ${HOME}/.ssh:/home/dev/.ssh:ro
 
     environment:
       - NODE_ENV=development
       - GIT_CONFIG_GLOBAL=/home/dev/.config/git/config
+      - TZ=America/Los_Angeles
 
     command: >
       bash -lc '
-        mkdir -p ~/.claude/debug ~/.claude/commands ~/.codex ~/.config/gh ~/.config/git ~/projects ~/overnight;
+        mkdir -p ~/.claude/debug ~/.claude/commands ~/.codex ~/.config/gh ~/.config/git ~/.aws ~/projects ~/overnight /srv/public;
         touch ~/.config/git/config;
         test -f ~/.claude/claude.json || echo "{}" > ~/.claude/claude.json;
         rm -rf ~/.claude.json && ln -s ~/.claude/claude.json ~/.claude.json;
