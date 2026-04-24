@@ -76,6 +76,7 @@ services:
         exec sleep infinity
       '
 
-    mem_limit: 3g
-    memswap_limit: 4g
+    mem_limit: 8g
+    memswap_limit: 8g
+    cpus: 4.0
     restart: unless-stopped
