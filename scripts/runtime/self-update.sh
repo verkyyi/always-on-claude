@@ -380,6 +380,19 @@ elif [[ -x "$DEV_ENV/scripts/runtime/sync-codex-config.sh" ]]; then
     fi
 fi
 
+if [[ -x "$DEV_ENV/scripts/runtime/sync-claude-personalization.sh" ]]; then
+    claude_setup_status=$("$DEV_ENV/scripts/runtime/sync-claude-personalization.sh")
+    if [[ "$claude_setup_status" == "updated" ]]; then
+        ok "Updated Claude home state"
+        host_updated=true
+    fi
+fi
+
+if [[ -x "$DEV_ENV/scripts/runtime/install-schedule-bridge.sh" && -f "$DEV_ENV/.provisioned" ]]; then
+    "$DEV_ENV/scripts/runtime/install-schedule-bridge.sh"
+    host_updated=true
+fi
+
 if [[ "$host_updated" == "true" ]]; then
     UPDATED+=("host-scripts: updated")
 fi

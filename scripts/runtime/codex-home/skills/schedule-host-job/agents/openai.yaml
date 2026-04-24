@@ -1,0 +1,7 @@
+interface:
+  display_name: "Schedule Host Job"
+  short_description: "Schedule container commands on the host"
+  default_prompt: "Use $schedule-host-job to schedule a command from this container session to run later through the host scheduling bridge."
+
+policy:
+  allow_implicit_invocation: true

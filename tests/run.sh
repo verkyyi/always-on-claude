@@ -14,10 +14,15 @@ cd "$REPO_ROOT"
 
 total_pass=0
 total_fail=0
-files=("${@}")
+files=()
+if [[ $# -gt 0 ]]; then
+    files=("$@")
+fi
 
 if [[ ${#files[@]} -eq 0 ]]; then
-    mapfile -t files < <(find tests -name 'test-*.sh' -type f | sort)
+    while IFS= read -r file; do
+        files+=("$file")
+    done < <(find tests -name 'test-*.sh' -type f | sort)
 fi
 
 for file in "${files[@]}"; do

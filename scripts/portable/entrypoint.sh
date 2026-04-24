@@ -78,6 +78,14 @@ if [[ -f /home/dev/dev-env/scripts/runtime/tmux-status.sh ]]; then
     chmod +x /home/dev/.tmux-status.sh
 fi
 
+# Repo-managed user-scope assistant state
+if [[ -x /home/dev/dev-env/scripts/runtime/sync-claude-personalization.sh ]]; then
+    HOME=/home/dev /home/dev/dev-env/scripts/runtime/sync-claude-personalization.sh >/dev/null || true
+fi
+if [[ -x /home/dev/dev-env/scripts/runtime/sync-codex-personalization.sh ]]; then
+    HOME=/home/dev /home/dev/dev-env/scripts/runtime/sync-codex-personalization.sh >/dev/null || true
+fi
+
 # Fix ownership on everything
 chown -R dev:dev /home/dev/.claude /home/dev/.codex \
     /home/dev/.config /home/dev/projects /home/dev/overnight \

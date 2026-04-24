@@ -409,6 +409,16 @@ if [[ -f "$DEV_ENV/scripts/runtime/statusline-command.sh" ]]; then
     fi
 fi
 
+# Claude user-scope commands managed by this repo.
+if [[ -x "$DEV_ENV/scripts/runtime/sync-claude-personalization.sh" ]]; then
+    claude_setup_status=$("$DEV_ENV/scripts/runtime/sync-claude-personalization.sh")
+    if [[ "$claude_setup_status" == "updated" ]]; then
+        ok "Updated Claude home state"
+    else
+        skip "Claude home state"
+    fi
+fi
+
 # Global CLAUDE.md — user-scope instructions shared across all projects.
 # Install once if missing; leave user edits alone on re-runs.
 if [[ -f "$DEV_ENV/scripts/runtime/claude-global.md" ]]; then
@@ -613,6 +623,13 @@ ok "Systemd service installed and enabled"
 
 step="chmod scripts"
 chmod +x "$DEV_ENV"/scripts/deploy/*.sh "$DEV_ENV"/scripts/runtime/*.sh 2>/dev/null || true
+
+if [[ -x "$DEV_ENV/scripts/runtime/install-schedule-bridge.sh" ]]; then
+    step="schedule bridge"
+    bash "$DEV_ENV/scripts/runtime/install-schedule-bridge.sh"
+else
+    skip "schedule bridge script not found"
+fi
 
 # --- Docker pull + start ----------------------------------------------------
 

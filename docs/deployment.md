@@ -127,12 +127,13 @@ curl -fsSL https://raw.githubusercontent.com/verkyyi/always-on-claude/main/scrip
 8. **Settings**: Generates `~/.claude/settings.json` with permission bypass, status line, MCP servers
 9. **Heartbeat hooks**: If `AOC_HEARTBEAT_URL` + `AOC_HEARTBEAT_TOKEN` set, adds webhook hooks for Notification (idle), Stop, and SessionStart events
 10. **tmux config**: Installs `~/.tmux.conf` and `~/.tmux-status.sh`
-11. **SSH config**: Accepts `NO_CLAUDE` env var. Optional password auth via `AOC_SSH_PASSWORD`
-12. **Shell integration**: Adds `ssh-login.sh` to `.bash_profile`
-13. **Auto-updater**: Installs systemd timer via `install-updater.sh`
-14. **CloudWatch alarms**: Memory warning (>80%) and critical (>90%) alarms via SNS
-15. **Docker**: Pulls image, starts container, fixes permissions
-16. **Provisioned marker**: Writes `~/dev-env/.provisioned` with timestamp and commit
+11. **Schedule bridge**: Installs host `atd`, cron, and a systemd path/service that accepts container schedule requests
+12. **SSH config**: Accepts `NO_CLAUDE` env var. Optional password auth via `AOC_SSH_PASSWORD`
+13. **Shell integration**: Adds `ssh-login.sh` to `.bash_profile`
+14. **Auto-updater**: Installs systemd timer via `install-updater.sh`
+15. **CloudWatch alarms**: Memory warning (>80%) and critical (>90%) alarms via SNS
+16. **Docker**: Pulls image, starts container, fixes permissions
+17. **Provisioned marker**: Writes `~/dev-env/.provisioned` with timestamp and commit
 
 ### Auth setup (first SSH login)
 

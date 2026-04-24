@@ -33,6 +33,12 @@ services:
       # AWS CLI config/credentials (shared between host and container)
       - ~/.aws:/home/dev/.aws
 
+      # Host scheduling bridge. Container sessions can submit requests, but
+      # status/logs are read-only and jobs are created in host-only paths.
+      - ~/.always-on-claude/schedule/inbox:/home/dev/.aoc/schedule/inbox
+      - ~/.always-on-claude/schedule/status:/home/dev/.aoc/schedule/status:ro
+      - ~/.always-on-claude/schedule/logs:/home/dev/.aoc/schedule/logs:ro
+
       # SSH keys for GitHub (read-only)
       - ~/.ssh:/home/dev/.ssh:ro
 

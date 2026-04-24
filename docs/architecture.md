@@ -141,6 +141,17 @@ Each workspace gets its own named tmux session:
 Sessions run on the **host** (not inside the container), so they survive container restarts. The selected coding assistant runs inside the container via `docker exec`.
 The workspace manager remains Claude-based because lifecycle commands still live in `.claude/commands/`.
 
+### Schedule bridge
+
+Provisioned hosts install a narrow scheduling bridge for container coding sessions:
+
+- Container writes request JSON to `/home/dev/.aoc/schedule/inbox`.
+- Host `always-on-claude-schedule-bridge.path` watches `~/.always-on-claude/schedule/inbox/*.json`.
+- Host processor validates the request, submits a host `atd` job or managed user crontab entry, and stores status/logs under `~/.always-on-claude/schedule/`.
+- The scheduled host job runs the command back inside the dev container with `docker compose exec -T -w <cwd> dev bash -lc <command>`.
+
+Only the inbox is writable from the container. Status and logs are mounted read-only, and generated `at` job scripts live in host-only paths.
+
 ### Login flow
 
 ```

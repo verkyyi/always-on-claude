@@ -123,6 +123,7 @@ sync_dir "$SOURCE_HOME/skills/futuapi" "$CODEX_HOME/skills/futuapi"
 sync_dir "$SOURCE_HOME/skills/install-futu-opend" "$CODEX_HOME/skills/install-futu-opend"
 sync_dir "$SOURCE_HOME/skills/deploy-proxy" "$CODEX_HOME/skills/deploy-proxy"
 sync_dir "$SOURCE_HOME/skills/release-plugin" "$CODEX_HOME/skills/release-plugin"
+sync_dir "$SOURCE_HOME/skills/schedule-host-job" "$CODEX_HOME/skills/schedule-host-job"
 
 sync_managed_mcp_config
 
