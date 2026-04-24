@@ -24,19 +24,21 @@ sync_file() {
     chmod "$mode" "$dest"
 }
 
-if [[ -d "$SOURCE_HOME/commands" ]]; then
-    while IFS= read -r -d '' src; do
-        rel="${src#"$SOURCE_HOME/"}"
-        sync_file "$src" "$CLAUDE_HOME/$rel" 644
-    done < <(find "$SOURCE_HOME/commands" -type f -print0)
-fi
+sync_tree() {
+    local subdir="$1"
+    local mode="$2"
+    local src rel
 
-if [[ -d "$SOURCE_HOME/skills" ]]; then
+    [[ -d "$SOURCE_HOME/$subdir" ]] || return 0
     while IFS= read -r -d '' src; do
         rel="${src#"$SOURCE_HOME/"}"
-        sync_file "$src" "$CLAUDE_HOME/$rel" 644
-    done < <(find "$SOURCE_HOME/skills" -type f -print0)
-fi
+        sync_file "$src" "$CLAUDE_HOME/$rel" "$mode"
+    done < <(find "$SOURCE_HOME/$subdir" -type f -print0)
+}
+
+sync_tree commands 644
+sync_tree skills 644
+sync_tree hooks 755
 
 if [[ "$CHANGED" -eq 1 ]]; then
     echo "updated"
