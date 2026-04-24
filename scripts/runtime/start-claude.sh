@@ -369,7 +369,7 @@ launch() {
     echo ""
 
     tmux new-session -A -s "$session_name" \
-        "docker exec -it -e CLAUDE_MOBILE=\"${CLAUDE_MOBILE:-}\" -w '$container_path' ${CONTAINER_NAME} bash -lc 'exec claude'"
+        "docker exec -it -e CLAUDE_MOBILE=\"${CLAUDE_MOBILE:-}\" -w '$container_path' ${CONTAINER_NAME} bash -lc 'source ~/.claude/gh-mcp-env.sh; exec claude'"
 }
 
 # --- Launch Claude Code on the host (for workspace management / updates) ---

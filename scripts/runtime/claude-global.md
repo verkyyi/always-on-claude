@@ -22,6 +22,12 @@ Applies to every project in this workspace. Edit freely — this file is only in
 - Mobile-friendly slash commands: `/s` (status), `/d` (deploy), `/l` (logs), `/fix`, `/ship`, `/review`.
 - Workspace lifecycle: `/provision`, `/destroy`, `/update`, `/backup`, `/workspace`, `/tailscale`.
 
+### GitHub operations
+
+- Prefer the `github` MCP server's tool calls (e.g. `mcp__github__*`) over shell `gh api` / `gh pr` / `gh issue` / `gh repo` when both are available — typed inputs, less token overhead, structured errors.
+- Keep using `gh` for `gh aw`, `gh auth`, and provisioning-script contexts where no MCP equivalent exists.
+- MCP is active only when `GITHUB_PERSONAL_ACCESS_TOKEN` is set; session launch auto-exports from `gh auth token`. If MCP is inactive, fall back to `gh` silently.
+
 ## Communication defaults
 
 - Terse. Lead with the answer. Skip recap and filler.

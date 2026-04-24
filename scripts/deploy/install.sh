@@ -371,6 +371,14 @@ if [[ -f "$DEV_ENV/scripts/runtime/statusline-command.sh" ]]; then
     fi
 fi
 
+# GitHub MCP auth bridge — sourced by start-claude*.sh to export
+# GITHUB_PERSONAL_ACCESS_TOKEN from gh CLI auth state.
+if [[ -f "$DEV_ENV/scripts/runtime/gh-mcp-env.sh" ]]; then
+    cp "$DEV_ENV/scripts/runtime/gh-mcp-env.sh" ~/.claude/gh-mcp-env.sh
+    chmod +x ~/.claude/gh-mcp-env.sh
+    ok "Installed gh-mcp-env.sh"
+fi
+
 # Global CLAUDE.md — user-scope instructions shared across all projects.
 # Install once if missing; leave user edits alone on re-runs.
 if [[ -f "$DEV_ENV/scripts/runtime/claude-global.md" ]]; then
