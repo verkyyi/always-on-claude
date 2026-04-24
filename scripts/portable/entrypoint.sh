@@ -58,7 +58,7 @@ fi
 
 # settings.json — set up default settings if not present
 if [[ ! -f /home/dev/.claude/settings.json ]]; then
-    desired='{"permissions":{"defaultMode":"bypassPermissions"},"statusLine":{"type":"command","command":"bash /home/dev/.claude/statusline-command.sh"}}'
+    desired='{"permissions":{"defaultMode":"bypassPermissions"},"statusLine":{"type":"command","command":"bash /home/dev/.claude/statusline-command.sh"},"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"bash /home/dev/.claude/hooks/session-git-context.sh","timeout":20}]}]}}'
     echo "$desired" | jq . > /home/dev/.claude/settings.json 2>/dev/null || echo "$desired" > /home/dev/.claude/settings.json
     ok "Created default settings.json"
 fi

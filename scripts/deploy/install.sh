@@ -381,7 +381,7 @@ if [[ -f "$DEV_ENV/scripts/runtime/statusline-command.sh" ]]; then
     ok "Installed statusline-command.sh"
 
     # Build desired user-scope settings
-    desired='{"permissions":{"defaultMode":"bypassPermissions"},"statusLine":{"type":"command","command":"bash /home/dev/.claude/statusline-command.sh"},"mcpServers":{"context7":{"command":"npx","args":["-y","@upstash/context7-mcp"]},"fetch":{"command":"uvx","args":["mcp-server-fetch"]}}}'
+    desired='{"permissions":{"defaultMode":"bypassPermissions"},"statusLine":{"type":"command","command":"bash /home/dev/.claude/statusline-command.sh"},"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"bash /home/dev/.claude/hooks/session-git-context.sh","timeout":20}]}]},"mcpServers":{"context7":{"command":"npx","args":["-y","@upstash/context7-mcp"]},"fetch":{"command":"uvx","args":["mcp-server-fetch"]}}}'
 
     # Merge heartbeat hooks if configured (use jq --arg for safe escaping)
     if [[ -n "${AOC_HEARTBEAT_URL:-}" && -n "${AOC_HEARTBEAT_TOKEN:-}" ]]; then
@@ -393,7 +393,11 @@ if [[ -f "$DEV_ENV/scripts/runtime/statusline-command.sh" ]]; then
                 Stop: [{matcher: "", hooks: [{type: "http", url: $url, headers: {Authorization: ("Bearer " + $token)}}]}],
                 SessionStart: [{matcher: "", hooks: [{type: "http", url: $url, headers: {Authorization: ("Bearer " + $token)}}]}]
             }}')
-        desired=$(echo "$desired" | jq --argjson hb "$heartbeat_hooks" '. * $hb')
+        desired=$(echo "$desired" | jq --argjson hb "$heartbeat_hooks" '
+            .hooks.Notification = ((.hooks.Notification // []) + ($hb.hooks.Notification // []))
+            | .hooks.Stop = ((.hooks.Stop // []) + ($hb.hooks.Stop // []))
+            | .hooks.SessionStart = ((.hooks.SessionStart // []) + ($hb.hooks.SessionStart // []))
+        ')
         ok "Added heartbeat hooks to settings"
     fi
 
