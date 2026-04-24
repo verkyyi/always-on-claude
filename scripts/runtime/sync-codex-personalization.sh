@@ -93,7 +93,12 @@ sync_managed_mcp_config() {
     if [[ -s "$merged" ]]; then
         printf '\n\n' >> "$merged"
     fi
-    cat "$SOURCE_HOME/mcp-config.toml" >> "$merged"
+    awk -v codex_home="$CODEX_HOME" '
+        {
+            gsub("/home/dev/.codex", codex_home)
+            print
+        }
+    ' "$SOURCE_HOME/mcp-config.toml" >> "$merged"
 
     if [[ ! -f "$CONFIG_FILE" ]] || ! cmp -s "$merged" "$CONFIG_FILE"; then
         mv "$merged" "$CONFIG_FILE"

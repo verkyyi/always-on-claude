@@ -1,0 +1,81 @@
+# docker-compose.macmini.yml — Mac mini target using host Tailscale SSH.
+#
+# This intentionally does not run Tailscale inside the container. Connect to the
+# Mac mini through the host's existing Tailscale SSH, then use docker exec.
+#
+# Usage on the Mac mini:
+#   mkdir -p ~/aoc-data/{claude,codex,gitconfig,gh,aws,overnight,public} ~/.always-on-claude/schedule/{inbox,status,logs} ~/projects
+#   docker compose -f docker-compose.macmini.yml up -d
+#   docker exec -it claude-dev bash -lc 'bash ~/dev-env/scripts/portable/start-claude-portable.sh'
+
+services:
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      labels:
+        org.opencontainers.image.revision: ${AOC_IMAGE_REVISION:-local}
+        org.opencontainers.image.created: ${AOC_IMAGE_CREATED:-local}
+    image: ${DOCKER_IMAGE:-ghcr.io/verkyyi/always-on-claude:latest}
+    container_name: ${CONTAINER_NAME:-claude-dev}
+    hostname: ${CONTAINER_HOSTNAME:-claude-dev}
+    stdin_open: true
+    tty: true
+
+    volumes:
+      - ${HOME}/aoc-data/claude:/home/dev/.claude
+      - ${HOME}/aoc-data/codex:/home/dev/.codex
+      - ${HOME}/aoc-data/gitconfig:/home/dev/.config/git
+      - ${HOME}/aoc-data/gh:/home/dev/.config/gh
+      - ${HOME}/aoc-data/aws:/home/dev/.aws
+      - ${HOME}/aoc-data/overnight:/home/dev/overnight
+      - ${HOME}/aoc-data/public:/srv/public
+      - ${HOME}/projects:/home/dev/projects
+      - ${HOME}/always-on-claude:/home/dev/dev-env:ro
+      - ${HOME}/.ssh:/home/dev/.ssh:ro
+      - ${HOME}/.always-on-claude/schedule/inbox:/home/dev/.aoc/schedule/inbox
+      - ${HOME}/.always-on-claude/schedule/status:/home/dev/.aoc/schedule/status:ro
+      - ${HOME}/.always-on-claude/schedule/logs:/home/dev/.aoc/schedule/logs:ro
+
+    environment:
+      - NODE_ENV=development
+      - GIT_CONFIG_GLOBAL=/home/dev/.config/git/config
+      - TZ=America/Los_Angeles
+
+    command: >
+      bash -lc '
+        mkdir -p ~/.claude/debug ~/.claude/commands ~/.codex ~/.config/gh ~/.config/git ~/.aws ~/projects ~/overnight /srv/public;
+        touch ~/.config/git/config;
+        test -f ~/.claude/claude.json || echo "{}" > ~/.claude/claude.json;
+        rm -rf ~/.claude.json && ln -s ~/.claude/claude.json ~/.claude.json;
+        touch ~/.claude/remote-settings.json;
+        if [ ! -f ~/.claude/settings.json ]; then
+          printf "%s\n" "{\"permissions\":{\"defaultMode\":\"bypassPermissions\"},\"statusLine\":{\"type\":\"command\",\"command\":\"bash /home/dev/.claude/statusline-command.sh\"},\"mcpServers\":{\"context7\":{\"command\":\"npx\",\"args\":[\"-y\",\"@upstash/context7-mcp\"]},\"fetch\":{\"command\":\"uvx\",\"args\":[\"mcp-server-fetch\"]}}}" > ~/.claude/settings.json;
+        fi;
+        if [ -f ~/dev-env/scripts/runtime/statusline-command.sh ]; then
+          cp ~/dev-env/scripts/runtime/statusline-command.sh ~/.claude/statusline-command.sh;
+          chmod +x ~/.claude/statusline-command.sh;
+        fi;
+        if [ -x ~/dev-env/scripts/runtime/sync-claude-personalization.sh ]; then
+          ~/dev-env/scripts/runtime/sync-claude-personalization.sh >/dev/null || true;
+        fi;
+        if [ -x ~/dev-env/scripts/runtime/sync-codex-personalization.sh ]; then
+          ~/dev-env/scripts/runtime/sync-codex-personalization.sh >/dev/null || true;
+        fi;
+        if [ -f ~/dev-env/scripts/runtime/gh-mcp-env.sh ]; then
+          cp ~/dev-env/scripts/runtime/gh-mcp-env.sh ~/.claude/gh-mcp-env.sh;
+          chmod +x ~/.claude/gh-mcp-env.sh;
+        fi;
+        if [ -f ~/dev-env/scripts/runtime/tmux.conf ]; then
+          cp ~/dev-env/scripts/runtime/tmux.conf ~/.tmux.conf;
+        fi;
+        if [ -f ~/dev-env/scripts/runtime/tmux-status.sh ]; then
+          cp ~/dev-env/scripts/runtime/tmux-status.sh ~/.tmux-status.sh;
+          chmod +x ~/.tmux-status.sh;
+        fi;
+        exec sleep infinity
+      '
+
+    mem_limit: 3g
+    memswap_limit: 4g
+    restart: unless-stopped
