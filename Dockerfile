@@ -78,4 +78,9 @@ RUN playwright install chromium
 # Shell aliases
 RUN printf '\nalias cc="claude --dangerously-skip-permissions"\nalias cx="codex --dangerously-bypass-approvals-and-sandbox"\nalias gs="git status"\nalias gl="git log --oneline -20"\n' >> /home/dev/.bashrc
 
+# Auto-install per-project Python deps on login (runs for `bash -lc` in cron jobs)
+# Uses a cache marker so re-install only happens when requirements.txt changes.
+# hadolint ignore=SC2016
+RUN printf '\n# Auto-install per-project Python requirements\nfor _req in "$HOME"/projects/*/requirements.txt; do\n    [ -f "$_req" ] || continue\n    _marker="$HOME/.cache/aoc/$(basename "$(dirname "$_req")").installed"\n    if [ ! -f "$_marker" ] || [ "$_req" -nt "$_marker" ]; then\n        mkdir -p "$(dirname "$_marker")"\n        pip install -q --user --break-system-packages -r "$_req" >/dev/null 2>&1 && touch "$_marker" || true\n    fi\ndone\nunset _req _marker\n' >> /home/dev/.profile
+
 CMD ["bash"]
