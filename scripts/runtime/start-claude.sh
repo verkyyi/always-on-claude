@@ -171,7 +171,7 @@ launch() {
     echo ""
 
     tmux new-session -A -s "$session_name" \
-        "docker exec -it -e CLAUDE_MOBILE=\"${CLAUDE_MOBILE:-}\" -e OPENAI_API_KEY=\"${OPENAI_API_KEY:-}\" -e ANTHROPIC_API_KEY=\"${ANTHROPIC_API_KEY:-}\" -e DEFAULT_CODE_AGENT=\"$CODE_AGENT\" -w '$container_path' ${CONTAINER_NAME} bash -lc 'exec bash \"$RUNNER_CONTAINER\" --agent \"$CODE_AGENT\"'"
+        "docker exec -it -e CLAUDE_MOBILE=\"${CLAUDE_MOBILE:-}\" -e OPENAI_API_KEY=\"${OPENAI_API_KEY:-}\" -e ANTHROPIC_API_KEY=\"${ANTHROPIC_API_KEY:-}\" -e DEFAULT_CODE_AGENT=\"$CODE_AGENT\" -w '$container_path' ${CONTAINER_NAME} bash -lc 'exec bash \"$RUNNER_CONTAINER\" --agent \"$CODE_AGENT\" --resume-latest'"
 }
 
 launch_manager() {

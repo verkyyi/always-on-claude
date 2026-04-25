@@ -136,7 +136,7 @@ launch() {
     echo ""
 
     tmux new-session -A -s "$session_name" \
-        "bash -lc 'exec bash \"$RUNNER\" --agent \"$CODE_AGENT\" --cwd \"$selected\"'"
+        "bash -lc 'exec bash \"$RUNNER\" --agent \"$CODE_AGENT\" --cwd \"$selected\" --resume-latest'"
 }
 
 launch_manager() {
