@@ -70,7 +70,7 @@ info "Verify"
 "$DOCKER" image inspect ghcr.io/verkyyi/always-on-claude:latest --format \
   '  Created={{.Created}} Revision={{index .Config.Labels "org.opencontainers.image.revision"}}'
 "$DOCKER" exec "$CONTAINER" bash -lc \
-  'claude --version; node --version; gh --version | head -1; git --version'
+  'claude --version; codex --version; node --version; gh --version | head -1; git --version'
 
 info "Cleanup"
 "$DOCKER" image prune -f >/dev/null 2>&1 || true
