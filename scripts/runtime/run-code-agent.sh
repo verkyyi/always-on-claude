@@ -7,7 +7,7 @@
 #
 # Usage:
 #   bash run-code-agent.sh [--agent claude|codex] [--cwd DIR] \
-#       [--prompt-file FILE] [--message TEXT]
+#       [--prompt-file FILE] [--message TEXT] [--resume-latest]
 
 set -euo pipefail
 
@@ -25,6 +25,7 @@ agent="${DEFAULT_CODE_AGENT:-claude}"
 cwd=""
 prompt_file=""
 message=""
+resume_latest=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -47,6 +48,10 @@ while [[ $# -gt 0 ]]; do
             [[ $# -ge 2 ]] || die "--message requires a value"
             message="$2"
             shift 2
+            ;;
+        --resume-latest)
+            resume_latest=1
+            shift
             ;;
         *)
             die "Unknown argument: $1"
@@ -75,10 +80,16 @@ if [[ "$agent" == "claude" ]]; then
     fi
 
     if [[ -n "$message" ]]; then
-        exec claude "${args[@]}" "$message"
+        if [[ ${#args[@]} -gt 0 ]]; then
+            exec claude "${args[@]}" "$message"
+        fi
+        exec claude "$message"
     fi
 
-    exec claude "${args[@]}"
+    if [[ ${#args[@]} -gt 0 ]]; then
+        exec claude "${args[@]}"
+    fi
+    exec claude
 fi
 
 combined_prompt=""
@@ -98,7 +109,14 @@ ${message}"
 fi
 
 if [[ -n "$combined_prompt" ]]; then
+    if [[ $resume_latest -eq 1 ]]; then
+        exec codex resume --last "$combined_prompt"
+    fi
     exec codex "$combined_prompt"
+fi
+
+if [[ $resume_latest -eq 1 ]]; then
+    exec codex resume --last
 fi
 
 exec codex

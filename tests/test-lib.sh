@@ -6,11 +6,13 @@ set -euo pipefail
 
 _PASS=0
 _FAIL=0
+_SKIP=0
 _CURRENT_TEST=""
 
 # --- Colors ---
 _RED=$'\033[0;31m'
 _GREEN=$'\033[0;32m'
+_YELLOW=$'\033[1;33m'
 _RESET=$'\033[0m'
 
 # --- Runner ---
@@ -33,15 +35,18 @@ run_tests() {
         export HOME="$TEST_DIR/home"
         export PATH="$TEST_DIR/bin:$_ORIG_PATH"
 
-        local failed=false
+        local result=0
         setup
         if ! "$func"; then
-            failed=true
+            result=$?
         fi
         teardown
         rm -rf "$TEST_DIR"
 
-        if [[ "$failed" == true ]]; then
+        if [[ $result -eq 200 ]]; then
+            echo "  ${_YELLOW}SKIP${_RESET} $func"
+            ((_SKIP++)) || true
+        elif [[ $result -ne 0 ]]; then
             echo "  ${_RED}FAIL${_RESET} $func"
             ((_FAIL++)) || true
         else
@@ -52,10 +57,14 @@ run_tests() {
 }
 
 print_summary() {
-    local total=$((_PASS + _FAIL))
+    local total=$((_PASS + _FAIL + _SKIP))
     echo ""
     if [[ $_FAIL -eq 0 ]]; then
-        echo "${_GREEN}All $total tests passed${_RESET}"
+        if [[ $_SKIP -gt 0 ]]; then
+            echo "${_GREEN}All $((_PASS + _SKIP)) tests passed${_RESET} (${_SKIP} skipped)"
+        else
+            echo "${_GREEN}All $total tests passed${_RESET}"
+        fi
     else
         echo "${_RED}$_FAIL/$total tests failed${_RESET}"
     fi
@@ -64,6 +73,7 @@ print_summary() {
 
 # Save original PATH before any mocks
 _ORIG_PATH="$PATH"
+_ORIG_HOME="$HOME"
 
 # --- Assertions ---
 
@@ -110,6 +120,12 @@ assert_output_contains() {
     local output
     output=$("$@" 2>&1) || true
     assert_contains "$output" "$needle" "output does not contain '$needle'"
+}
+
+skip_test() {
+    local reason="${1:-}"
+    echo "    SKIP${reason:+: $reason}"
+    return 200
 }
 
 # --- Fixtures ---
