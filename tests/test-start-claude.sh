@@ -4,37 +4,22 @@
 START_SCRIPT="$REPO_ROOT/scripts/runtime/start-claude.sh"
 
 _source_functions() {
-    export COMPOSE_DIR="$HOME/dev-env"
+    export DEV_ENV="$REPO_ROOT"
+    export COMPOSE_DIR="$REPO_ROOT"
     export CONTAINER_NAME="claude-dev"
     export CONTAINER_PROJECTS="/home/dev/projects"
     export DEFAULT_CODE_AGENT="${DEFAULT_CODE_AGENT:-claude}"
     export CODE_AGENT="${CODE_AGENT:-$DEFAULT_CODE_AGENT}"
     COMPOSE_CMD=(sudo --preserve-env=HOME docker compose)
-
-    eval "$(sed -n '/^normalize_code_agent()/,/^}/p' "$START_SCRIPT")"
-    eval "$(sed -n '/^file_sha256()/,/^}/p' "$START_SCRIPT")"
-    eval "$(sed -n '/^container_file_sha256()/,/^}/p' "$START_SCRIPT")"
-    eval "$(sed -n '/^refresh_container_after_recreate()/,/^}/p' "$START_SCRIPT")"
-    eval "$(sed -n '/^ensure_claude_state_mount_current()/,/^}/p' "$START_SCRIPT")"
-    eval "$(sed -n '/^all_code_agent_session_pattern()/,/^}/p' "$START_SCRIPT")"
-    eval "$(sed -n '/^next_code_agent()/,/^}/p' "$START_SCRIPT")"
-    eval "$(sed -n '/^persist_default_code_agent()/,/^}/p' "$START_SCRIPT")"
-    eval "$(sed -n '/^toggle_code_agent()/,/^}/p' "$START_SCRIPT")"
-    eval "$(sed -n '/^code_agent_session_name()/,/^}/p' "$START_SCRIPT")"
-    eval "$(sed -n '/^count_sessions()/,/^}/p' "$START_SCRIPT")"
-    eval "$(sed -n '/^get_max_sessions()/,/^}/p' "$START_SCRIPT")"
-    eval "$(sed -n '/^check_session_limit()/,/^}/p' "$START_SCRIPT")"
-    eval "$(sed -n '/^to_container_path()/,/^}/p' "$START_SCRIPT")"
-    eval "$(sed -n '/^normalize_discovered_path()/,/^}/p' "$START_SCRIPT")"
+    START_MENU_TESTING=1
+    # shellcheck disable=SC1090
+    source "$START_SCRIPT"
+    unset START_MENU_TESTING
 }
 
 _source_v2() {
     export PROJECTS_DIR="$HOME/projects"
-    eval "$(sed -n '/^discover_entries()/,/^}/p' "$START_SCRIPT")" 2>/dev/null || true
-    eval "$(sed -n '/^get_sessions()/,/^}/p' "$START_SCRIPT")" 2>/dev/null || true
-    eval "$(sed -n '/^match_sessions()/,/^}/p' "$START_SCRIPT")" 2>/dev/null || true
-    eval "$(sed -n '/^compute_default()/,/^}/p' "$START_SCRIPT")" 2>/dev/null || true
-    eval "$(sed -n '/^show_menu()/,/^}/p' "$START_SCRIPT")" 2>/dev/null || true
+    _source_functions
 }
 
 setup() {
@@ -426,7 +411,12 @@ test_match_sessions_annotates_entry() {
 
     orphaned_sessions=()
     match_sessions
-    IFS='|' read -r _ _ _ state activity <<< "${entries[0]}"
+    IFS='|' read -r name main_branch main_path selected_branch selected_path state activity <<< "${project_entries[0]}"
+    assert_eq "myrepo" "$name"
+    assert_eq "main" "$main_branch"
+    assert_eq "/home/dev/projects/myrepo" "$main_path"
+    assert_eq "main" "$selected_branch"
+    assert_eq "/home/dev/projects/myrepo" "$selected_path"
     assert_eq "idle" "$state"
     assert_eq "1711612800" "$activity"
     assert_eq "0" "${#orphaned_sessions[@]}" "matching session should not be orphaned"
@@ -457,16 +447,41 @@ test_match_sessions_uses_selected_agent_prefix() {
 
     orphaned_sessions=()
     match_sessions
-    IFS='|' read -r _ _ _ state activity <<< "${entries[0]}"
+    IFS='|' read -r _ _ _ selected_branch selected_path state activity <<< "${project_entries[0]}"
+    assert_eq "main" "$selected_branch"
+    assert_eq "/home/dev/projects/myrepo" "$selected_path"
     assert_eq "idle" "$state"
     assert_eq "1711612800" "$activity"
     assert_eq "0" "${#orphaned_sessions[@]}"
 }
 
-test_compute_default_prefers_idle() {
+test_match_sessions_collapses_worktrees_to_latest_project_session() {
     entries=(
-        "app1|main|/path/app1|none|0"
-        "app2|main|/path/app2|idle|1711612800"
+        "myrepo|main|/home/dev/projects/myrepo|none|0"
+        "myrepo|feature-x|/home/dev/projects/myrepo-feature-x|none|0"
+    )
+    session_names=("claude-myrepo-feature-x")
+    session_states=("idle")
+    session_activities=("1711612800")
+    _source_v2
+
+    orphaned_sessions=()
+    match_sessions
+    assert_eq "1" "${#project_entries[@]}" "worktrees should collapse to one project summary"
+    IFS='|' read -r name main_branch main_path selected_branch selected_path state activity <<< "${project_entries[0]}"
+    assert_eq "myrepo" "$name"
+    assert_eq "main" "$main_branch"
+    assert_eq "/home/dev/projects/myrepo" "$main_path"
+    assert_eq "feature-x" "$selected_branch"
+    assert_eq "/home/dev/projects/myrepo-feature-x" "$selected_path"
+    assert_eq "idle" "$state"
+    assert_eq "1711612800" "$activity"
+}
+
+test_compute_default_prefers_idle() {
+    project_entries=(
+        "app1|main|/path/app1|main|/path/app1|none|0"
+        "app2|main|/path/app2|main|/path/app2|idle|1711612800"
     )
     _source_v2
 
@@ -475,9 +490,9 @@ test_compute_default_prefers_idle() {
 }
 
 test_compute_default_most_recent_idle() {
-    entries=(
-        "app1|main|/path/app1|idle|1711612000"
-        "app2|main|/path/app2|idle|1711612800"
+    project_entries=(
+        "app1|main|/path/app1|main|/path/app1|idle|1711612000"
+        "app2|main|/path/app2|main|/path/app2|idle|1711612800"
     )
     _source_v2
 
@@ -486,9 +501,9 @@ test_compute_default_most_recent_idle() {
 }
 
 test_compute_default_no_sessions_first_entry() {
-    entries=(
-        "app1|main|/path/app1|none|0"
-        "app2|dev|/path/app2|none|0"
+    project_entries=(
+        "app1|main|/path/app1|main|/path/app1|none|0"
+        "app2|dev|/path/app2|dev|/path/app2|none|0"
     )
     _source_v2
 
@@ -497,7 +512,7 @@ test_compute_default_no_sessions_first_entry() {
 }
 
 test_compute_default_empty_entries() {
-    entries=()
+    project_entries=()
     _source_v2
 
     compute_default
@@ -505,9 +520,9 @@ test_compute_default_empty_entries() {
 }
 
 test_compute_default_skips_attached() {
-    entries=(
-        "app1|main|/path/app1|attached|1711613000"
-        "app2|main|/path/app2|idle|1711612800"
+    project_entries=(
+        "app1|main|/path/app1|main|/path/app1|attached|1711613000"
+        "app2|main|/path/app2|main|/path/app2|idle|1711612800"
     )
     _source_v2
 
@@ -515,42 +530,52 @@ test_compute_default_skips_attached() {
     assert_eq "1" "$default_idx" "should prefer idle over attached even if attached is newer"
 }
 
-test_show_menu_repo_header_and_branch() {
-    entries=("myrepo|main|/path/myrepo|none|0")
+test_compute_default_uses_attached_when_no_idle_session_exists() {
+    project_entries=(
+        "app1|main|/path/app1|main|/path/app1|attached|1711613000"
+        "app2|main|/path/app2|main|/path/app2|attached|1711612800"
+    )
+    _source_v2
+
+    compute_default
+    assert_eq "0" "$default_idx" "should resume the newest attached session when no idle session exists"
+}
+
+test_show_menu_project_line() {
+    project_entries=("myrepo|main|/path/myrepo|main|/path/myrepo|none|0")
     orphaned_sessions=()
     default_idx=0
     _source_v2
 
     local output
     output=$(show_menu)
-    assert_contains "$output" "myrepo" "should show repo name as header"
-    assert_contains "$output" "[1] main" "should show branch as numbered item"
+    assert_contains "$output" "[1] myrepo  main" "should show project and branch on one line"
 }
 
 test_show_menu_active_marker() {
-    entries=("myrepo|main|/path/myrepo|idle|1711612800")
+    project_entries=("myrepo|main|/path/myrepo|feature-x|/path/myrepo-feature-x|idle|1711612800")
     orphaned_sessions=()
     default_idx=0
     _source_v2
 
     local output
     output=$(show_menu)
-    assert_contains "$output" "active (idle)" "should show active marker"
+    assert_contains "$output" "[1] myrepo  feature-x  active" "should show active marker on the project line"
 }
 
 test_show_menu_attached_marker() {
-    entries=("myrepo|main|/path/myrepo|attached|1711612800")
+    project_entries=("myrepo|main|/path/myrepo|feature-x|/path/myrepo-feature-x|attached|1711612800")
     orphaned_sessions=()
     default_idx=0
     _source_v2
 
     local output
     output=$(show_menu)
-    assert_contains "$output" "active (attached)" "should show attached marker"
+    assert_contains "$output" "[1] myrepo  feature-x  attached" "should show attached marker"
 }
 
 test_show_menu_footer_default() {
-    entries=("myrepo|main|/path/myrepo|none|0")
+    project_entries=("myrepo|main|/path/myrepo|main|/path/myrepo|none|0")
     orphaned_sessions=()
     default_idx=0
     _source_v2
@@ -565,7 +590,7 @@ test_show_menu_footer_default() {
 }
 
 test_show_menu_no_repos() {
-    entries=()
+    project_entries=()
     orphaned_sessions=()
     default_idx=0
     _source_v2
@@ -578,7 +603,7 @@ test_show_menu_no_repos() {
 }
 
 test_show_menu_footer_codex_toggle_target() {
-    entries=("myrepo|main|/path/myrepo|none|0")
+    project_entries=("myrepo|main|/path/myrepo|main|/path/myrepo|none|0")
     orphaned_sessions=()
     default_idx=0
     CODE_AGENT=codex
@@ -592,11 +617,10 @@ test_show_menu_footer_codex_toggle_target() {
     assert_contains "$output" "t=toggle->claude" "should show opposite agent"
 }
 
-test_show_menu_multiple_repos_grouped() {
-    entries=(
-        "app-one|main|/path/app-one|none|0"
-        "app-one|feature-x|/path/app-one--feature-x|none|0"
-        "app-two|dev|/path/app-two|none|0"
+test_show_menu_multiple_projects() {
+    project_entries=(
+        "app-one|main|/path/app-one|feature-x|/path/app-one--feature-x|idle|1711612800"
+        "app-two|dev|/path/app-two|dev|/path/app-two|none|0"
     )
     orphaned_sessions=()
     default_idx=0
@@ -604,15 +628,12 @@ test_show_menu_multiple_repos_grouped() {
 
     local output
     output=$(show_menu)
-    assert_contains "$output" "app-one" "should show first repo header"
-    assert_contains "$output" "[1] main" "should show first branch"
-    assert_contains "$output" "[2] feature-x" "should show worktree branch"
-    assert_contains "$output" "app-two" "should show second repo header"
-    assert_contains "$output" "[3] dev" "should show second repo branch"
+    assert_contains "$output" "[1] app-one  feature-x  active" "should show the first project summary"
+    assert_contains "$output" "[2] app-two  dev" "should show the second project summary"
 }
 
 test_show_menu_orphaned_sessions() {
-    entries=("myrepo|main|/path/myrepo|none|0")
+    project_entries=("myrepo|main|/path/myrepo|main|/path/myrepo|none|0")
     orphaned_sessions=("claude-deleted-repo|idle|0")
     default_idx=0
     _source_v2
@@ -621,4 +642,23 @@ test_show_menu_orphaned_sessions() {
     output=$(show_menu)
     assert_contains "$output" "sessions" "should show orphaned sessions header"
     assert_contains "$output" "claude-deleted-repo" "should show orphaned session name"
+}
+
+test_select_entry_resumes_project_session() {
+    project_entries=("myrepo|main|/path/myrepo|feature-x|/path/myrepo-feature-x|idle|1711612800")
+    orphaned_sessions=()
+    _source_v2
+
+    cat > "$TEST_DIR/bin/tmux" <<'MOCK'
+#!/bin/bash
+if [[ "$1" == "attach-session" && "$2" == "-t" && "$3" == "claude-myrepo-feature-x" ]]; then
+    exit 0
+fi
+exit 99
+MOCK
+    chmod +x "$TEST_DIR/bin/tmux"
+
+    local output
+    output=$(select_entry 0 2>&1)
+    assert_contains "$output" "claude-myrepo-feature-x"
 }

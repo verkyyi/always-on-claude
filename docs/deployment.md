@@ -256,6 +256,16 @@ Runs as root, then drops privileges:
 | `OPENAI_API_KEY` | API key auth for Codex (alternative to `codex login`) |
 | `DEFAULT_CODE_AGENT` | Default assistant launched by the picker (`claude` or `codex`) |
 
+### Mac mini agent upgrades
+
+`docker-compose.macmini.yml` runs `scripts/runtime/upgrade-code-agents.sh` whenever the Mac mini container starts. The script runs as the non-root `dev` user:
+
+- Claude Code is updated with `claude update`.
+- Codex is installed/updated with npm into `~/.local`, avoiding root-owned global npm directories.
+- The latest upgrade log is written to `~/.cache/aoc/agent-upgrade.log` inside the container.
+
+Set `AOC_AUTO_UPGRADE_AGENTS=0` in the compose environment to disable this startup check.
+
 ## Tailscale
 
 Private SSH access without exposing ports to the internet.

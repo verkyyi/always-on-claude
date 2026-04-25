@@ -73,6 +73,10 @@ services:
           cp ~/dev-env/scripts/runtime/tmux-status.sh ~/.tmux-status.sh;
           chmod +x ~/.tmux-status.sh;
         fi;
+        if [ -x ~/dev-env/scripts/runtime/upgrade-code-agents.sh ]; then
+          mkdir -p ~/.cache/aoc;
+          ~/dev-env/scripts/runtime/upgrade-code-agents.sh | tee ~/.cache/aoc/agent-upgrade.log || true;
+        fi;
         exec sleep infinity
       '
 
