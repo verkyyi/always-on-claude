@@ -266,7 +266,7 @@ match_sessions() {
             if [[ "$sname" == "$expected_session" ]]; then
                 local pi
                 for pi in "${!project_entries[@]}"; do
-                    IFS='|' read -r project_name _main_branch _main_path _selected_branch _selected_path selected_state selected_activity <<< "${project_entries[$pi]}"
+                    IFS='|' read -r project_name _main_branch _main_path _selected_branch _selected_path _ selected_activity <<< "${project_entries[$pi]}"
                     [[ "$project_name" == "$repo_name" ]] || continue
                     if [[ "$sactivity" -gt "$selected_activity" ]]; then
                         project_entries[$pi]="${project_name}|${_main_branch}|${_main_path}|${branch}|${path}|${sstate}|${sactivity}"
