@@ -20,10 +20,13 @@ DEV_ENV="${DEV_ENV:-$CONFIG_ROOT}"
 : "${PROJECTS_DIR:=$HOME/projects}"
 MANAGER_PROMPT="$DEV_ENV/scripts/runtime/manager-prompt.txt"
 RUNNER="$DEV_ENV/scripts/runtime/run-code-agent.sh"
+# Shared picker config consumed by scripts/lib/start-menu-common.sh.
+# shellcheck disable=SC2034
 MANAGER_TARGET="$DEV_ENV"
+# shellcheck disable=SC2034
 MENU_ACTIONS="h=shell"
 
-# shellcheck disable=SC1091
+# shellcheck source=../lib/start-menu-common.sh
 source "$COMMON_LIB"
 
 CODE_AGENT=$(normalize_code_agent "${DEFAULT_CODE_AGENT:-claude}")

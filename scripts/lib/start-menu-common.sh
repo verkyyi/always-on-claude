@@ -240,7 +240,7 @@ match_sessions() {
         local exists=false
         local pi
         for pi in "${!project_entries[@]}"; do
-            IFS='|' read -r project_name _main_branch _main_path _selected_branch _selected_path _selected_state _selected_activity <<< "${project_entries[$pi]}"
+            IFS='|' read -r project_name _main_branch _main_path _selected_branch _selected_path _ _selected_activity <<< "${project_entries[$pi]}"
             if [[ "$project_name" == "$repo_name" ]]; then
                 exists=true
                 break

@@ -25,10 +25,13 @@ RUNNER_HOST="$COMPOSE_DIR/scripts/runtime/run-code-agent.sh"
 RUNNER_CONTAINER="/home/dev/dev-env/scripts/runtime/run-code-agent.sh"
 
 COMPOSE_CMD=(sudo --preserve-env=HOME docker compose)
+# Shared picker config consumed by scripts/lib/start-menu-common.sh.
+# shellcheck disable=SC2034
 MANAGER_TARGET="$COMPOSE_DIR"
+# shellcheck disable=SC2034
 MENU_ACTIONS="h=host  c=container"
 
-# shellcheck disable=SC1091
+# shellcheck source=../lib/start-menu-common.sh
 source "$COMMON_LIB"
 
 CODE_AGENT=$(normalize_code_agent "${DEFAULT_CODE_AGENT:-claude}")
