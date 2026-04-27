@@ -98,6 +98,11 @@ NGINX
         root $PUBLIC_DIR;
         index index.html;
 
+        location /data/ {
+            add_header Cache-Control "no-store" always;
+            try_files \$uri =404;
+        }
+
         location / {
             try_files \$uri \$uri/ =404;
         }
