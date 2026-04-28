@@ -25,4 +25,6 @@ disable_legacy_agent "com.always-on-claude.update"
 
 bash "$REPO/scripts/runtime/install-macmini-host-tools.sh"
 bash "$REPO/scripts/runtime/install-macmini-schedule-bridge.sh"
+bash "$REPO/scripts/runtime/install-macmini-agent-upgrade-schedule.sh"
+bash "$REPO/scripts/runtime/install-macmini-network-tuning.sh"
 bash "$REPO/scripts/runtime/install-macmini-nginx.sh"

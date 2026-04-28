@@ -266,6 +266,17 @@ Runs as root, then drops privileges:
 
 Set `AOC_AUTO_UPGRADE_AGENTS=0` in the compose environment to disable this startup check.
 
+For the Mac mini flow, prefer the scheduled host job installed by `scripts/runtime/install-macmini-services.sh`:
+
+- `scripts/runtime/install-macmini-agent-upgrade-schedule.sh` creates a daily scheduler job named `agent-upgrades-daily`.
+- The default run time is `03:00` local time and can be changed with `AOC_AGENT_UPGRADE_TIME`.
+- The job runs `/home/dev/dev-env/scripts/runtime/upgrade-code-agents.sh` inside `claude-dev` and keeps writing `~/.cache/aoc/agent-upgrade.log`.
+
+The same Mac mini services install also applies a host-side IPv4 ephemeral port range safety margin:
+
+- `scripts/runtime/install-macmini-network-tuning.sh` installs a launch agent that reapplies `net.inet.ip.portrange.first` and `net.inet.ip.portrange.hifirst` at login.
+- Defaults are `32768` for both and can be overridden with `AOC_HOST_PORTRANGE_FIRST` and `AOC_HOST_PORTRANGE_HIFIRST`.
+
 ## Tailscale
 
 Private SSH access without exposing ports to the internet.

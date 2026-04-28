@@ -469,7 +469,10 @@ info "SSH server config"
 step="sshd config"
 
 # Build custom.conf content — single write to avoid clobber issues
-SSHD_CUSTOM="AcceptEnv NO_CLAUDE"
+SSHD_CUSTOM="AcceptEnv NO_CLAUDE
+TCPKeepAlive yes
+ClientAliveInterval 30
+ClientAliveCountMax 3"
 
 if [[ -n "${AOC_SSH_PASSWORD:-}" ]]; then
     SSHD_CUSTOM="${SSHD_CUSTOM}

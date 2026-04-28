@@ -13,6 +13,7 @@ Thumbs.db
 # Claude Code local settings — personal, not shared
 .claude/settings.local.json
 .claude/CLAUDE.local.md
+.claude/scheduled_tasks.lock
 
 # Claude Code worktrees (created by `claude --worktree`)
 .claude/worktrees/

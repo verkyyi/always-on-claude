@@ -5,6 +5,7 @@ services:
     hostname: ${CONTAINER_HOSTNAME:-claude-dev}
     stdin_open: true
     tty: true
+    init: true
     volumes:
       # Claude Code config/auth/history (bind mount to persist through down/up)
       - ~/.claude:/home/dev/.claude

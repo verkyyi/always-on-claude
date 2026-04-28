@@ -1,12 +1,12 @@
 # Host Schedule
 
-Schedule commands from this container coding session through the always-on-claude host scheduling bridge.
+Schedule commands from this container coding session through the always-on-claude host-native v2 scheduler.
 
 ## Context
 
 - Arguments: $ARGUMENTS
 - Current directory: !`pwd`
-- Bridge status: !`test -d /home/dev/.aoc/schedule/inbox && test -w /home/dev/.aoc/schedule/inbox && echo ready || echo unavailable`
+- Scheduler status: !`test -d /home/dev/.always-on-claude/schedule/inbox-v2 && test -w /home/dev/.always-on-claude/schedule/inbox-v2 && echo ready || echo unavailable`
 
 ## Usage
 
@@ -19,26 +19,32 @@ Use this repo-managed CLI for all operations:
 Parse `$ARGUMENTS` as one of:
 
 - Empty or `list`: show scheduled jobs.
-- `at <time spec> -- <command>`: schedule a one-off command from the current project directory.
-- `cron <5-field spec> -- <command>`: schedule a recurring command from the current project directory.
-- `at <time spec> --cwd <path> -- <command>`: schedule from an explicit container path under `/home/dev/projects`.
+- `at <YYYY-MM-DD HH:MM> -- <command>`: schedule a one-off command in host local time.
+- `hourly --minute <0-59> -- <command>`: schedule an hourly recurring command.
+- `daily --time <HH:MM> -- <command>`: schedule a daily recurring command.
+- `weekly --weekday <weekday> --time <HH:MM> -- <command>`: schedule a weekly recurring command.
+- `monthly --day <1-31> --time <HH:MM> -- <command>`: schedule a monthly recurring command.
+- `... --cwd <path> -- <command>`: schedule from an explicit container path under `/home/dev/projects`.
+- `health`: show bridge health JSON.
 - `status <job-id>`: show status JSON.
 - `logs <job-id> [lines]`: show recent logs.
-- `cancel <job-id>`: request cancellation of a queued host `at` job.
+- `delete <job-id>`: remove a scheduled job.
+- `enable <job-id>` / `disable <job-id>`: toggle a job.
+- `run-now <job-id>`: request an immediate run of the current slot.
 
 Examples:
 
 ```bash
-/home/dev/dev-env/scripts/runtime/aoc-schedule.sh at "now + 2 hours" -- "npm test"
-/home/dev/dev-env/scripts/runtime/aoc-schedule.sh cron "0 3 * * *" -- "npm test"
-/home/dev/dev-env/scripts/runtime/aoc-schedule.sh at "03:00 tomorrow" -- ./scripts/nightly.sh
+/home/dev/dev-env/scripts/runtime/aoc-schedule.sh at "2026-04-26 09:00" -- "npm test"
+/home/dev/dev-env/scripts/runtime/aoc-schedule.sh daily --time 03:00 -- ./scripts/nightly.sh
+/home/dev/dev-env/scripts/runtime/aoc-schedule.sh hourly --minute 0 -- ./scripts/hourly.sh
 /home/dev/dev-env/scripts/runtime/aoc-schedule.sh list
 ```
 
 ## Rules
 
 - Prefer `/host-schedule` for this workflow. `/schedule` may resolve to Claude's built-in scheduling feature.
-- Do not call host `at`, `atrm`, `crontab`, `systemctl`, or Docker directly for this workflow from inside the container.
-- If the bridge is unavailable, tell the user to run `/update` from the manager session and restart the container so the schedule mounts are present.
+- Do not call host `launchctl`, `systemctl`, `crontab`, or Docker directly for this workflow from inside the container.
+- If the scheduler is unavailable, tell the user to run `/update` from the manager session and restart the container so the schedule mounts are present.
 - Confirm before scheduling destructive, externally visible, cloud-costing, or long-running production actions.
 - Keep output compact: return the job id, status command, and logs command.

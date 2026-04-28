@@ -143,14 +143,17 @@ The workspace manager remains Claude-based because lifecycle commands still live
 
 ### Schedule bridge
 
-Provisioned hosts install a narrow scheduling bridge for container coding sessions:
+Provisioned hosts now use a v2 local-time scheduler for container coding sessions:
 
-- Container writes request JSON to `/home/dev/.aoc/schedule/inbox`.
-- Host `always-on-claude-schedule-bridge.path` watches `~/.always-on-claude/schedule/inbox/*.json`.
-- Host processor validates the request, submits a host `atd` job or managed user crontab entry, and stores status/logs under `~/.always-on-claude/schedule/`.
+- Container writes request JSON to `/home/dev/.always-on-claude/schedule/inbox-v2`.
+- Host recovery/controller processing applies pending requests and keeps missed-run recovery state up to date.
+- Native host scheduler entries run jobs directly (`launchd` on macOS, `systemd` timers on Linux).
 - The scheduled host job runs the command back inside the dev container with `docker compose exec -T -w <cwd> dev bash -lc <command>`.
+- Scheduler health is written to `~/.always-on-claude/schedule/bridge-health.json`.
 
-Only the inbox is writable from the container. Status and logs are mounted read-only, and generated `at` job scripts live in host-only paths.
+Only the v2 request inbox is writable from the container. Status and logs are mounted read-only, and native scheduler definitions plus generated runner scripts live in host-only paths.
+
+The current bridge design is being replaced by a v2 local-time native scheduler design. See [docs/superpowers/specs/2026-04-25-local-time-native-scheduler-design.md](docs/superpowers/specs/2026-04-25-local-time-native-scheduler-design.md).
 
 ### Login flow
 
