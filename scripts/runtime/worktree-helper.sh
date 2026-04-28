@@ -341,7 +341,7 @@ cmd_recover_dirty_repo() {
 
     stash_message="aoc-recover-${slug}"
     git -C "$repo_path" stash push -u -m "$stash_message" >/dev/null 2>&1
-    stash_ref=$(git -C "$repo_path" rev-parse -q --verify stash@{0} 2>/dev/null || true)
+    stash_ref=$(git -C "$repo_path" rev-parse -q --verify 'stash@{0}' 2>/dev/null || true)
     if [[ -z "$stash_ref" ]]; then
         echo "Error: failed to stash dirty repo state: $repo_path" >&2
         exit 1
@@ -399,7 +399,6 @@ time_since_last_commit() {
 record_unique_cleanup_entry() {
     local bucket="$1" entry="$2"
     local seen_var="seen_${bucket}"
-    local array_var="${bucket}[@]"
     local current_seen
     current_seen=$(eval "printf '%s' \"\${$seen_var:-}\"")
     if [[ "$current_seen" == *"|$entry|"* ]]; then
@@ -446,8 +445,11 @@ cmd_cleanup() {
     local cleaned=()
     local stale=()
     local active=()
+    # shellcheck disable=SC2034  # accessed indirectly via "seen_${bucket}" in record_unique_cleanup_entry
     local seen_cleaned=""
+    # shellcheck disable=SC2034
     local seen_stale=""
+    # shellcheck disable=SC2034
     local seen_active=""
     local repo_glob_root="$HOME/projects"
 

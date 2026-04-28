@@ -10,7 +10,7 @@ source "$SCRIPT_DIR/schedule-v2-lib.sh"
 recovery_log="$SCHEDULE_V2_LOGS_DIR/recovery.log"
 
 main() {
-    local job_id slot slot_file
+    local job_id slot
 
     schedule_v2_ensure_dirs
 
@@ -23,7 +23,6 @@ main() {
             [[ "$SCHEDULE_V2_JOB_ENABLED" == "true" ]] || continue
 
             slot="$(schedule_v2_compute_slot "$SCHEDULE_V2_JOB_FILE")"
-            slot_file="$(schedule_v2_slot_path "$job_id" "$slot")"
 
             if schedule_v2_slot_terminal "$job_id" "$slot" || schedule_v2_slot_running "$job_id" "$slot"; then
                 echo "skip $job_id: slot $slot already accounted for"

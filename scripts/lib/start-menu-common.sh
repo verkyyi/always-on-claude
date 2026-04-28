@@ -464,6 +464,7 @@ match_sessions() {
 }
 
 compute_default() {
+    # shellcheck disable=SC2034  # consumed by show_menu in caller scope
     default_idx=0
 }
 

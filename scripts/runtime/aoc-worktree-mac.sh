@@ -4,7 +4,6 @@
 set -euo pipefail
 
 DOCKER="${DOCKER:-/opt/homebrew/bin/docker}"
-REPO="${AOC_REPO:-$HOME/always-on-claude}"
 CONTAINER="${AOC_CONTAINER:-claude-dev}"
 PROJECTS_HOST="${AOC_PROJECTS_HOST:-$HOME/projects}"
 PROJECTS_CONTAINER="${AOC_PROJECTS_CONTAINER:-/home/dev/projects}"

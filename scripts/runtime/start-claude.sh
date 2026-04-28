@@ -217,6 +217,7 @@ session_matches_repo_path() {
     local session_agent expected_session
     expected_session=$(code_agent_session_name_for_agent "claude" "$repo_path")
 
+    # shellcheck disable=SC2154  # session_names/session_paths set in start-menu-common.sh
     for si in "${!session_names[@]}"; do
         if [[ -n "${session_paths[$si]:-}" && "${session_paths[$si]}" == "$repo_path" ]]; then
             return 0
@@ -248,7 +249,7 @@ active_worktree_keep_args() {
 
 sync_repo_or_warn() {
     local repo_path="$1"
-    local output
+    local output  # shellcheck disable=SC2034  # captured to suppress stderr; only exit code is checked
     if ! output=$(bash "$WORKTREE_HELPER" sync-repo "$repo_path" 2>&1); then
         PROJECT_SYNC_WARNINGS+=("${repo_path}|needs cleanup")
         return 1
@@ -428,7 +429,9 @@ prepare_project_launch() {
     mark_repo_refreshed "$main_path"
 
     worktree_info=$(bash "$WORKTREE_HELPER" create-session-worktree "$main_path")
+    # shellcheck disable=SC2034  # LAUNCH_* consumed by launch() in start-menu-common.sh
     IFS='|' read -r LAUNCH_PATH LAUNCH_BRANCH _default_branch <<< "$worktree_info"
+    # shellcheck disable=SC2034
     LAUNCH_REPO_NAME="$repo_name"
 }
 
