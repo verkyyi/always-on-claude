@@ -249,9 +249,7 @@ active_worktree_keep_args() {
 
 sync_repo_or_warn() {
     local repo_path="$1"
-    # shellcheck disable=SC2034  # captured to suppress stderr; only exit code is checked
-    local output
-    if ! output=$(bash "$WORKTREE_HELPER" sync-repo "$repo_path" 2>&1); then
+    if ! bash "$WORKTREE_HELPER" sync-repo "$repo_path" >/dev/null 2>&1; then
         PROJECT_SYNC_WARNINGS+=("${repo_path}|needs cleanup")
         return 1
     fi
