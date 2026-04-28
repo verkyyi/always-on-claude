@@ -470,8 +470,14 @@ cmd_cleanup() {
     # Walk all repos and run `git worktree prune` to clear registered-but-missing
     # worktree entries before the main scan. Skip read-only mounts (e.g. virtiofs
     # ro mount of dev-env inside the container) so we don't churn on errors.
+    #
+    # Loop FD 3 holds the find pipe and FD 4 holds the inner worktree-list pipe.
+    # Without this isolation, child processes in the loop body inherit FD 0 from
+    # the loop redirection, and any one that reads stdin (e.g. git fetch's
+    # askpass probe) silently consumes the next path off the find pipe — so the
+    # next repo is skipped without any error. See test_cleanup_processes_all_repos_when_inner_git_reads_stdin.
     local _registered_worktrees="|"
-    while IFS= read -r git_dir; do
+    while IFS= read -r git_dir <&3; do
         local _repo_path
         _repo_path=$(normalize_path "$(dirname "$git_dir")")
         if [[ -n "$scope_repo" && "$_repo_path" != "$scope_repo" ]]; then
@@ -484,17 +490,17 @@ cmd_cleanup() {
         git -C "$_repo_path" worktree prune 2>/dev/null || true
         # While we're here, build a set of all currently-registered worktree paths
         # for the orphan-sibling scan below.
-        while IFS= read -r _wt_line; do
+        while IFS= read -r _wt_line <&4; do
             if [[ "$_wt_line" == "worktree "* ]]; then
                 local _wt
                 _wt=$(normalize_path "${_wt_line#worktree }")
                 _registered_worktrees="${_registered_worktrees}${_wt}|"
             fi
-        done < <(git -C "$_repo_path" worktree list --porcelain 2>/dev/null)
-    done < <(find "$repo_glob_root" -maxdepth 3 -name ".git" -type d 2>/dev/null | sort)
+        done 4< <(git -C "$_repo_path" worktree list --porcelain 2>/dev/null)
+    done 3< <(find "$repo_glob_root" -maxdepth 3 -name ".git" -type d 2>/dev/null | sort)
 
     # Find all main repos (directories with .git as a directory)
-    while IFS= read -r git_dir; do
+    while IFS= read -r git_dir <&3; do
         local repo_path
         repo_path=$(normalize_path "$(dirname "$git_dir")")
         if [[ -n "$scope_repo" && "$repo_path" != "$scope_repo" ]]; then
@@ -503,12 +509,12 @@ cmd_cleanup() {
         local default_branch
         default_branch=$(detect_default_branch "$repo_path")
 
-        # Fetch latest state of default branch for accurate merge checks
-        git -C "$repo_path" fetch origin "$default_branch" &>/dev/null 2>&1 || true
+        # Fetch latest state of default branch for accurate merge checks.
+        git -C "$repo_path" fetch origin "$default_branch" &>/dev/null || true
 
         # Iterate over worktrees for this repo
         local wt_path="" wt_branch=""
-        while IFS= read -r line; do
+        while IFS= read -r line <&4; do
             if [[ "$line" == "worktree "* ]]; then
                 wt_path=$(normalize_path "${line#worktree }")
                 wt_branch=""  # Reset; will be set by "branch" line or left empty for detached HEAD
@@ -601,8 +607,8 @@ cmd_cleanup() {
                     fi
                 fi
             fi
-        done < <(git -C "$repo_path" worktree list --porcelain 2>/dev/null; echo)
-    done < <(find "$repo_glob_root" -maxdepth 3 -name ".git" -type d 2>/dev/null | sort)
+        done 4< <(git -C "$repo_path" worktree list --porcelain 2>/dev/null; echo)
+    done 3< <(find "$repo_glob_root" -maxdepth 3 -name ".git" -type d 2>/dev/null | sort)
 
     # --- Orphan-sibling scan ---
     # Walk top-level <basename>--* sibling dirs and remove those that:
@@ -610,7 +616,7 @@ cmd_cleanup() {
     #   - are not registered as a worktree anywhere
     # We deliberately do NOT auto-remove "empty stub" dirs (no .git at all) —
     # those can be in-progress user work; we only surface them.
-    while IFS= read -r sibling; do
+    while IFS= read -r sibling <&3; do
         sibling=$(normalize_path "$sibling")
         if [[ "$_registered_worktrees" == *"|${sibling}|"* ]]; then
             continue
@@ -636,7 +642,7 @@ cmd_cleanup() {
             # No .git at all — empty stub. Don't auto-remove; just surface.
             record_unique_cleanup_entry active "${sibling} (empty stub, not a worktree — review)"
         fi
-    done < <(find "$repo_glob_root" -maxdepth 1 -mindepth 1 -name '*--*' -type d 2>/dev/null | sort)
+    done 3< <(find "$repo_glob_root" -maxdepth 1 -mindepth 1 -name '*--*' -type d 2>/dev/null | sort)
 
     # Report results
     if [[ "$quiet" == true ]]; then
