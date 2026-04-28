@@ -444,6 +444,55 @@ test_cleanup_pre_prune_runs_before_main_loop() {
     [[ ! -d "$repo/.git/worktrees/myrepo--ghost" ]] || _fail "pre-prune did not clear .git/worktrees/myrepo--ghost"
 }
 
+test_cleanup_processes_all_repos_when_inner_git_reads_stdin() {
+    # Regression: the outer find-pipe was being slurped by `git fetch`
+    # inside the loop because fetch inherited FD 0. That silently skipped
+    # every repo after the first one, leaving merged worktrees in place.
+    # Set up three repos in alphabetical order, each with a mergeable
+    # worktree, and wrap git so `fetch` reads stdin. All three worktrees
+    # must be cleaned, not just the first.
+    local real_git
+    real_git=$(command -v git)
+
+    local name repo bare default_branch
+    for name in alpha bravo charlie; do
+        repo=$(create_test_repo "projects/$name")
+        create_test_worktree "$repo" "merged" >/dev/null
+        bare="$TEST_DIR/bare-$name"
+        git init -q --bare "$bare"
+        git -C "$repo" remote add origin "$bare"
+        default_branch=$(git -C "$repo" rev-parse --abbrev-ref HEAD)
+        git -C "$repo" push -q origin "${default_branch}"
+    done
+
+    cat > "$TEST_DIR/bin/git" <<WRAP
+#!/bin/bash
+# Slurp one line of stdin during fetch — emulates the conditions under
+# which real git reads from the controlling terminal (askpass, slow
+# handshake). If the cleanup loop hasn't isolated stdin, this consumes
+# a path off the find pipe and the next repo gets skipped.
+for arg in "\$@"; do
+    if [[ "\$arg" == "fetch" ]]; then
+        IFS= read -r -t 0.05 _slurp 2>/dev/null || true
+        break
+    fi
+done
+exec "$real_git" "\$@"
+WRAP
+    chmod +x "$TEST_DIR/bin/git"
+
+    bash "$HELPER" cleanup >/dev/null
+
+    # Roll up failures so a single missed repo is visible; with bare
+    # asserts, set -e is suppressed inside the test function so only
+    # the last assertion's exit code would matter.
+    local missing=()
+    for name in alpha bravo charlie; do
+        [[ ! -e "$HOME/projects/${name}--merged" ]] || missing+=("${name}--merged")
+    done
+    [[ ${#missing[@]} -eq 0 ]] || _fail "worktrees not cleaned: ${missing[*]}"
+}
+
 test_sync_repo_resets_to_default_branch_and_cleans_files() {
     local repo
     repo=$(create_test_repo projects/myrepo)
