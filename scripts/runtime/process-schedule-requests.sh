@@ -30,11 +30,18 @@ PROCESSING_DIR="$SCHEDULE_DIR/processing"
 JOBS_DIR="$SCHEDULE_DIR/jobs"
 LOG_DIR="$SCHEDULE_DIR/logs"
 STATUS_DIR="$SCHEDULE_DIR/status"
+RUN_DIR="$SCHEDULE_DIR/run"
 LOCK_FILE="$SCHEDULE_DIR/.processor.lock"
 LOCK_DIR="$SCHEDULE_DIR/.processor.lockdir"
+HEALTH_FILE="$SCHEDULE_DIR/bridge-health.json"
+JOB_TIMEOUT_SEC="${AOC_JOB_TIMEOUT_SEC:-7200}"
 
 now_utc() {
     date -u +%Y-%m-%dT%H:%M:%SZ
+}
+
+health_epoch() {
+    date +%s
 }
 
 valid_id() {
@@ -72,6 +79,100 @@ cron_spec_ok() {
 
 has_newline() {
     [[ "$1" == *$'\n'* || "$1" == *$'\r'* ]]
+}
+
+job_lock_dir() {
+    printf '%s/%s.lock\n' "$RUN_DIR" "$1"
+}
+
+job_pid_file() {
+    printf '%s/pid\n' "$(job_lock_dir "$1")"
+}
+
+job_lock_active() {
+    local id="$1"
+    local lock_dir pid_file pid
+
+    lock_dir="$(job_lock_dir "$id")"
+    [[ -d "$lock_dir" ]] || return 1
+
+    pid_file="$(job_pid_file "$id")"
+    if [[ -f "$pid_file" ]]; then
+        pid="$(cat "$pid_file" 2>/dev/null || true)"
+        if [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null; then
+            return 0
+        fi
+    fi
+
+    rm -rf "$lock_dir"
+    return 1
+}
+
+count_active_job_locks() {
+    local lock_dir count=0 id
+
+    shopt -s nullglob
+    for lock_dir in "$RUN_DIR"/*.lock; do
+        id="$(basename "$lock_dir" .lock)"
+        job_lock_active "$id" && count=$((count + 1))
+    done
+    printf '%s\n' "$count"
+}
+
+write_health() {
+    local state="$1"
+    local reason="${2:-}"
+    local tmp existing_started_at
+    local active_jobs
+
+    mkdir -p "$RUN_DIR"
+    active_jobs="$(count_active_job_locks)"
+    existing_started_at=""
+    if [[ -f "$HEALTH_FILE" ]]; then
+        existing_started_at="$(jq -r '.last_started_at // empty' "$HEALTH_FILE" 2>/dev/null || true)"
+    fi
+
+    tmp=$(mktemp "$SCHEDULE_DIR/.health.tmp.XXXXXX")
+    jq -n \
+        --arg state "$state" \
+        --arg reason "$reason" \
+        --arg now "$(now_utc)" \
+        --arg last_started_at "${existing_started_at:-$(now_utc)}" \
+        --argjson last_tick_epoch "$(health_epoch)" \
+        --argjson active_jobs "$active_jobs" \
+        --argjson pid "$$" \
+        '{
+            state: $state,
+            last_started_at: $last_started_at,
+            last_completed_at: $now,
+            last_tick_epoch: $last_tick_epoch,
+            active_jobs: $active_jobs,
+            processor_pid: $pid
+        }
+        | if $reason == "" then . else . + {reason: $reason} end' > "$tmp"
+    mv "$tmp" "$HEALTH_FILE"
+}
+
+mark_health_started() {
+    local tmp active_jobs
+
+    mkdir -p "$RUN_DIR"
+    active_jobs="$(count_active_job_locks)"
+    tmp=$(mktemp "$SCHEDULE_DIR/.health.tmp.XXXXXX")
+    jq -n \
+        --arg state "running" \
+        --arg now "$(now_utc)" \
+        --argjson last_tick_epoch "$(health_epoch)" \
+        --argjson active_jobs "$active_jobs" \
+        --argjson pid "$$" \
+        '{
+            state: $state,
+            last_started_at: $now,
+            last_tick_epoch: $last_tick_epoch,
+            active_jobs: $active_jobs,
+            processor_pid: $pid
+        }' > "$tmp"
+    mv "$tmp" "$HEALTH_FILE"
 }
 
 write_invalid_status() {
@@ -171,6 +272,7 @@ create_job_script() {
         printf 'STATUS_FILE=%q\n' "$status_file"
         printf 'LOG_FILE=%q\n' "$log_file"
         printf 'RECURRING=%q\n' "$recurring"
+        printf 'JOB_TIMEOUT_SEC=%q\n' "$JOB_TIMEOUT_SEC"
         cat <<'JOB'
 
 now_utc() {
@@ -191,7 +293,10 @@ update_status() {
             --arg status "$status" \
             --arg updated_at "$now" \
             --arg last_started_at "$now" \
-            '.status = $status | .updated_at = $updated_at | .last_started_at = $last_started_at' \
+            '.status = $status
+             | .updated_at = $updated_at
+             | .last_started_at = $last_started_at
+             | del(.worker_pid, .worker_state, .worker_started_at)' \
             "$STATUS_FILE" > "$tmp"
     elif [[ "$RECURRING" == "true" && -n "$exit_code" ]]; then
         jq \
@@ -204,20 +309,26 @@ update_status() {
              | .updated_at = $updated_at
              | .last_run_status = $last_run_status
              | .last_finished_at = $last_finished_at
-             | .last_exit_code = $last_exit_code' \
+             | .last_exit_code = $last_exit_code
+             | del(.worker_pid, .worker_state, .worker_started_at)' \
             "$STATUS_FILE" > "$tmp"
     elif [[ -n "$exit_code" ]]; then
         jq \
             --arg status "$status" \
             --arg updated_at "$now" \
             --argjson exit_code "$exit_code" \
-            '.status = $status | .updated_at = $updated_at | .exit_code = $exit_code' \
+            '.status = $status
+             | .updated_at = $updated_at
+             | .exit_code = $exit_code
+             | del(.worker_pid, .worker_state, .worker_started_at)' \
             "$STATUS_FILE" > "$tmp"
     else
         jq \
             --arg status "$status" \
             --arg updated_at "$now" \
-            '.status = $status | .updated_at = $updated_at' \
+            '.status = $status
+             | .updated_at = $updated_at
+             | del(.worker_pid, .worker_state, .worker_started_at)' \
             "$STATUS_FILE" > "$tmp"
     fi
     mv "$tmp" "$STATUS_FILE"
@@ -242,11 +353,32 @@ update_status() {
         read -r -a exec_prefix <<< "$DOCKER_EXEC_PREFIX"
     fi
 
-    set +e
+    docker_cmd=()
     if [[ ${#exec_prefix[@]} -gt 0 ]]; then
-        "${exec_prefix[@]}" "$DOCKER_BIN" "${compose_args[@]}" exec -T -w "$CWD" "$DOCKER_SERVICE" bash -lc "$COMMAND"
+        docker_cmd+=("${exec_prefix[@]}")
+    fi
+    docker_cmd+=("$DOCKER_BIN" "${compose_args[@]}" exec -T -w "$CWD" "$DOCKER_SERVICE" bash -lc "$COMMAND")
+
+    set +e
+    if [[ "$JOB_TIMEOUT_SEC" =~ ^[0-9]+$ ]] && [[ "$JOB_TIMEOUT_SEC" -gt 0 ]]; then
+        python3 - "$JOB_TIMEOUT_SEC" "${docker_cmd[@]}" <<'PY'
+import subprocess
+import sys
+
+timeout = int(sys.argv[1])
+cmd = sys.argv[2:]
+if not cmd:
+    raise SystemExit(127)
+
+try:
+    completed = subprocess.run(cmd, check=False, timeout=timeout)
+except subprocess.TimeoutExpired:
+    raise SystemExit(124)
+
+raise SystemExit(completed.returncode)
+PY
     else
-        "$DOCKER_BIN" "${compose_args[@]}" exec -T -w "$CWD" "$DOCKER_SERVICE" bash -lc "$COMMAND"
+        "${docker_cmd[@]}"
     fi
     rc=$?
     set -e
@@ -254,6 +386,9 @@ update_status() {
     if [[ "$rc" -eq 0 ]]; then
         echo "=== $(now_utc) job $JOB_ID succeeded ==="
         update_status succeeded "$rc"
+    elif [[ "$rc" -eq 124 ]]; then
+        echo "=== $(now_utc) job $JOB_ID timed out after ${JOB_TIMEOUT_SEC}s ==="
+        update_status failed "$rc"
     else
         echo "=== $(now_utc) job $JOB_ID failed: exit $rc ==="
         update_status failed "$rc"
@@ -265,6 +400,122 @@ JOB
     } > "$job_script"
 
     chmod 700 "$job_script"
+}
+
+rebuild_job_script_from_status() {
+    local status_file="$1"
+    local id cwd command action log_file job_script
+
+    id=$(jq -r '.id // empty' "$status_file" 2>/dev/null || true)
+    cwd=$(jq -r '.cwd // empty' "$status_file" 2>/dev/null || true)
+    command=$(jq -r '.command // empty' "$status_file" 2>/dev/null || true)
+    action=$(jq -r '.action // empty' "$status_file" 2>/dev/null || true)
+
+    valid_id "$id" || return 1
+    [[ -n "$cwd" && -n "$command" ]] || return 1
+
+    log_file="$LOG_DIR/$id.log"
+    job_script="$JOBS_DIR/$id.sh"
+    create_job_script "$id" "$cwd" "$command" "$status_file" "$log_file" "$job_script" "$([[ "$action" == "cron" ]] && echo true || echo false)"
+}
+
+reconcile_stale_running_jobs() {
+    local status_file id action status tmp
+
+    shopt -s nullglob
+    for status_file in "$STATUS_DIR"/*.json; do
+        id=$(jq -r '.id // empty' "$status_file" 2>/dev/null || true)
+        action=$(jq -r '.action // empty' "$status_file" 2>/dev/null || true)
+        status=$(jq -r '.status // empty' "$status_file" 2>/dev/null || true)
+
+        valid_id "$id" || continue
+        [[ "$status" == "running" ]] || continue
+        job_lock_active "$id" && continue
+
+        tmp=$(mktemp "$STATUS_DIR/.${id}.tmp.XXXXXX")
+        if [[ "$action" == "cron" ]]; then
+            jq \
+                --arg status "scheduled" \
+                --arg updated_at "$(now_utc)" \
+                --arg last_run_status "failed" \
+                --arg last_finished_at "$(now_utc)" \
+                --arg reason "worker disappeared before completion" \
+                --argjson last_exit_code 125 \
+                '.status = $status
+                 | .updated_at = $updated_at
+                 | .last_run_status = $last_run_status
+                 | .last_finished_at = $last_finished_at
+                 | .last_exit_code = $last_exit_code
+                 | .reason = $reason
+                 | del(.worker_pid, .worker_state, .worker_started_at)' \
+                "$status_file" > "$tmp"
+        else
+            jq \
+                --arg status "failed" \
+                --arg updated_at "$(now_utc)" \
+                --arg reason "worker disappeared before completion" \
+                --argjson exit_code 125 \
+                '.status = $status
+                 | .updated_at = $updated_at
+                 | .exit_code = $exit_code
+                 | .reason = $reason
+                 | del(.worker_pid, .worker_state, .worker_started_at)' \
+                "$status_file" > "$tmp"
+        fi
+        mv "$tmp" "$status_file"
+        warn "Reconciled stale running job $id"
+    done
+}
+
+mark_job_dispatched() {
+    local status_file="$1"
+    local worker_pid="$2"
+    local tmp
+
+    tmp=$(mktemp "$STATUS_DIR/.dispatch.tmp.XXXXXX")
+    jq \
+        --arg updated_at "$(now_utc)" \
+        --arg worker_state "queued" \
+        --arg worker_started_at "$(now_utc)" \
+        --argjson worker_pid "$worker_pid" \
+        '.updated_at = $updated_at
+         | .worker_state = $worker_state
+         | .worker_started_at = $worker_started_at
+         | .worker_pid = $worker_pid' \
+        "$status_file" > "$tmp"
+    mv "$tmp" "$status_file"
+}
+
+launch_job_async() {
+    local id="$1"
+    local status_file="$2"
+    local job_script="$3"
+    local lock_dir pid_file bg_pid
+
+    lock_dir="$(job_lock_dir "$id")"
+    pid_file="$(job_pid_file "$id")"
+    if job_lock_active "$id"; then
+        warn "Job $id is already running"
+        return 1
+    fi
+
+    mkdir -p "$RUN_DIR"
+    mkdir "$lock_dir"
+
+    nohup bash -c '
+        set -euo pipefail
+        lock_dir="$1"
+        pid_file="$2"
+        job_script="$3"
+        printf "%s\n" "$$" > "$pid_file"
+        bash "$job_script" || true
+        rm -f "$pid_file"
+        rmdir "$lock_dir" 2>/dev/null || true
+    ' _ "$lock_dir" "$pid_file" "$job_script" >/dev/null 2>&1 &
+    bg_pid=$!
+    printf '%s\n' "$bg_pid" > "$pid_file"
+    mark_job_dispatched "$status_file" "$bg_pid"
+    return 0
 }
 
 parse_launchd_time_spec() {
@@ -709,8 +960,9 @@ run_due_launchd_at_jobs() {
         valid_id "$id" || continue
 
         job_script="$JOBS_DIR/$id.sh"
+        rebuild_job_script_from_status "$status_file" || true
         if [[ -x "$job_script" ]]; then
-            bash "$job_script" || true
+            launch_job_async "$id" "$status_file" "$job_script" || true
         else
             update_status_file "$status_file" "failed" 127
             warn "Missing job script for due job $id: $job_script"
@@ -737,8 +989,9 @@ run_due_launchd_cron_jobs() {
         cron_due_now "$schedule" "$last_started_at" || continue
 
         job_script="$JOBS_DIR/$id.sh"
+        rebuild_job_script_from_status "$status_file" || true
         if [[ -x "$job_script" ]]; then
-            bash "$job_script" || true
+            launch_job_async "$id" "$status_file" "$job_script" || true
         else
             update_status_file "$status_file" "failed" 127
             warn "Missing job script for recurring job $id: $job_script"
@@ -802,14 +1055,14 @@ acquire_lock() {
         exec 9>"$LOCK_FILE"
         if ! flock -n 9; then
             warn "Another schedule processor is already running"
-            exit 0
+            return 1
         fi
         return 0
     fi
 
     if ! mkdir "$LOCK_DIR" 2>/dev/null; then
         warn "Another schedule processor is already running"
-        exit 0
+        return 1
     fi
     trap 'rmdir "$LOCK_DIR" 2>/dev/null || true' EXIT
 }
@@ -856,12 +1109,16 @@ main() {
             ;;
     esac
 
-    mkdir -p "$INBOX_DIR" "$PROCESSING_DIR" "$JOBS_DIR" "$LOG_DIR" "$STATUS_DIR"
+    mkdir -p "$INBOX_DIR" "$PROCESSING_DIR" "$JOBS_DIR" "$LOG_DIR" "$STATUS_DIR" "$RUN_DIR"
     if [[ $EUID -eq 0 ]]; then
         chown -R "$TARGET_USER:$TARGET_GROUP" "$SCHEDULE_DIR"
     fi
 
-    acquire_lock
+    mark_health_started
+    if ! acquire_lock; then
+        write_health "busy" "processor lock is held by another run"
+        return 0
+    fi
 
     shopt -s nullglob
     local request work
@@ -872,8 +1129,10 @@ main() {
         rm -f "$work"
     done
 
+    reconcile_stale_running_jobs
     run_due_launchd_at_jobs
     run_due_launchd_cron_jobs
+    write_health "idle"
 }
 
 main "$@"

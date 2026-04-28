@@ -13,6 +13,13 @@ set -euo pipefail
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 
+disable_terminal_flow_control() {
+    # Prevent accidental Ctrl-S from pausing output in attached tmux sessions.
+    if [[ -t 0 ]]; then
+        stty -ixon -ixoff 2>/dev/null || true
+    fi
+}
+
 normalize_code_agent() {
     case "${1:-}" in
         codex) echo "codex" ;;
@@ -60,6 +67,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 agent=$(normalize_code_agent "$agent")
+
+disable_terminal_flow_control
 
 if [[ -n "$cwd" ]]; then
     cd "$cwd"

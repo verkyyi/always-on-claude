@@ -214,16 +214,18 @@ Short aliases designed for phone typing:
 
 ### Scheduled jobs
 
-Container coding sessions do not get direct host `at` or cron access. Use `/host-schedule` in Claude or the Codex `schedule-host-job` skill to submit jobs through the host bridge. `/schedule` may resolve to Claude's built-in scheduling feature, so `/host-schedule` is the reliable workspace command:
+Container coding sessions do not get direct host scheduler access. Use `/host-schedule` in Claude or the Codex `schedule-host-job` skill to submit jobs through the host-native v2 scheduler. `/schedule` may resolve to Claude's built-in scheduling feature, so `/host-schedule` is the reliable workspace command:
 
 ```bash
-/home/dev/dev-env/scripts/runtime/aoc-schedule.sh at "03:00 tomorrow" -- "npm test"
-/home/dev/dev-env/scripts/runtime/aoc-schedule.sh cron "0 3 * * *" -- "npm test"
+/home/dev/dev-env/scripts/runtime/aoc-schedule.sh at "2026-04-26 09:00" -- "npm test"
+/home/dev/dev-env/scripts/runtime/aoc-schedule.sh daily --time 03:00 -- "npm test"
+/home/dev/dev-env/scripts/runtime/aoc-schedule.sh hourly --minute 0 -- ./scripts/hourly.sh
 /home/dev/dev-env/scripts/runtime/aoc-schedule.sh list
+/home/dev/dev-env/scripts/runtime/aoc-schedule.sh health
 /home/dev/dev-env/scripts/runtime/aoc-schedule.sh logs <job-id>
 ```
 
-The host validates requests, stores status/logs in `~/.always-on-claude/schedule/`, and runs the command inside the container at the requested time. Recurring jobs are stored as managed blocks in the `dev` user's host crontab and can be removed with `aoc-schedule.sh cancel <job-id>`.
+The host validates requests, stores status/logs in `~/.always-on-claude/schedule/`, and runs the command inside the container at the requested local time. Recurring jobs are installed as native host scheduler entries (`launchd` on macOS, `systemd` timers on Linux) and can be removed with `aoc-schedule.sh delete <job-id>`. Scheduler health and recovery state are exposed through `aoc-schedule.sh health`, and host operators can use `scripts/runtime/schedule-v2-manage.sh` for install or migration tasks.
 
 ### How slash commands work
 

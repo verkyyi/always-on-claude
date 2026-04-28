@@ -20,7 +20,7 @@ DOCKER="${AOC_DOCKER:-/opt/homebrew/bin/docker}"
 COMPOSE_FILE="${AOC_DOCKER_COMPOSE_FILE:-docker-compose.macmini.yml}"
 LABEL="com.always-on-claude.schedule-bridge"
 PLIST="$HOME_DIR/Library/LaunchAgents/$LABEL.plist"
-PROCESSOR="$REPO/scripts/runtime/process-schedule-requests.sh"
+PROCESSOR="$REPO/scripts/runtime/process-all-schedule-requests.sh"
 LOG_FILE="$SCHEDULE_DIR/logs/launchd.log"
 
 command -v launchctl >/dev/null 2>&1 || die "launchctl is required"
@@ -30,11 +30,11 @@ command -v jq >/dev/null 2>&1 || die "jq is required"
 [ -f "$REPO/$COMPOSE_FILE" ] || die "Missing compose file: $REPO/$COMPOSE_FILE"
 
 info "Schedule bridge directories"
-for dir in inbox processing jobs logs status; do
+for dir in inbox inbox-v2 processing jobs logs status request-status; do
     mkdir -p "$SCHEDULE_DIR/$dir"
 done
 mkdir -p "$PROJECTS_DIR" "$HOME_DIR/Library/LaunchAgents"
-chmod 700 "$SCHEDULE_DIR" "$SCHEDULE_DIR/inbox" "$SCHEDULE_DIR/processing" "$SCHEDULE_DIR/jobs"
+chmod 700 "$SCHEDULE_DIR" "$SCHEDULE_DIR/inbox" "$SCHEDULE_DIR/inbox-v2" "$SCHEDULE_DIR/processing" "$SCHEDULE_DIR/jobs" "$SCHEDULE_DIR/request-status"
 chmod 755 "$SCHEDULE_DIR/logs" "$SCHEDULE_DIR/status"
 ok "Directories ready"
 
@@ -92,6 +92,7 @@ cat > "$PLIST" <<PLIST
   <key>WatchPaths</key>
   <array>
     <string>$SCHEDULE_DIR/inbox</string>
+    <string>$SCHEDULE_DIR/inbox-v2</string>
   </array>
   <key>StandardOutPath</key>
   <string>$LOG_FILE</string>

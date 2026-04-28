@@ -21,6 +21,7 @@ services:
     hostname: ${CONTAINER_HOSTNAME:-claude-dev}
     stdin_open: true
     tty: true
+    init: true
 
     volumes:
       - ${HOME}/aoc-data/claude:/home/dev/.claude
@@ -41,6 +42,7 @@ services:
       - NODE_ENV=development
       - GIT_CONFIG_GLOBAL=/home/dev/.config/git/config
       - TZ=America/Los_Angeles
+      - AOC_AUTO_UPGRADE_AGENTS=${AOC_AUTO_UPGRADE_AGENTS:-0}
 
     command: >
       bash -lc '
@@ -83,4 +85,14 @@ services:
     mem_limit: 8g
     memswap_limit: 8g
     cpus: 4.0
+    restart: unless-stopped
+
+  dashboard-about-me-forwarder:
+    image: alpine/socat
+    container_name: dashboard-about-me-forwarder
+    command:
+      - tcp-listen:18765,fork,reuseaddr,bind=0.0.0.0
+      - tcp:claude-dev:8765
+    ports:
+      - "127.0.0.1:18765:18765"
     restart: unless-stopped

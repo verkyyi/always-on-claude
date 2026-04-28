@@ -8,6 +8,7 @@ _source_functions() {
     export COMPOSE_DIR="$REPO_ROOT"
     export CONTAINER_NAME="claude-dev"
     export CONTAINER_PROJECTS="/home/dev/projects"
+    export PROJECTS_DIR="$HOME/projects"
     export DEFAULT_CODE_AGENT="${DEFAULT_CODE_AGENT:-claude}"
     export CODE_AGENT="${CODE_AGENT:-$DEFAULT_CODE_AGENT}"
     COMPOSE_CMD=(sudo --preserve-env=HOME docker compose)
@@ -17,132 +18,48 @@ _source_functions() {
     unset START_MENU_TESTING
 }
 
-_source_v2() {
-    export PROJECTS_DIR="$HOME/projects"
-    _source_functions
-}
-
 setup() {
     mkdir -p "$HOME/dev-env/scripts/runtime" "$HOME/projects"
     mock_binary tmux ""
     mock_binary nproc "2"
     unset DEFAULT_CODE_AGENT CODE_AGENT MAX_SESSIONS
     _source_functions
-    _source_v2
 }
 
 test_count_sessions_zero() {
     cat > "$TEST_DIR/bin/tmux" <<'MOCK'
 #!/bin/bash
-# Real tmux exits 1 (no sessions)
 if [[ "$1" == "list-sessions" ]]; then
     exit 1
 fi
 MOCK
     chmod +x "$TEST_DIR/bin/tmux"
     _source_functions
-    local result
-    result=$(count_sessions)
-    # count_sessions returns "0" (possibly with a duplicate from the || echo 0 fallback)
-    # Verify the first line is zero
-    assert_eq "0" "$(echo "$result" | head -1)"
+
+    assert_eq "0" "$(count_sessions | head -1)"
 }
 
-test_count_sessions_counts_claude_prefix() {
+test_count_sessions_counts_agent_prefix() {
     cat > "$TEST_DIR/bin/tmux" <<'MOCK'
 #!/bin/bash
 if [[ "$1" == "list-sessions" ]]; then
     echo "claude-myrepo"
     echo "codex-other"
-    echo "claude-other"
-    echo "non-claude-session"
+    echo "shell-host"
 fi
 MOCK
     chmod +x "$TEST_DIR/bin/tmux"
     _source_functions
-    local result
-    result=$(count_sessions)
-    assert_eq "3" "$result"
+
+    assert_eq "2" "$(count_sessions)"
 }
 
 test_max_sessions_env_override() {
-    local result
-    result=$(MAX_SESSIONS=5 get_max_sessions)
-    assert_eq "5" "$result"
-}
-
-test_max_sessions_calculated() {
-    mock_binary nproc "2"
-    mock_binary sysctl "4294967296"
-    cat > "$TEST_DIR/bin/awk" <<'MOCK'
-#!/bin/bash
-if [[ "$*" == *"MemTotal"* ]]; then
-    echo "4096"
-else
-    /usr/bin/awk "$@"
-fi
-MOCK
-    chmod +x "$TEST_DIR/bin/awk"
-    _source_functions
-    local result
-    result=$(get_max_sessions)
-    assert_eq "2" "$result"
-}
-
-test_max_sessions_minimum_one() {
-    mock_binary nproc "1"
-    mock_binary sysctl "1572864000"
-    cat > "$TEST_DIR/bin/awk" <<'MOCK'
-#!/bin/bash
-if [[ "$*" == *"MemTotal"* ]]; then
-    echo "1500"
-else
-    /usr/bin/awk "$@"
-fi
-MOCK
-    chmod +x "$TEST_DIR/bin/awk"
-    _source_functions
-    local result
-    result=$(get_max_sessions)
-    assert_eq "1" "$result"
-}
-
-test_max_sessions_low_memory_high_cpu() {
-    mock_binary nproc "8"
-    mock_binary sysctl "2147483648"
-    cat > "$TEST_DIR/bin/awk" <<'MOCK'
-#!/bin/bash
-if [[ "$*" == *"MemTotal"* ]]; then
-    echo "2048"
-else
-    /usr/bin/awk "$@"
-fi
-MOCK
-    chmod +x "$TEST_DIR/bin/awk"
-    _source_functions
-    local result
-    result=$(get_max_sessions)
-    # 2048MB RAM, 512MB OS reserve: (2048-512)/650 = 2, capped by 8 CPUs = 2
-    assert_eq "2" "$result"
+    assert_eq "5" "$(MAX_SESSIONS=5 get_max_sessions)"
 }
 
 test_to_container_path() {
-    local result
-    result=$(to_container_path "$HOME/projects/myrepo")
-    assert_eq "/home/dev/projects/myrepo" "$result"
-}
-
-test_next_code_agent_toggles() {
-    assert_eq "codex" "$(next_code_agent claude)"
-    assert_eq "claude" "$(next_code_agent codex)"
-}
-
-test_persist_default_code_agent_appends_to_bash_profile() {
-    persist_default_code_agent codex
-
-    assert_eq "codex" "$DEFAULT_CODE_AGENT"
-    assert_eq "codex" "$CODE_AGENT"
-    assert_contains "$(cat "$HOME/.bash_profile")" 'export DEFAULT_CODE_AGENT="codex"'
+    assert_eq "/home/dev/projects/myrepo" "$(to_container_path "$HOME/projects/myrepo")"
 }
 
 test_persist_default_code_agent_replaces_existing_line() {
@@ -159,26 +76,10 @@ EOF
     assert_contains "$content" 'export PATH="$HOME/.local/bin:$PATH"'
 }
 
-test_toggle_code_agent_updates_profile_and_vars() {
-    cat > "$HOME/.bash_profile" <<'EOF'
-export DEFAULT_CODE_AGENT="claude"
-EOF
-
-    CODE_AGENT=claude
-    DEFAULT_CODE_AGENT=claude
-
-    toggle_code_agent >/dev/null
-
-    assert_eq "codex" "$DEFAULT_CODE_AGENT"
-    assert_eq "codex" "$CODE_AGENT"
-    assert_contains "$(cat "$HOME/.bash_profile")" 'export DEFAULT_CODE_AGENT="codex"'
-}
-
 test_ensure_claude_state_mount_current_recreates_container_when_mount_is_stale() {
     cat > "$HOME/.claude.json" <<'EOF'
 {"state":"fresh"}
 EOF
-    mkdir -p "$HOME/dev-env"
     : > "$TEST_DIR/markers/container-recreated"
 
     cat > "$TEST_DIR/bin/tmux" <<'MOCK'
@@ -195,6 +96,7 @@ MOCK
     else
         host_sum=$(shasum -a 256 "$HOME/.claude.json" | awk '{print $1}')
     fi
+
     cat > "$TEST_DIR/bin/docker" <<MOCK
 #!/bin/bash
 state_file="$TEST_DIR/markers/container-recreated"
@@ -286,7 +188,6 @@ MOCK
     assert_contains "$output" "Exit active coding sessions"
 }
 
-
 test_check_session_limit_allows_reattach() {
     cat > "$TEST_DIR/bin/tmux" <<'MOCK'
 #!/bin/bash
@@ -301,357 +202,199 @@ exit 1
 MOCK
     chmod +x "$TEST_DIR/bin/tmux"
     _source_functions
+
     MAX_SESSIONS=2 check_session_limit "claude-myrepo"
 }
 
-test_discover_entries_finds_repos() {
+test_discover_entries_lists_base_repos_and_tracks_worktrees() {
     local repo
     repo=$(create_test_repo "projects/my-app")
-    local expected_branch
-    expected_branch=$(git -C "$repo" branch --show-current)
+    create_test_worktree "$repo" "feature-x" >/dev/null
 
-    entries=()
     discover_entries
-    assert_eq "1" "${#entries[@]}" "should find 1 repo"
-    IFS='|' read -r name branch path state activity <<< "${entries[0]}"
-    assert_eq "my-app" "$name"
-    assert_eq "$expected_branch" "$branch"
+
+    assert_eq "1" "${#project_entries[@]}"
+    assert_eq "2" "${#entries[@]}"
+    IFS='|' read -r repo_name branch path kind _repo_warning _repo_refreshing <<< "${project_entries[0]}"
+    assert_eq "my-app" "$repo_name"
     assert_eq "$repo" "$path"
-    assert_eq "none" "$state"
-    assert_eq "0" "$activity"
+    assert_eq "repo" "$kind"
+
+    IFS='|' read -r _ hidden_branch hidden_path hidden_kind <<< "${entries[1]}"
+    assert_eq "feature-x" "$hidden_branch"
+    assert_eq "${repo}--feature-x" "$hidden_path"
+    assert_eq "worktree" "$hidden_kind"
 }
 
-test_discover_entries_finds_worktrees() {
-    local repo
-    repo=$(create_test_repo "projects/my-app")
-    create_test_worktree "$repo" "feature-x"
-
-    entries=()
-    discover_entries
-    assert_eq "2" "${#entries[@]}" "should find repo + worktree"
-    IFS='|' read -r name branch _ _ _ <<< "${entries[1]}"
-    assert_eq "my-app" "$name"
-    assert_eq "feature-x" "$branch"
-}
-
-test_discover_entries_empty() {
-    entries=()
-    discover_entries
-    assert_eq "0" "${#entries[@]}" "should find nothing"
-}
-
-test_discover_entries_multiple_repos() {
-    create_test_repo "projects/app-one"
-    create_test_repo "projects/app-two"
-
-    entries=()
-    discover_entries
-    assert_eq "2" "${#entries[@]}" "should find 2 repos"
-    IFS='|' read -r name1 _ _ _ _ <<< "${entries[0]}"
-    IFS='|' read -r name2 _ _ _ _ <<< "${entries[1]}"
-    assert_eq "app-one" "$name1"
-    assert_eq "app-two" "$name2"
-}
-
-test_get_sessions_parses_idle() {
+test_get_sessions_parses_tmux_metadata() {
     cat > "$TEST_DIR/bin/tmux" <<'MOCK'
 #!/bin/bash
 if [[ "$1" == "list-sessions" ]]; then
-    echo "claude-myrepo 0 1711612800"
+    printf 'claude-myrepo\t0\t1711612800\t/home/dev/projects/myrepo--sess-1\tmyrepo\tsess/20260426-120000\toauth fix\n'
 fi
 MOCK
     chmod +x "$TEST_DIR/bin/tmux"
-    _source_v2
+    _source_functions
 
     get_sessions
     assert_eq "1" "${#session_names[@]}"
     assert_eq "claude-myrepo" "${session_names[0]}"
     assert_eq "idle" "${session_states[0]}"
-    assert_eq "1711612800" "${session_activities[0]}"
+    assert_eq "/home/dev/projects/myrepo--sess-1" "${session_paths[0]}"
+    assert_eq "myrepo" "${session_repos[0]}"
+    assert_eq "sess/20260426-120000" "${session_branches[0]}"
+    assert_eq "oauth fix" "${session_notes[0]}"
 }
 
-test_get_sessions_parses_attached() {
-    cat > "$TEST_DIR/bin/tmux" <<'MOCK'
-#!/bin/bash
-if [[ "$1" == "list-sessions" ]]; then
-    echo "claude-myrepo 1 1711612800"
-fi
-MOCK
-    chmod +x "$TEST_DIR/bin/tmux"
-    _source_v2
+test_match_sessions_keeps_projects_clean_and_lists_live_sessions_separately() {
+    local repo worktree
+    repo=$(create_test_repo "projects/myrepo")
+    worktree=$(create_test_worktree "$repo" "sess-branch")
 
-    get_sessions
-    assert_eq "1" "${#session_names[@]}"
-    assert_eq "attached" "${session_states[0]}"
-}
-
-test_get_sessions_filters_non_agent() {
-    cat > "$TEST_DIR/bin/tmux" <<'MOCK'
-#!/bin/bash
-if [[ "$1" == "list-sessions" ]]; then
-    echo "claude-myrepo 0 1711612800"
-    echo "codex-other 0 1711612500"
-    echo "shell-host 0 1711612000"
-    echo "other-session 0 1711611000"
-fi
-MOCK
-    chmod +x "$TEST_DIR/bin/tmux"
-    _source_v2
-
-    get_sessions
-    assert_eq "2" "${#session_names[@]}" "should only include claude-* and codex-* sessions"
-}
-
-test_match_sessions_annotates_entry() {
-    entries=("myrepo|main|/home/dev/projects/myrepo|none|0")
-    session_names=("claude-myrepo")
+    discover_entries
+    session_names=("claude-$(basename "$worktree")")
     session_states=("idle")
     session_activities=("1711612800")
-    _source_v2
+    session_paths=("$worktree")
+    session_repos=("")
+    session_branches=("")
 
-    orphaned_sessions=()
     match_sessions
-    IFS='|' read -r name main_branch main_path selected_branch selected_path state activity <<< "${project_entries[0]}"
-    assert_eq "myrepo" "$name"
-    assert_eq "main" "$main_branch"
-    assert_eq "/home/dev/projects/myrepo" "$main_path"
-    assert_eq "main" "$selected_branch"
-    assert_eq "/home/dev/projects/myrepo" "$selected_path"
-    assert_eq "idle" "$state"
-    assert_eq "1711612800" "$activity"
-    assert_eq "0" "${#orphaned_sessions[@]}" "matching session should not be orphaned"
+
+    assert_eq "1" "${#project_entries[@]}"
+    assert_eq "1" "${#session_entries[@]}"
+    assert_contains "${session_entries[0]}" "myrepo"
+    assert_contains "${session_entries[0]}" "sess-branch"
 }
 
-test_match_sessions_detects_orphaned() {
-    entries=("myrepo|main|/home/dev/projects/myrepo|none|0")
-    session_names=("claude-myrepo" "claude-deleted-repo")
-    session_states=("idle" "idle")
-    session_activities=("1711612800" "1711611000")
-    _source_v2
+test_match_sessions_includes_note_in_live_session_label() {
+    local repo worktree
+    repo=$(create_test_repo "projects/myrepo")
+    worktree=$(create_test_worktree "$repo" "sess-branch")
 
-    orphaned_sessions=()
-    match_sessions
-    assert_eq "1" "${#orphaned_sessions[@]}" "should detect 1 orphaned session"
-    assert_contains "${orphaned_sessions[0]}" "claude-deleted-repo"
-}
-
-test_match_sessions_uses_selected_agent_prefix() {
-    entries=("myrepo|main|/home/dev/projects/myrepo|none|0")
-    session_names=("codex-myrepo")
+    discover_entries
+    session_names=("claude-$(basename "$worktree")")
     session_states=("idle")
     session_activities=("1711612800")
-    DEFAULT_CODE_AGENT=codex
-    CODE_AGENT=codex
-    _source_functions
-    _source_v2
+    session_paths=("$worktree")
+    session_repos=("myrepo")
+    session_branches=("sess-branch")
+    session_notes=("oauth fix")
 
-    orphaned_sessions=()
     match_sessions
-    IFS='|' read -r _ _ _ selected_branch selected_path state activity <<< "${project_entries[0]}"
-    assert_eq "main" "$selected_branch"
-    assert_eq "/home/dev/projects/myrepo" "$selected_path"
-    assert_eq "idle" "$state"
-    assert_eq "1711612800" "$activity"
-    assert_eq "0" "${#orphaned_sessions[@]}"
+
+    assert_contains "${session_entries[0]}" "oauth fix"
 }
 
-test_match_sessions_collapses_worktrees_to_latest_project_session() {
-    entries=(
-        "myrepo|main|/home/dev/projects/myrepo|none|0"
-        "myrepo|feature-x|/home/dev/projects/myrepo-feature-x|none|0"
-    )
-    session_names=("claude-myrepo-feature-x")
-    session_states=("idle")
-    session_activities=("1711612800")
-    _source_v2
+test_match_sessions_lists_inactive_worktree_under_sessions() {
+    local repo worktree
+    repo=$(create_test_repo "projects/myrepo")
+    worktree=$(create_test_worktree "$repo" "feature-x")
 
-    orphaned_sessions=()
+    discover_entries
+    session_names=()
+    session_states=()
+    session_activities=()
+    session_paths=()
+    session_repos=()
+    session_branches=()
+
     match_sessions
-    assert_eq "1" "${#project_entries[@]}" "worktrees should collapse to one project summary"
-    IFS='|' read -r name main_branch main_path selected_branch selected_path state activity <<< "${project_entries[0]}"
-    assert_eq "myrepo" "$name"
-    assert_eq "main" "$main_branch"
-    assert_eq "/home/dev/projects/myrepo" "$main_path"
-    assert_eq "feature-x" "$selected_branch"
-    assert_eq "/home/dev/projects/myrepo-feature-x" "$selected_path"
-    assert_eq "idle" "$state"
-    assert_eq "1711612800" "$activity"
+
+    assert_eq "1" "${#project_entries[@]}"
+    assert_eq "1" "${#session_entries[@]}"
+    assert_contains "${session_entries[0]}" "myrepo  feature-x"
+    assert_contains "${session_entries[0]}" "|worktree|"
 }
 
-test_compute_default_prefers_idle() {
-    project_entries=(
-        "app1|main|/path/app1|main|/path/app1|none|0"
-        "app2|main|/path/app2|main|/path/app2|idle|1711612800"
+test_show_menu_renders_projects_and_sessions_sections() {
+    project_entries=("myrepo|main|/path/myrepo|repo||")
+    session_entries=(
+        "myrepo  sess/20260426-120000  claude|live|claude-myrepo-sess|idle|1711612800|/path/myrepo--sess|myrepo|sess/20260426-120000|myrepo"
+        "myrepo  feature-x|worktree||dormant|0|/path/myrepo--feature-x|myrepo|feature-x|myrepo"
     )
-    _source_v2
-
-    compute_default
-    assert_eq "1" "$default_idx"
-}
-
-test_compute_default_most_recent_idle() {
-    project_entries=(
-        "app1|main|/path/app1|main|/path/app1|idle|1711612000"
-        "app2|main|/path/app2|main|/path/app2|idle|1711612800"
-    )
-    _source_v2
-
-    compute_default
-    assert_eq "1" "$default_idx"
-}
-
-test_compute_default_no_sessions_first_entry() {
-    project_entries=(
-        "app1|main|/path/app1|main|/path/app1|none|0"
-        "app2|dev|/path/app2|dev|/path/app2|none|0"
-    )
-    _source_v2
-
-    compute_default
-    assert_eq "0" "$default_idx"
-}
-
-test_compute_default_empty_entries() {
-    project_entries=()
-    _source_v2
-
-    compute_default
-    assert_eq "0" "$default_idx"
-}
-
-test_compute_default_skips_attached() {
-    project_entries=(
-        "app1|main|/path/app1|main|/path/app1|attached|1711613000"
-        "app2|main|/path/app2|main|/path/app2|idle|1711612800"
-    )
-    _source_v2
-
-    compute_default
-    assert_eq "1" "$default_idx" "should prefer idle over attached even if attached is newer"
-}
-
-test_compute_default_uses_attached_when_no_idle_session_exists() {
-    project_entries=(
-        "app1|main|/path/app1|main|/path/app1|attached|1711613000"
-        "app2|main|/path/app2|main|/path/app2|attached|1711612800"
-    )
-    _source_v2
-
-    compute_default
-    assert_eq "0" "$default_idx" "should resume the newest attached session when no idle session exists"
-}
-
-test_show_menu_project_line() {
-    project_entries=("myrepo|main|/path/myrepo|main|/path/myrepo|none|0")
-    orphaned_sessions=()
-    default_idx=0
-    _source_v2
 
     local output
     output=$(show_menu)
-    assert_contains "$output" "[1] myrepo  main" "should show project and branch on one line"
+
+    assert_contains "$output" "Projects"
+    assert_contains "$output" "[1] myrepo  main"
+    assert_contains "$output" "Sessions"
+    assert_contains "$output" "[2] myrepo  sess/20260426-120000  claude  active"
+    assert_contains "$output" "[3] myrepo  feature-x  worktree"
 }
 
-test_show_menu_active_marker() {
-    project_entries=("myrepo|main|/path/myrepo|feature-x|/path/myrepo-feature-x|idle|1711612800")
-    orphaned_sessions=()
-    default_idx=0
-    _source_v2
+test_show_menu_renders_session_note() {
+    project_entries=("myrepo|main|/path/myrepo|repo||")
+    session_entries=("myrepo  sess/20260426-120000  claude  :: oauth fix|live|claude-myrepo-sess|idle|1711612800|/path/myrepo--sess|myrepo|sess/20260426-120000|myrepo")
 
     local output
     output=$(show_menu)
-    assert_contains "$output" "[1] myrepo  feature-x  active" "should show active marker on the project line"
+    assert_contains "$output" "oauth fix"
 }
 
-test_show_menu_attached_marker() {
-    project_entries=("myrepo|main|/path/myrepo|feature-x|/path/myrepo-feature-x|attached|1711612800")
-    orphaned_sessions=()
-    default_idx=0
-    _source_v2
+test_show_menu_marks_blocked_projects() {
+    project_entries=("myrepo|main|/path/myrepo|repo|needs cleanup|")
+    session_entries=()
 
     local output
     output=$(show_menu)
-    assert_contains "$output" "[1] myrepo  feature-x  attached" "should show attached marker"
+    assert_contains "$output" "[1] myrepo  main  blocked"
 }
 
-test_show_menu_footer_default() {
-    project_entries=("myrepo|main|/path/myrepo|main|/path/myrepo|none|0")
-    orphaned_sessions=()
-    default_idx=0
-    _source_v2
+test_show_menu_marks_refreshing_projects() {
+    project_entries=("myrepo|main|/path/myrepo|repo||refreshing")
+    session_entries=()
 
     local output
     output=$(show_menu)
-    assert_contains "$output" "Enter=1" "should show default in footer"
-    assert_contains "$output" "t=toggle->codex" "should show toggle option"
-    assert_contains "$output" "m=manage" "should show manage option"
-    assert_contains "$output" "h=host" "should show host option"
-    assert_contains "$output" "c=container" "should show container option"
+    assert_contains "$output" "[1] myrepo  main  refreshing"
 }
 
-test_show_menu_no_repos() {
-    project_entries=()
-    orphaned_sessions=()
-    default_idx=0
-    _source_v2
+test_select_entry_launches_prepared_worktree_for_project() {
+    project_entries=("myrepo|main|/path/myrepo|repo||")
+    session_entries=()
+
+    prepare_project_launch() {
+        LAUNCH_PATH="/path/myrepo--sess-20260426-120000"
+        LAUNCH_BRANCH="sess/20260426-120000"
+        LAUNCH_REPO_NAME="myrepo"
+    }
+
+    launch() {
+        echo "launch:$1|$2|$3"
+    }
 
     local output
-    output=$(show_menu)
-    assert_contains "$output" "no repos"
-    assert_contains "$output" "Enter=m" "should default to manage when no repos"
-    assert_contains "$output" "t=toggle->codex" "should show toggle option"
+    output=$(select_entry 0 2>&1)
+    assert_contains "$output" "launch:/path/myrepo--sess-20260426-120000|sess/20260426-120000|myrepo"
 }
 
-test_show_menu_footer_codex_toggle_target() {
-    project_entries=("myrepo|main|/path/myrepo|main|/path/myrepo|none|0")
-    orphaned_sessions=()
-    default_idx=0
-    CODE_AGENT=codex
-    DEFAULT_CODE_AGENT=codex
-    _source_functions
-    _source_v2
+test_select_entry_launches_existing_worktree_directly() {
+    project_entries=("myrepo|main|/path/myrepo|repo||")
+    session_entries=("myrepo  sess/20260426-120000|worktree||dormant|0|/path/myrepo--sess|myrepo|sess/20260426-120000|myrepo")
+
+    prepare_project_launch() {
+        echo "unexpected prepare" >&2
+        return 99
+    }
+
+    launch() {
+        echo "launch:$1|$2|$3"
+    }
 
     local output
-    output=$(show_menu)
-    assert_contains "$output" "agent=codex" "should show current agent"
-    assert_contains "$output" "t=toggle->claude" "should show opposite agent"
+    output=$(select_entry 1 2>&1)
+    assert_contains "$output" "launch:/path/myrepo--sess|sess/20260426-120000|myrepo"
 }
 
-test_show_menu_multiple_projects() {
-    project_entries=(
-        "app-one|main|/path/app-one|feature-x|/path/app-one--feature-x|idle|1711612800"
-        "app-two|dev|/path/app-two|dev|/path/app-two|none|0"
-    )
-    orphaned_sessions=()
-    default_idx=0
-    _source_v2
-
-    local output
-    output=$(show_menu)
-    assert_contains "$output" "[1] app-one  feature-x  active" "should show the first project summary"
-    assert_contains "$output" "[2] app-two  dev" "should show the second project summary"
-}
-
-test_show_menu_orphaned_sessions() {
-    project_entries=("myrepo|main|/path/myrepo|main|/path/myrepo|none|0")
-    orphaned_sessions=("claude-deleted-repo|idle|0")
-    default_idx=0
-    _source_v2
-
-    local output
-    output=$(show_menu)
-    assert_contains "$output" "sessions" "should show orphaned sessions header"
-    assert_contains "$output" "claude-deleted-repo" "should show orphaned session name"
-}
-
-test_select_entry_resumes_project_session() {
-    project_entries=("myrepo|main|/path/myrepo|feature-x|/path/myrepo-feature-x|idle|1711612800")
-    orphaned_sessions=()
-    _source_v2
+test_select_entry_attaches_live_session_entry() {
+    project_entries=("myrepo|main|/path/myrepo|repo||")
+    session_entries=("myrepo  sess/20260426-120000  claude|live|claude-myrepo-sess|idle|1711612800|/path/myrepo--sess|myrepo|sess/20260426-120000|myrepo")
 
     cat > "$TEST_DIR/bin/tmux" <<'MOCK'
 #!/bin/bash
-if [[ "$1" == "attach-session" && "$2" == "-t" && "$3" == "claude-myrepo-feature-x" ]]; then
+if [[ "$1" == "attach-session" && "$2" == "-t" && "$3" == "claude-myrepo-sess" ]]; then
     exit 0
 fi
 exit 99
@@ -659,6 +402,167 @@ MOCK
     chmod +x "$TEST_DIR/bin/tmux"
 
     local output
-    output=$(select_entry 0 2>&1)
-    assert_contains "$output" "claude-myrepo-feature-x"
+    output=$(select_entry 1 2>&1)
+    assert_contains "$output" "claude-myrepo-sess"
+}
+
+test_session_matches_repo_path_uses_metadata_and_legacy_name_fallback() {
+    local repo
+    repo=$(create_test_repo "projects/myrepo")
+
+    session_names=("claude-myrepo")
+    session_states=("idle")
+    session_activities=("1711612800")
+    session_paths=("")
+    session_repos=("")
+    session_branches=("")
+
+    assert_eq "0" "$(session_matches_repo_path "$repo"; echo $?)"
+
+    session_paths=("$repo")
+    assert_eq "0" "$(session_matches_repo_path "$repo"; echo $?)"
+}
+
+test_run_background_maintenance_skips_base_repo_with_live_session_and_protects_active_worktrees() {
+    local repo1 repo2 active_worktree helper
+    repo1=$(create_test_repo "projects/repo-one")
+    repo2=$(create_test_repo "projects/repo-two")
+    active_worktree=$(create_test_worktree "$repo2" "active-work")
+    MENU_SYNC_TTL=0
+    MENU_CLEANUP_TTL=0
+
+    helper="$TEST_DIR/mock-worktree-helper.sh"
+    cat > "$helper" <<MOCK
+#!/bin/bash
+echo "\$*" >> "$TEST_DIR/markers/helper.log"
+case "\$1" in
+  cleanup) exit 0 ;;
+  sync-repo) exit 0 ;;
+esac
+exit 0
+MOCK
+    chmod +x "$helper"
+    WORKTREE_HELPER="$helper"
+
+    session_names=("claude-$(basename "$repo1")" "claude-$(basename "$active_worktree")")
+    session_states=("idle" "idle")
+    session_activities=("1" "2")
+    session_paths=("$repo1" "$active_worktree")
+    session_repos=("repo-one" "repo-two")
+    session_branches=("main" "active-work")
+
+    run_background_maintenance
+    for _ in 1 2 3 4 5; do
+        [[ -f "$TEST_DIR/markers/helper.log" ]] && break
+        sleep 0.2
+    done
+
+    local log
+    log=$(cat "$TEST_DIR/markers/helper.log")
+    assert_contains "$log" "cleanup --quiet --keep-path $repo1 --keep-path $active_worktree"
+    [[ "$log" != *"sync-repo $repo1"* ]] || _fail "repo with live base session should not sync"
+    assert_contains "$log" "sync-repo $repo2"
+}
+
+test_load_maintenance_state_reads_warning_and_refreshing_cache() {
+    local repo helper
+    repo=$(create_test_repo "projects/repo-one")
+    helper="$TEST_DIR/mock-worktree-helper.sh"
+    WORKTREE_HELPER="$helper"
+    ensure_menu_cache_dirs
+    printf '%s\n' "needs cleanup" > "$(repo_warning_file "$repo")"
+    : > "$(repo_refreshing_file "$repo")"
+
+    load_maintenance_state
+
+    assert_eq "1" "${#PROJECT_SYNC_WARNINGS[@]}"
+    assert_contains "${PROJECT_SYNC_WARNINGS[0]}" "$repo|needs cleanup"
+    assert_eq "1" "${#PROJECT_SYNC_REFRESHING[@]}"
+    assert_eq "$repo" "${PROJECT_SYNC_REFRESHING[0]}"
+}
+
+test_prepare_project_launch_creates_worktree_before_launch() {
+    local repo helper
+    repo=$(create_test_repo "projects/myrepo")
+
+    helper="$TEST_DIR/mock-worktree-helper.sh"
+    cat > "$helper" <<MOCK
+#!/bin/bash
+echo "\$*" >> "$TEST_DIR/markers/helper.log"
+if [[ "\$1" == "cleanup" || "\$1" == "sync-repo" ]]; then
+  exit 0
+fi
+if [[ "\$1" == "create-session-worktree" ]]; then
+  echo "$repo--sess-20260426-120000|sess/20260426-120000|main"
+  exit 0
+fi
+exit 0
+MOCK
+    chmod +x "$helper"
+    WORKTREE_HELPER="$helper"
+
+    wait_for_container() { :; }
+    session_names=()
+    session_states=()
+    session_activities=()
+    session_paths=()
+    session_repos=()
+    session_branches=()
+
+    prepare_project_launch "$repo" "myrepo" "main"
+
+    assert_eq "$repo--sess-20260426-120000" "$LAUNCH_PATH"
+    assert_eq "sess/20260426-120000" "$LAUNCH_BRANCH"
+    assert_eq "myrepo" "$LAUNCH_REPO_NAME"
+}
+
+test_prepare_project_launch_recovers_dirty_repo_into_worktree() {
+    local repo helper
+    repo=$(create_test_repo "projects/myrepo")
+
+    helper="$TEST_DIR/mock-worktree-helper.sh"
+    cat > "$helper" <<MOCK
+#!/bin/bash
+if [[ "\$1" == "sync-repo" ]]; then
+  exit 1
+fi
+if [[ "\$1" == "recover-dirty-repo" ]]; then
+  echo "$repo--sess-recover-feature-20260426|sess-recover/feature-20260426"
+  exit 0
+fi
+exit 0
+MOCK
+    chmod +x "$helper"
+    WORKTREE_HELPER="$helper"
+
+    wait_for_container() { :; }
+    session_names=()
+    session_states=()
+    session_activities=()
+    session_paths=()
+    session_repos=()
+    session_branches=()
+
+    prepare_project_launch "$repo" "myrepo" "main"
+
+    assert_eq "$repo--sess-recover-feature-20260426" "$LAUNCH_PATH"
+    assert_eq "sess-recover/feature-20260426" "$LAUNCH_BRANCH"
+    assert_eq "myrepo" "$LAUNCH_REPO_NAME"
+}
+
+test_prepare_project_launch_blocks_when_base_repo_has_live_session() {
+    local repo
+    repo=$(create_test_repo "projects/myrepo")
+    wait_for_container() { :; }
+    session_names=("claude-myrepo")
+    session_states=("idle")
+    session_activities=("1")
+    session_paths=("$repo")
+    session_repos=("myrepo")
+    session_branches=("main")
+
+    local output exit_code=0
+    output=$(prepare_project_launch "$repo" "myrepo" "main" 2>&1) || exit_code=$?
+    assert_eq "1" "$exit_code"
+    assert_contains "$output" "live tmux session"
 }

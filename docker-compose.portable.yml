@@ -19,6 +19,7 @@ services:
     hostname: claude-dev
     stdin_open: true
     tty: true
+    init: true
 
     volumes:
       # Claude Code config/auth/history
