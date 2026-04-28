@@ -445,17 +445,53 @@ cmd_cleanup() {
     local cleaned=()
     local stale=()
     local active=()
+    local dirty_merged=()
+    local orphans=()
+    local readonly_repos=()
     # shellcheck disable=SC2034  # accessed indirectly via "seen_${bucket}" in record_unique_cleanup_entry
     local seen_cleaned=""
     # shellcheck disable=SC2034
     local seen_stale=""
     # shellcheck disable=SC2034
     local seen_active=""
+    # shellcheck disable=SC2034
+    local seen_dirty_merged=""
+    # shellcheck disable=SC2034
+    local seen_orphans=""
+    # shellcheck disable=SC2034
+    local seen_readonly_repos=""
     local repo_glob_root="$HOME/projects"
 
     if [[ -n "$scope_repo" ]]; then
         repo_glob_root="$scope_repo"
     fi
+
+    # --- Pre-prune pass ---
+    # Walk all repos and run `git worktree prune` to clear registered-but-missing
+    # worktree entries before the main scan. Skip read-only mounts (e.g. virtiofs
+    # ro mount of dev-env inside the container) so we don't churn on errors.
+    local _registered_worktrees="|"
+    while IFS= read -r git_dir; do
+        local _repo_path
+        _repo_path=$(normalize_path "$(dirname "$git_dir")")
+        if [[ -n "$scope_repo" && "$_repo_path" != "$scope_repo" ]]; then
+            continue
+        fi
+        if [[ ! -w "$git_dir" ]]; then
+            record_unique_cleanup_entry readonly_repos "${_repo_path} (read-only mount, prune from host)"
+            continue
+        fi
+        git -C "$_repo_path" worktree prune 2>/dev/null || true
+        # While we're here, build a set of all currently-registered worktree paths
+        # for the orphan-sibling scan below.
+        while IFS= read -r _wt_line; do
+            if [[ "$_wt_line" == "worktree "* ]]; then
+                local _wt
+                _wt=$(normalize_path "${_wt_line#worktree }")
+                _registered_worktrees="${_registered_worktrees}${_wt}|"
+            fi
+        done < <(git -C "$_repo_path" worktree list --porcelain 2>/dev/null)
+    done < <(find "$repo_glob_root" -maxdepth 3 -name ".git" -type d 2>/dev/null | sort)
 
     # Find all main repos (directories with .git as a directory)
     while IFS= read -r git_dir; do
@@ -502,21 +538,33 @@ cmd_cleanup() {
                     fi
                 done
 
-                if worktree_has_dirty_changes "$wt_path"; then
-                    record_unique_cleanup_entry active "${wt_path} (local edits)"
-                    wt_path=""
-                    wt_branch=""
-                    continue
-                fi
-
                 local default_ref="origin/$default_branch"
                 if ! remote_branch_exists "$repo_path" "$default_branch"; then
                     default_ref="$default_branch"
                 fi
 
+                local _has_unique=true
+                if ! branch_has_unique_commits "$repo_path" "$wt_branch" "$default_ref"; then
+                    _has_unique=false
+                fi
+
+                # Dirty worktrees: surface but never auto-remove. If the branch
+                # has no unique commits beyond default (likely merged), flag it
+                # for review separately so the user knows it can probably go.
+                if worktree_has_dirty_changes "$wt_path"; then
+                    if [[ "$_has_unique" == false ]]; then
+                        record_unique_cleanup_entry dirty_merged "${wt_path} (merged, but has local edits — review)"
+                    else
+                        record_unique_cleanup_entry active "${wt_path} (local edits)"
+                    fi
+                    wt_path=""
+                    wt_branch=""
+                    continue
+                fi
+
                 # Remove worktrees that contribute no unique commits beyond default.
                 # This covers merged branches and untouched branches that simply lag main.
-                if ! branch_has_unique_commits "$repo_path" "$wt_branch" "$default_ref"; then
+                if [[ "$_has_unique" == false ]]; then
                     if [[ "$dry_run" == true ]]; then
                         record_unique_cleanup_entry cleaned "${wt_path} (no unique commits beyond ${default_branch}) [dry-run]"
                     else
@@ -556,6 +604,40 @@ cmd_cleanup() {
         done < <(git -C "$repo_path" worktree list --porcelain 2>/dev/null; echo)
     done < <(find "$repo_glob_root" -maxdepth 3 -name ".git" -type d 2>/dev/null | sort)
 
+    # --- Orphan-sibling scan ---
+    # Walk top-level <basename>--* sibling dirs and remove those that:
+    #   - have a stale `.git` file pointing to a missing gitdir, AND
+    #   - are not registered as a worktree anywhere
+    # We deliberately do NOT auto-remove "empty stub" dirs (no .git at all) —
+    # those can be in-progress user work; we only surface them.
+    while IFS= read -r sibling; do
+        sibling=$(normalize_path "$sibling")
+        if [[ "$_registered_worktrees" == *"|${sibling}|"* ]]; then
+            continue
+        fi
+        if [[ -f "$sibling/.git" ]]; then
+            local _gitdir
+            _gitdir=$(sed -n 's/^gitdir: //p' "$sibling/.git" 2>/dev/null || true)
+            if [[ -n "$_gitdir" && -e "$_gitdir" ]]; then
+                # gitdir is live but worktree isn't registered — odd, leave alone.
+                continue
+            fi
+            if [[ "$dry_run" == true ]]; then
+                record_unique_cleanup_entry orphans "${sibling} (stale gitdir) [dry-run]"
+            else
+                rm -rf "$sibling"
+                if [[ -e "$sibling" ]]; then
+                    record_unique_cleanup_entry active "${sibling} (orphan removal failed)"
+                else
+                    record_unique_cleanup_entry orphans "${sibling} (stale gitdir, removed)"
+                fi
+            fi
+        elif [[ ! -e "$sibling/.git" ]]; then
+            # No .git at all — empty stub. Don't auto-remove; just surface.
+            record_unique_cleanup_entry active "${sibling} (empty stub, not a worktree — review)"
+        fi
+    done < <(find "$repo_glob_root" -maxdepth 1 -mindepth 1 -name '*--*' -type d 2>/dev/null | sort)
+
     # Report results
     if [[ "$quiet" == true ]]; then
         return 0
@@ -590,6 +672,30 @@ cmd_cleanup() {
     fi
 
     echo ""
+    if [[ ${#dirty_merged[@]} -gt 0 ]]; then
+        echo "  Dirty but merged (review):"
+        for entry in "${dirty_merged[@]}"; do
+            echo "    $entry"
+        done
+        echo ""
+    fi
+
+    if [[ ${#orphans[@]} -gt 0 ]]; then
+        echo "  Orphans (stale gitdir, removed):"
+        for entry in "${orphans[@]}"; do
+            echo "    $entry"
+        done
+        echo ""
+    fi
+
+    if [[ ${#readonly_repos[@]} -gt 0 ]]; then
+        echo "  Read-only repos (skipped):"
+        for entry in "${readonly_repos[@]}"; do
+            echo "    $entry"
+        done
+        echo ""
+    fi
+
     if [[ ${#active[@]} -gt 0 ]]; then
         echo "  Active:"
         for entry in "${active[@]}"; do

@@ -3,8 +3,11 @@
 
 HELPER="$REPO_ROOT/scripts/runtime/worktree-helper.sh"
 
-# Override HOME/projects to TEST_DIR for find discovery
+# Override HOME/projects to TEST_DIR for find discovery.
+# Unset DEV_ENV/PROJECTS_DIR so the helper doesn't load /home/dev/dev-env/.env
+# and override paths to the real workspace (would leak host state into tests).
 setup() {
+    unset DEV_ENV PROJECTS_DIR
     mkdir -p "$HOME/projects"
 }
 
@@ -366,6 +369,79 @@ MOCK
 
     bash "$HELPER" cleanup >/dev/null
     assert_file_not_exists "$worktree"
+}
+
+test_cleanup_removes_orphan_sibling_with_stale_gitdir() {
+    local repo
+    repo=$(create_test_repo projects/myrepo)
+    create_test_worktree "$repo" "orphan-branch"
+
+    # Simulate the "gitdir gone but worktree dir remains" failure mode:
+    # delete the .git/worktrees/<name> entry so the .git file in the worktree
+    # points at a path that no longer exists.
+    rm -rf "$repo/.git/worktrees/myrepo--orphan-branch"
+
+    local bare="$TEST_DIR/bare-remote"
+    git init -q --bare "$bare"
+    git -C "$repo" remote add origin "$bare" 2>/dev/null || true
+    local default_branch
+    default_branch=$(git -C "$repo" rev-parse --abbrev-ref HEAD)
+    git -C "$repo" push -q origin "${default_branch}" 2>/dev/null || true
+
+    bash "$HELPER" cleanup >/dev/null
+    assert_file_not_exists "$HOME/projects/myrepo--orphan-branch"
+}
+
+test_cleanup_dirty_but_merged_worktree_is_flagged_not_removed() {
+    local repo
+    repo=$(create_test_repo projects/myrepo)
+    create_test_worktree "$repo" "idle-dirty"
+
+    # Advance main so the branch has no unique commits beyond it.
+    touch "$repo/mainfile"
+    git -C "$repo" add mainfile
+    git -C "$repo" commit -q -m "main moves"
+
+    # Worktree has uncommitted local edits.
+    echo "scratch" > "$HOME/projects/myrepo--idle-dirty/scratch.txt"
+
+    local bare="$TEST_DIR/bare-remote"
+    git init -q --bare "$bare"
+    git -C "$repo" remote add origin "$bare" 2>/dev/null || true
+    local default_branch
+    default_branch=$(git -C "$repo" rev-parse --abbrev-ref HEAD)
+    git -C "$repo" push -q origin "${default_branch}" 2>/dev/null || true
+
+    local output
+    output=$(bash "$HELPER" cleanup)
+    assert_contains "$output" "Dirty but merged"
+    assert_contains "$output" "myrepo--idle-dirty (merged, but has local edits"
+    assert_file_exists "$HOME/projects/myrepo--idle-dirty/.git"
+}
+
+test_cleanup_pre_prune_runs_before_main_loop() {
+    # Verify the pre-prune pass clears a stale .git/worktrees/<name> entry
+    # before the orphan-sibling scan tries to inspect the on-disk dir.
+    local repo
+    repo=$(create_test_repo projects/myrepo)
+    create_test_worktree "$repo" "ghost"
+
+    # Move the worktree dir out of the way so it looks "missing" to git, but
+    # keep the .git/worktrees/<name> entry so it shows up in `worktree list`
+    # as prunable. After pre-prune, the entry should be gone.
+    mv "$HOME/projects/myrepo--ghost" "$HOME/projects/myrepo--ghost.away"
+
+    local bare="$TEST_DIR/bare-remote"
+    git init -q --bare "$bare"
+    git -C "$repo" remote add origin "$bare" 2>/dev/null || true
+    local default_branch
+    default_branch=$(git -C "$repo" rev-parse --abbrev-ref HEAD)
+    git -C "$repo" push -q origin "${default_branch}" 2>/dev/null || true
+
+    bash "$HELPER" cleanup >/dev/null
+
+    # Pre-prune should have removed the registration.
+    [[ ! -d "$repo/.git/worktrees/myrepo--ghost" ]] || _fail "pre-prune did not clear .git/worktrees/myrepo--ghost"
 }
 
 test_sync_repo_resets_to_default_branch_and_cleans_files() {
