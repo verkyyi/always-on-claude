@@ -288,7 +288,20 @@ file_age_seconds() {
     local path="$1"
     [[ -e "$path" ]] || return 1
     local modified
-    modified=$(stat -f %m "$path" 2>/dev/null || stat -c %Y "$path" 2>/dev/null || return 1)
+    # Try GNU stat (Linux) first, then BSD/macOS. Old order trusted whatever
+    # the first call wrote to stdout, but on GNU systems `stat -f %m FILE`
+    # exits 0 with a multi-line filesystem dump — that gets bound to `modified`
+    # and the arithmetic below explodes under `set -u` with "File: unbound
+    # variable", aborting the surrounding `$()` subshell before any `||`
+    # fallback in the caller can fire. Net effect: cleanup_due always
+    # returned false on Linux, so picker-driven cleanup never ran.
+    if modified=$(stat -c %Y "$path" 2>/dev/null); then
+        :
+    elif modified=$(stat -f %m "$path" 2>/dev/null); then
+        :
+    else
+        return 1
+    fi
     echo $(( $(now_epoch) - modified ))
 }
 
