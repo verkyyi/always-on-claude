@@ -87,6 +87,8 @@ cat > "$PLIST" <<PLIST
   <true/>
   <key>StartInterval</key>
   <integer>60</integer>
+  <key>AbandonProcessGroup</key>
+  <true/>
   <key>WatchPaths</key>
   <array>
     <string>$SCHEDULE_DIR/inbox</string>
