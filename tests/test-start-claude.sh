@@ -566,3 +566,65 @@ test_prepare_project_launch_blocks_when_base_repo_has_live_session() {
     assert_eq "1" "$exit_code"
     assert_contains "$output" "live tmux session"
 }
+
+# --- file_age_seconds / cleanup_due ---
+
+test_file_age_seconds_returns_positive_integer_for_recent_file() {
+    local f="$TEST_DIR/recent"
+    touch "$f"
+
+    local age
+    age=$(file_age_seconds "$f")
+    [[ "$age" =~ ^[0-9]+$ ]] || _fail "expected integer, got '$age'"
+    [[ "$age" -lt 60 ]] || _fail "expected age <60s for just-touched file, got $age"
+}
+
+test_file_age_seconds_handles_old_file() {
+    local f="$TEST_DIR/old"
+    touch -d '2026-01-01 00:00:00' "$f"
+
+    local age
+    age=$(file_age_seconds "$f")
+    [[ "$age" =~ ^[0-9]+$ ]] || _fail "expected integer, got '$age'"
+    [[ "$age" -gt 86400 ]] || _fail "expected age >1 day for Jan 1 file, got $age"
+}
+
+test_file_age_seconds_returns_nonzero_for_missing_file() {
+    local exit_code=0
+    file_age_seconds "$TEST_DIR/does-not-exist" >/dev/null 2>&1 || exit_code=$?
+    [[ "$exit_code" -ne 0 ]] || _fail "expected non-zero exit for missing file"
+}
+
+test_cleanup_due_true_when_stamp_is_old() {
+    # Regression: file_age_seconds used `stat -f %m` first, which on GNU
+    # systems exits 0 with a multi-line filesystem dump instead of an
+    # mtime. The arithmetic on that string aborted the surrounding
+    # subshell under `set -u`, the `|| echo TTL+1` fallback never ran,
+    # and cleanup_due always returned false on Linux — so picker-driven
+    # cleanup never fired.
+    MENU_CACHE_DIR="$TEST_DIR/cache"
+    MENU_CLEANUP_TTL=300
+    mkdir -p "$MENU_CACHE_DIR"
+    touch -d '2026-01-01 00:00:00' "$MENU_CACHE_DIR/cleanup.stamp"
+
+    cleanup_due || _fail "cleanup_due should be true when stamp is months old"
+}
+
+test_cleanup_due_false_when_stamp_is_fresh() {
+    MENU_CACHE_DIR="$TEST_DIR/cache"
+    MENU_CLEANUP_TTL=300
+    mkdir -p "$MENU_CACHE_DIR"
+    touch "$MENU_CACHE_DIR/cleanup.stamp"
+
+    if cleanup_due; then
+        _fail "cleanup_due should be false for just-touched stamp"
+    fi
+}
+
+test_cleanup_due_true_when_stamp_missing() {
+    MENU_CACHE_DIR="$TEST_DIR/cache-empty"
+    MENU_CLEANUP_TTL=300
+    mkdir -p "$MENU_CACHE_DIR"
+
+    cleanup_due || _fail "cleanup_due should be true when stamp is missing"
+}
