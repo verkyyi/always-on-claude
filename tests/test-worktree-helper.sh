@@ -508,3 +508,38 @@ test_sync_repo_resets_to_default_branch_and_cleans_files() {
     assert_eq "$initial_branch" "$(git -C "$repo" branch --show-current)"
     assert_file_not_exists "$repo/extra"
 }
+
+test_cleanup_removes_squash_merged_branch() {
+    # Squash-merge equivalent: feature commit's patch lands on main under a
+    # different SHA. rev-list --count would still see the branch as ahead
+    # (it compares SHAs); git cherry compares patch-ids and reports nothing
+    # unique. Main must be advanced independently so cherry-pick creates a
+    # divergent commit instead of fast-forwarding.
+    local repo
+    repo=$(create_test_repo projects/myrepo)
+    local default_branch
+    default_branch=$(git -C "$repo" branch --show-current)
+
+    git -C "$repo" checkout -q -b feat/squashed
+    echo "feature work" > "$repo/feature.txt"
+    git -C "$repo" add feature.txt
+    git -C "$repo" commit -q -m "Feature work"
+    local feat_sha
+    feat_sha=$(git -C "$repo" rev-parse HEAD)
+
+    git -C "$repo" checkout -q "$default_branch"
+    echo "unrelated" > "$repo/mainfile.txt"
+    git -C "$repo" add mainfile.txt
+    git -C "$repo" commit -q -m "Unrelated main change"
+    git -C "$repo" cherry-pick "$feat_sha" >/dev/null
+
+    local bare="$TEST_DIR/bare-remote"
+    git init -q --bare "$bare"
+    git -C "$repo" remote add origin "$bare" 2>/dev/null || true
+    git -C "$repo" push -q origin "$default_branch" 2>/dev/null || true
+
+    bash "$HELPER" create "$repo" feat/squashed >/dev/null
+
+    bash "$HELPER" cleanup >/dev/null
+    assert_file_not_exists "${repo}--feat-squashed"
+}

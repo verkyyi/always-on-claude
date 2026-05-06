@@ -408,8 +408,6 @@ prepare_project_launch() {
     local main_path="$1" repo_name="$2"
     local worktree_info
 
-    wait_for_container
-
     if session_matches_repo_path "$main_path"; then
         echo ""
         echo "  Cannot start a new session from $repo_name."
@@ -418,6 +416,12 @@ prepare_project_launch() {
         echo ""
         return 1
     fi
+
+    if ! check_new_session_capacity; then
+        return 1
+    fi
+
+    wait_for_container
 
     if ! sync_repo_or_warn "$main_path"; then
         worktree_info=$(bash "$WORKTREE_HELPER" recover-dirty-repo "$main_path" 2>/dev/null) || {

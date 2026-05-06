@@ -379,9 +379,13 @@ days_since_last_commit() {
 
 branch_has_unique_commits() {
     local repo_path="$1" branch="$2" default_ref="$3"
-    local ahead_count
-    ahead_count=$(git -C "$repo_path" rev-list --count "${default_ref}..${branch}" 2>/dev/null || echo "0")
-    [[ "$ahead_count" -gt 0 ]]
+    # `git cherry` prefixes "+ <sha>" for unique patches and "- <sha>" for
+    # patches whose patch-id already exists upstream. This catches squash- and
+    # rebase-merges, where rev-list would still see the original commits as
+    # ahead. Empty output also means nothing unique.
+    local unique
+    unique=$(git -C "$repo_path" cherry "$default_ref" "$branch" 2>/dev/null | grep -c '^+' || true)
+    [[ "${unique:-0}" -gt 0 ]]
 }
 
 # Human-readable time since last commit

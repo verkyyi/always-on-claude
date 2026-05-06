@@ -168,6 +168,10 @@ check_session_limit() {
         return 0
     fi
 
+    check_new_session_capacity
+}
+
+check_new_session_capacity() {
     local current max
     current=$(count_sessions)
     max=$(get_max_sessions)
@@ -576,7 +580,10 @@ run_picker_loop() {
         compute_default
         show_menu
 
-        read -r -p "  > " choice || true
+        if ! read -r -p "  > " choice; then
+            echo ""
+            return 0
+        fi
 
         if [[ "$choice" == "m" ]]; then
             prepare_manager_launch || continue

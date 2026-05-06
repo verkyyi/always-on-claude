@@ -18,4 +18,9 @@ if ! "$DOCKER" ps --format '{{.Names}}' | grep -qx "$CONTAINER"; then
 fi
 
 exec "$DOCKER" exec -it "$CONTAINER" bash -lc \
-  'exec bash "$HOME/dev-env/scripts/portable/start-claude-portable.sh"'
+  'for root in "$HOME/dev-env" "$HOME/projects/dev-env" "$HOME/projects/always-on-claude"; do
+     script="$root/scripts/portable/start-claude-portable.sh"
+     if [ -x "$script" ]; then export DEV_ENV="$root"; exec bash "$script"; fi
+   done
+   echo "Could not find start-claude-portable.sh in expected locations" >&2
+   exit 1'
