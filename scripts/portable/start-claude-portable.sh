@@ -366,6 +366,10 @@ prepare_project_launch() {
         return 1
     fi
 
+    if ! check_new_session_capacity; then
+        return 1
+    fi
+
     if ! sync_repo_or_warn "$main_path"; then
         worktree_info=$(bash "$WORKTREE_HELPER" recover-dirty-repo "$main_path" 2>/dev/null) || {
             echo ""
