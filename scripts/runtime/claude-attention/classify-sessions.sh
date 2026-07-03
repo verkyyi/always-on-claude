@@ -50,11 +50,11 @@ tmux list-windows -a -F '#{session_name}:#{window_index} #{@claude_state}' | whi
   echo "$h" > "$hf"     # remember we've seen this screen regardless of parse
 
   case "$label" in
-    *WAITING*) new=needs ;;
-    *LOOPING*) new=looping ;;
-    *STOPPED*) new=done ;;
-    *ERROR*)   new=needs ;;
-    *WORKING*) new=working ;;
+    *WAITING*) new="needs" ;;
+    *LOOPING*) new="looping" ;;
+    *STOPPED*) new="done" ;;
+    *ERROR*)   new="needs" ;;
+    *WORKING*) new="working" ;;
     *) printf '%s  %-10s unparsed [%s]\n' "$(date +%H:%M:%S)" "$win" "${raw:0:40}" >> "$LOG"; n=$((n+1)); continue ;;
   esac
 

@@ -9,9 +9,9 @@
 [ -n "$TMUX_PANE" ] || exit 0
 
 case "$1" in
-  needs) sem=needs ;;
-  done)  sem=done ;;
-  *)     sem=working ;;   # busy / between-tools / prompt submitted
+  needs) sem="needs" ;;
+  done)  sem="done" ;;
+  *)     sem="working" ;;   # busy / between-tools / prompt submitted
 esac
 
 tmux set-window-option -t "$TMUX_PANE" @claude_state "$sem" 2>/dev/null

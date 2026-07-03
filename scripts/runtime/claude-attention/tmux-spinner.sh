@@ -21,6 +21,7 @@ NAME_NEEDS='#f7768e'
 NAME_IDLE='#565f89'
 i=1
 LAST='|'
+frame='' cyan='' indigo=''   # reassigned each frame via eval below; declared so shellcheck sees them
 
 while :; do
   wins=$(tmux list-windows -a -F '#{session_name}:#{window_index} #{@claude_state}' 2>/dev/null) \
@@ -28,7 +29,6 @@ while :; do
 
   set -- '⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏';                                eval "frame=\${$i}"
   set -- '#3d6a85' '#4a82a5' '#5aa0c8' '#6bb8e0' '#7dcfff' '#a6e0ff' '#7dcfff' '#6bb8e0' '#5aa0c8' '#4a82a5'; eval "cyan=\${$i}"
-  set -- '#8a4452' '#a8546a' '#c25a70' '#db6a82' '#f7768e' '#ff98ab' '#f7768e' '#db6a82' '#c25a70' '#a8546a'; eval "red=\${$i}"
   set -- '#5a4a8a' '#6a5a9e' '#7d6bb5' '#9078c8' '#a78bde' '#bb9af7' '#a78bde' '#9078c8' '#7d6bb5' '#6a5a9e'; eval "indigo=\${$i}"
 
   NEW='|'
@@ -43,7 +43,7 @@ while :; do
       working) glyph="$frame "; sfg="$cyan";      nfg="$NAME_WORKING"; wst="fg=#565f89" ;;
       looping) glyph="$frame "; sfg="$indigo";    nfg="#9d7cd8";       wst="fg=#565f89" ;;
       done)    glyph="✓ ";      sfg="$NAME_DONE"; nfg="$NAME_DONE";    wst="fg=#565f89" ;;
-      needs)   glyph="! ";      sfg="#f7768e";    nfg="#f7768e";       wst="fg=#f7768e,bold" ;;  # urgent = red FONT (no block)
+      needs)   glyph="! ";      sfg="$NAME_NEEDS"; nfg="$NAME_NEEDS"; wst="fg=$NAME_NEEDS,bold" ;;  # urgent = red FONT (no block)
       *)       glyph="  ";      sfg="$NAME_IDLE"; nfg="$NAME_IDLE";    wst="fg=#565f89" ;;
     esac
     token="$win^$glyph^$sfg^$nfg^$wst"
