@@ -64,6 +64,18 @@ Tunables: `SPIN_INTERVAL` (spinner fps) and classifier `StartInterval` in the
 plists; guard rules in `hooks/guard.py`. Logs: `~/.claude/classify-sessions.log`,
 `~/.claude/worktree-autoclean.log`.
 
+### Guard tests
+
+`hooks/guard.py` has a case suite. To add coverage, append a
+`["BLOCK"|"ALLOW", "command"]` pair to `tests/guard-cases.json` and run:
+
+```sh
+python3 scripts/runtime/claude-attention/tests/run-guard-tests.py
+```
+
+Segments are split on `; \n && || |` and rules match the command position, so
+tokens inside commit messages / echoed strings / other commands don't trigger.
+
 ## Persistence
 
 Everything lives in `~/.claude` (which `aoc-update` does not regenerate).
