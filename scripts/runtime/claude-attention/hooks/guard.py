@@ -44,7 +44,7 @@ def _cmd_is(seg, name):
 
 def check_segment(low):
     # 1) Force-push touching master/main — must be an actual `git push` command.
-    if re.match(r"\s*(?:sudo\s+|\w+=\S+\s+)*git\b(?:\s+-\S+)*\s+push\b", low):
+    if re.match(r"\s*(?:sudo\s+|\w+=\S+\s+)*git\b(?:\s+(?:-\S+|\S+=\S+))*\s+push\b", low):
         forced = (
             "--force" in low
             or "--force-with-lease" in low
@@ -77,7 +77,10 @@ def check_segment(low):
         recursive = ("--recursive" in low) or _has_short_flag(low, "r")
         force     = ("--force" in low)     or _has_short_flag(low, "f")
         if recursive and force:
-            if re.search(r"(?:^|\s)(?:/|/\*|~|~/\*?|\$home|\$\{home\})(?:\s|$)", low):
+            # bare dangerous target as its own arg — tolerates a trailing slash,
+            # a `*`, and surrounding quotes ("/", "$HOME", ~/); but NOT a subpath
+            # (/usr/..., $HOME/.cache) which stays allowed.
+            if re.search(r"(?:^|\s|[\x22\x27])(?:/|~|\$home|\$\{home\})/?\*?[\x22\x27]?(?:\s|$)", low):
                 block("rm -rf targeting filesystem root or $HOME")
             if re.search(r"(?:^|\s)\S*\.git(?:\s|/|$)", low):
                 block("rm -rf touching a .git directory (use `git worktree remove`)")
